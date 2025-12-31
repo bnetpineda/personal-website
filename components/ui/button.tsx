@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useHaptic } from "@/hooks/use-haptic";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-heading ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border-2 border-border cursor-pointer",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-heading ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border-2 border-border cursor-pointer active:scale-95",
   {
     variants: {
       variant: {

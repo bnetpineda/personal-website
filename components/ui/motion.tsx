@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, type Variants } from "motion/react";
+import { motion, type Variants, useReducedMotion } from "motion/react";
 import { type ReactNode } from "react";
 
 // Animation variants
@@ -86,13 +86,22 @@ export function FadeIn({
   duration = 0.5,
   once = true,
 }: FadeInProps) {
+  const shouldReduceMotion = useReducedMotion();
+
+  const finalVariants = shouldReduceMotion
+    ? {
+        hidden: { opacity: 0 },
+        visible: { opacity: 1 },
+      }
+    : variantMap[variant];
+
   return (
     <motion.div
       initial="hidden"
       whileInView="visible"
       viewport={{ once, margin: "-100px" }}
-      variants={variantMap[variant]}
-      transition={{ duration, delay, ease: "easeOut" }}
+      variants={finalVariants}
+      transition={{ duration: shouldReduceMotion ? 0 : duration, delay: shouldReduceMotion ? 0 : delay, ease: "easeOut" }}
       className={className}
     >
       {children}
@@ -111,6 +120,8 @@ export function StaggerContainer({
   staggerDelay = 0.1,
   once = true,
 }: StaggerContainerProps) {
+  const shouldReduceMotion = useReducedMotion();
+  
   return (
     <motion.div
       initial="hidden"
@@ -121,8 +132,8 @@ export function StaggerContainer({
         visible: {
           opacity: 1,
           transition: {
-            staggerChildren: staggerDelay,
-            delayChildren: delay,
+            staggerChildren: shouldReduceMotion ? 0 : staggerDelay,
+            delayChildren: shouldReduceMotion ? 0 : delay,
           },
         },
       }}
@@ -138,10 +149,19 @@ export function StaggerItem({
   className,
   duration = 0.5,
 }: Omit<AnimatedProps, "delay" | "once">) {
+  const shouldReduceMotion = useReducedMotion();
+
+  const finalVariants = shouldReduceMotion
+    ? {
+        hidden: { opacity: 0 },
+        visible: { opacity: 1 },
+      }
+    : staggerItemVariants;
+
   return (
     <motion.div
-      variants={staggerItemVariants}
-      transition={{ duration, ease: "easeOut" }}
+      variants={finalVariants}
+      transition={{ duration: shouldReduceMotion ? 0 : duration, ease: "easeOut" }}
       className={className}
     >
       {children}
@@ -159,10 +179,12 @@ export function HoverScale({
   className?: string;
   scale?: number;
 }) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <motion.div
-      whileHover={{ scale }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={shouldReduceMotion ? {} : { scale }}
+      whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
       transition={{ type: "spring", stiffness: 400, damping: 17 }}
       className={className}
     >
@@ -177,12 +199,14 @@ export function TextReveal({
   className,
   delay = 0,
 }: AnimatedProps) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20, filter: "blur(10px)" }}
-      whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20, filter: "blur(10px)" }}
+      whileInView={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: "blur(0px)" }}
       viewport={{ once: true }}
-      transition={{ duration: 0.6, delay, ease: "easeOut" }}
+      transition={{ duration: 0.6, delay: shouldReduceMotion ? 0 : delay, ease: "easeOut" }}
       className={className}
     >
       {children}

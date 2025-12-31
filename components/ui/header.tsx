@@ -1,9 +1,13 @@
 "use client";
 
 import { Menu } from "lucide-react";
+import { motion, useScroll, useSpring } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useActiveSection } from "@/hooks/use-active-section";
+import { cn } from "@/lib/utils";
+import { NAV_LINKS } from "@/lib/constants";
 import {
   Sheet,
   SheetContent,
@@ -13,31 +17,41 @@ import {
   SheetClose,
 } from "@/components/ui/sheet";
 
-const navLinks = [
-  { href: "#about", label: "About" },
-  { href: "#skills", label: "Skills" },
-  { href: "#projects", label: "Projects" },
-  { href: "#contact", label: "Contact" },
-];
-
 export function Header() {
+  const activeSection = useActiveSection();
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001
+  });
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-secondary-background border-b-2 border-border dark:border-foreground/20 shadow-shadow">
-      <nav className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-secondary-background border-b-2 border-border shadow-shadow">
+      <motion.div
+        className="absolute bottom-0 left-0 right-0 h-1 bg-main origin-left z-50"
+        style={{ scaleX }}
+      />
+      <nav className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between relative z-40">
         <a href="#" className="flex items-center gap-2">
           <Avatar className="size-10 border-2 border-border">
             <AvatarImage src="/image.png" alt="Profile" />
-            <AvatarFallback>JD</AvatarFallback>
+            <AvatarFallback>MP</AvatarFallback>
           </Avatar>
         </a>
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-6">
-          {navLinks.map((link) => (
+          {NAV_LINKS.map((link) => (
             <a
               key={link.href}
               href={link.href}
-              className="text-foreground/80 hover:text-foreground transition-colors font-medium"
+              className={cn(
+                "transition-colors font-medium",
+                activeSection === link.href.slice(1)
+                  ? "text-main font-bold"
+                  : "text-foreground/80 hover:text-foreground"
+              )}
             >
               {link.label}
             </a>
@@ -58,16 +72,21 @@ export function Header() {
               <SheetHeader className="flex-row items-center gap-3">
                 <Avatar className="size-10 border-2 border-border">
                   <AvatarImage src="/image.png" alt="Profile" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarFallback>MP</AvatarFallback>
                 </Avatar>
                 <SheetTitle className="text-left text-xl">Menu</SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col gap-4 px-4 mt-8">
-                {navLinks.map((link) => (
+                {NAV_LINKS.map((link) => (
                   <SheetClose key={link.href} asChild>
                     <a
                       href={link.href}
-                      className="text-xl font-heading py-2 hover:text-main transition-colors border-b border-border"
+                      className={cn(
+                        "text-xl font-heading py-2 transition-colors border-b border-border",
+                        activeSection === link.href.slice(1)
+                          ? "text-main"
+                          : "hover:text-main"
+                      )}
                     >
                       {link.label}
                     </a>

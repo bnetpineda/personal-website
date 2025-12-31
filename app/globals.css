@@ -64,11 +64,34 @@
 }
   
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply text-foreground font-base bg-background;
   }
 
   h1, h2, h3, h4, h5, h6{
     @apply font-heading;
+  }
+  
+  /* Global focus styles for accessibility */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Animated link underline */
+  .link-underline {
+    @apply relative no-underline;
+  }
+
+  .link-underline::after {
+    content: '';
+    @apply absolute w-full h-[2px] bottom-0 left-0 bg-current scale-x-0 origin-bottom-right transition-transform duration-300 ease-out;
+  }
+
+  .link-underline:hover::after {
+    @apply scale-x-100 origin-bottom-left;
   }
 }

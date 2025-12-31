@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FadeIn, StaggerContainer, StaggerItem, motion } from "@/components/ui/motion";
@@ -10,21 +11,24 @@ const projects = [
     title: "E-Commerce Platform",
     description: "A full-stack e-commerce solution with real-time inventory management, payment processing, and admin dashboard.",
     tech: ["Next.js", "PostgreSQL", "Stripe", "Tailwind CSS"],
-    github: "https://github.com",
+    image: "/projects/ecommerce.png",
+    github: "https://github.com/bnetpineda",
     demo: "https://example.com",
   },
   {
     title: "Task Management App",
     description: "A collaborative project management tool with real-time updates, team workspaces, and integrations.",
     tech: ["React", "Node.js", "MongoDB", "Socket.io"],
-    github: "https://github.com",
+    image: "/projects/taskmanager.png",
+    github: "https://github.com/bnetpineda",
     demo: "https://example.com",
   },
   {
     title: "AI Content Generator",
     description: "An AI-powered application for generating marketing copy, blog posts, and social media content.",
     tech: ["Next.js", "OpenAI API", "Prisma", "TypeScript"],
-    github: "https://github.com",
+    image: "/projects/aicontent.png",
+    github: "https://github.com/bnetpineda",
     demo: "https://example.com",
   },
 ];
@@ -46,7 +50,15 @@ export function Projects() {
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 className="h-full"
               >
-                <Card className="flex flex-col h-full">
+                <Card className="flex flex-col h-full overflow-hidden">
+                  <div className="relative h-48 w-full border-b-2 border-border bg-background">
+                    <Image
+                      src={project.image}
+                      alt={project.title}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
                   <CardHeader>
                     <CardTitle>{project.title}</CardTitle>
                     <CardDescription>{project.description}</CardDescription>

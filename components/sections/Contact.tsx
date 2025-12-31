@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/ui/motion";
 import { Github, Linkedin, Mail, MapPin, Twitter, Send, Loader2, CheckCircle } from "lucide-react";
+import { CONTACT_FORM_ENDPOINT } from "@/lib/constants";
 
 interface FormData {
   name: string;
@@ -98,9 +99,20 @@ export function Contact() {
     setStatus("submitting");
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setStatus("success");
-      setFormData({ name: "", email: "", message: "" });
+      const response = await fetch(CONTACT_FORM_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        setStatus("success");
+        setFormData({ name: "", email: "", message: "" });
+      } else {
+        setStatus("error");
+      }
     } catch {
       setStatus("error");
     }
@@ -218,7 +230,7 @@ export function Contact() {
                       <div>
                         <p className="text-sm text-foreground/60">Email</p>
                         <a
-                          href="mailto:markbenenttpineda@gmail.com"
+                          href="mailto:markbennettpineda@gmail.com"
                           className="font-heading hover:text-main transition-colors"
                         >
                           markbennettpineda@gmail.com
