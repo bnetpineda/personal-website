@@ -12,7 +12,7 @@
   --border: oklch(0% 0 0);
   --ring: oklch(0% 0 0);
   --overlay: oklch(0% 0 0 / 0.8);
-  --shadow: 4px 4px 0px 0px var(--border);
+  --shadow: 5px 5px 0px 0px var(--border);
   --chart-1: #8AE500;
   --chart-2: #0099FF;
   --chart-3: #FF4D50;
@@ -29,7 +29,7 @@
   --main: oklch(76.26% 0.21309 132.4002);
   --border: oklch(0% 0 0);
   --ring: oklch(100% 0 0);
-  --shadow: 4px 4px 0px 0px var(--border);
+  --shadow: 5px 5px 0px 0px var(--border);
   --chart-1: #7ACC00;
   --chart-2: #008AE5;
   --chart-3: #FF6669;
@@ -53,10 +53,10 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  --spacing-boxShadowX: 4px;
-  --spacing-boxShadowY: 4px;
-  --spacing-reverseBoxShadowX: -4px;
-  --spacing-reverseBoxShadowY: -4px;
+  --spacing-boxShadowX: 5px;
+  --spacing-boxShadowY: 5px;
+  --spacing-reverseBoxShadowX: -5px;
+  --spacing-reverseBoxShadowY: -5px;
   --radius-base: 5px;
   --shadow-shadow: var(--shadow);
   --font-weight-base: 600;
@@ -93,5 +93,18 @@
 
   .link-underline:hover::after {
     @apply scale-x-100 origin-bottom-left;
+  }
+
+  /* Brutalist background pattern */
+  .bg-pattern {
+    @apply relative;
+  }
+  
+  .bg-pattern::before {
+    content: "";
+    @apply absolute inset-0 pointer-events-none z-0;
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 24px 24px;
+    opacity: 0.15;
   }
 }

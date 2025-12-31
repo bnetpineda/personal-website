@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, CardContent } from "@/components/ui/card";
-import { FadeIn, StaggerContainer, StaggerItem, motion } from "@/components/ui/motion";
+import { Marquee } from "@/components/ui/marquee";
+import { FadeIn } from "@/components/ui/motion";
 
 const skills = {
   frontend: [
@@ -11,6 +11,10 @@ const skills = {
     "Tailwind CSS",
     "HTML/CSS",
     "JavaScript",
+    "Redux",
+    "Framer Motion",
+    "Shadcn UI",
+    "Zustand",
   ],
   backend: [
     "Node.js",
@@ -19,6 +23,10 @@ const skills = {
     "MongoDB",
     "REST APIs",
     "GraphQL",
+    "Prisma",
+    "Supabase",
+    "Firebase",
+    "JWT",
   ],
   tools: [
     "Git",
@@ -27,73 +35,60 @@ const skills = {
     "Vercel",
     "Figma",
     "VS Code",
+    "Postman",
+    "Jest",
+    "CI/CD",
+    "Linux",
   ],
 };
 
-function SkillBadge({ skill, index }: { skill: string; index: number }) {
+function SkillTag({ skill }: { skill: string }) {
   return (
-    <motion.span
-      initial={{ opacity: 0, scale: 0.8 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-      whileHover={{ scale: 1.1, y: -2 }}
-      className="bg-main text-main-foreground px-3 py-1 text-sm border-2 border-border cursor-default"
-    >
+    <div className="bg-main text-main-foreground px-6 py-3 text-lg font-heading border-2 border-border shadow-shadow mx-4">
       {skill}
-    </motion.span>
+    </div>
   );
 }
 
 export function Skills() {
   return (
-    <section id="skills" className="py-20 px-4 bg-secondary-background">
-      <div className="max-w-6xl mx-auto">
+    <section
+      id="skills"
+      className="py-24 overflow-hidden bg-secondary-background border-y-2 border-border"
+    >
+      <div className="mb-16 px-4">
         <FadeIn className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-heading mb-4">Skills & Technologies</h2>
+          <h2 className="text-3xl md:text-4xl font-heading mb-4">
+            Featured Projects
+          </h2>
           <div className="w-20 h-1 bg-main mx-auto"></div>
         </FadeIn>
-        
-        <StaggerContainer className="grid md:grid-cols-3 gap-8">
-          <StaggerItem>
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="font-heading text-xl mb-4 text-center">Frontend</h3>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {skills.frontend.map((skill, index) => (
-                    <SkillBadge key={skill} skill={skill} index={index} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </StaggerItem>
-          
-          <StaggerItem>
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="font-heading text-xl mb-4 text-center">Backend</h3>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {skills.backend.map((skill, index) => (
-                    <SkillBadge key={skill} skill={skill} index={index} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </StaggerItem>
-          
-          <StaggerItem>
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="font-heading text-xl mb-4 text-center">Tools</h3>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {skills.tools.map((skill, index) => (
-                    <SkillBadge key={skill} skill={skill} index={index} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </StaggerItem>
-        </StaggerContainer>
+      </div>
+
+      <div className="flex flex-col gap-12">
+        <div className="rotate-1 bg-background py-4 border-y-2 border-border">
+          <Marquee speed={30} direction="left" className="py-2">
+            {skills.frontend.map((skill, i) => (
+              <SkillTag key={`fe-${i}`} skill={skill} />
+            ))}
+          </Marquee>
+        </div>
+
+        <div className="-rotate-1 bg-background py-4 border-y-2 border-border">
+          <Marquee speed={30} direction="right" className="py-2">
+            {skills.backend.map((skill, i) => (
+              <SkillTag key={`be-${i}`} skill={skill} />
+            ))}
+          </Marquee>
+        </div>
+
+        <div className="rotate-1 bg-background py-4 border-y-2 border-border">
+          <Marquee speed={30} direction="left" className="py-2">
+            {skills.tools.map((skill, i) => (
+              <SkillTag key={`tools-${i}`} skill={skill} />
+            ))}
+          </Marquee>
+        </div>
       </div>
     </section>
   );

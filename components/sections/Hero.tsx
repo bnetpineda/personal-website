@@ -50,7 +50,7 @@ function Typewriter({ text, delay = 0 }: { text: string; delay?: number }) {
 
 export function Hero() {
   return (
-    <section className="min-h-screen flex items-center justify-center pt-24 pb-20 px-4 relative overflow-hidden">
+    <section className="min-h-screen flex items-center justify-center pt-24 pb-20 px-4 relative overflow-hidden bg-pattern">
       <div className="max-w-4xl mx-auto text-center relative z-10">
         <FadeIn variant="fadeInDown" delay={0.1}>
           <div className="mb-6">
