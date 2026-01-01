@@ -59,7 +59,7 @@ export function Skills() {
       <div className="mb-16 px-4">
         <FadeIn className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-heading mb-4">
-            Featured Projects
+            Technical Skills
           </h2>
           <div className="w-20 h-1 bg-main mx-auto"></div>
         </FadeIn>
