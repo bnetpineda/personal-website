@@ -27,23 +27,43 @@ const projects = [
       "/pawscan-images/Screenshot_20260102_022017_com_markbennettpineda_PawScan_MainActivity.jpg",
     ],
     github: "https://github.com/bnetpineda/PawScan",
-    demo: "#",
   },
   {
     title: "G3od",
     description: "Interactive geometry learning platform with voice-assisted AI tutoring and 3D visualizations for students.",
     tech: ["React Native", "Three.js", "OpenAI", "Supabase", "Nativewind"],
-    image: "/projects/taskmanager.png",
-    github: "https://github.com/bnetpineda/G3od",
-    demo: "#",
+    image: "/g3od-images/Screenshot_20260102_023031_com_citycollegeofangeles_g3od_MainActivity.jpg",
+    isMobile: true,
+    gallery: [
+      "/g3od-images/Screenshot_20260102_023031_com_citycollegeofangeles_g3od_MainActivity.jpg",
+      "/g3od-images/Screenshot_20260102_023056_com_citycollegeofangeles_g3od_MainActivity.jpg",
+      "/g3od-images/Screenshot_20260102_023100_com_citycollegeofangeles_g3od_MainActivity.jpg",
+      "/g3od-images/Screenshot_20260102_023118_com_citycollegeofangeles_g3od_MainActivity.jpg",
+      "/g3od-images/Screenshot_20260102_023236_com_citycollegeofangeles_g3od_MainActivity.jpg",
+      "/g3od-images/Screenshot_20260102_023310_com_citycollegeofangeles_g3od_MainActivity.jpg",
+      "/g3od-images/Screenshot_20260102_023350_com_citycollegeofangeles_g3od_MainActivity.jpg",
+    ],
+    github: "https://github.com/bnetpineda/G3od-app",
   },
   {
     title: "MealWise",
     description: "Multi-vendor food marketplace with real-time order tracking and role-based dashboards for sellers and customers.",
     tech: ["React", "Node.js", "MongoDB", "Socket.io", "AWS EC2", "Tailwind CSS"],
-    image: "/projects/ecommerce.png",
+    image: "/mealchoice/mealchoice-cca.vercel.app.png",
+    gallery: [
+      "/mealchoice/mealchoice-cca.vercel.app.png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer (3).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer (4).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer (5).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer_ai-meal-planner (2).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer_ai-meal-planner (4).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer_ai-meal-planner (5).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer_ai-meal-planner (6).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer_ai-meal-planner (7).png",
+      "/mealchoice/mealchoice-cca.vercel.app_customer_ai-meal-planner.png",
+    ],
     github: "https://github.com/bnetpineda/MealWise",
-    demo: "#",
+    demo: "https://mealchoice-cca.vercel.app",
   },
 ];
 
@@ -61,16 +81,19 @@ function ImageViewer({
   isMobile?: boolean;
 }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [direction, setDirection] = useState(0);
 
   useEffect(() => {
     setCurrentIndex(initialIndex);
   }, [initialIndex, isOpen]);
 
   const handleNext = useCallback(() => {
+    setDirection(1);
     setCurrentIndex((prev) => (prev + 1) % images.length);
   }, [images.length]);
 
   const handlePrev = useCallback(() => {
+    setDirection(-1);
     setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
   }, [images.length]);
 
@@ -88,6 +111,23 @@ function ImageViewer({
 
   if (!isOpen || images.length === 0) return null;
 
+  const variants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? 1000 : -1000,
+      opacity: 0
+    }),
+    center: {
+      zIndex: 1,
+      x: 0,
+      opacity: 1
+    },
+    exit: (direction: number) => ({
+      zIndex: 0,
+      x: direction < 0 ? 1000 : -1000,
+      opacity: 0
+    })
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -95,41 +135,45 @@ function ImageViewer({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay/90 backdrop-blur-md"
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            exit={{ scale: 0.95, opacity: 0, y: 20 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="relative w-full max-w-5xl bg-background border-2 border-border shadow-[8px_8px_0px_0px_var(--border)] max-h-[90vh] flex flex-col"
+            className="relative w-full max-w-6xl bg-background border-2 border-border shadow-[8px_8px_0px_0px_var(--border)] max-h-[95vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b-2 border-border bg-main">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b-2 border-border bg-main z-20">
               <h3 className="text-lg font-heading text-main-foreground">
                 Image Viewer ({currentIndex + 1} / {images.length})
               </h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                className="rounded-none border-2 border-border bg-background hover:bg-red-500 hover:text-white transition-all shadow-[2px_2px_0px_0px_var(--border)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
-              >
-                <X className="h-5 w-5" />
-                <span className="sr-only">Close viewer</span>
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClose}
+                  className="rounded-none border-2 border-border bg-background hover:bg-red-500 hover:text-white transition-all shadow-[2px_2px_0px_0px_var(--border)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
+                >
+                  <X className="h-5 w-5" />
+                  <span className="sr-only">Close viewer</span>
+                </Button>
+              </div>
             </div>
             
-            <div className="relative w-full h-[60vh] bg-secondary-background overflow-hidden">
-              {/* Navigation Buttons */}
+            {/* Main Content Area */}
+            <div className="relative w-full h-[60vh] bg-secondary-background overflow-hidden group">
+              {/* Navigation Buttons (Floating) */}
               {images.length > 1 && (
                 <>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 z-50 rounded-full border-2 border-border bg-background shadow-[4px_4px_0px_0px_var(--border)] hover:translate-x-[-2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--border)] transition-all"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-30 rounded-full border-2 border-border bg-background/80 backdrop-blur-sm shadow-[4px_4px_0px_0px_var(--border)] hover:translate-x-[-2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--border)] transition-all opacity-0 group-hover:opacity-100"
                   >
                     <ChevronLeft className="h-6 w-6" />
                   </Button>
@@ -137,39 +181,95 @@ function ImageViewer({
                     variant="ghost"
                     size="icon"
                     onClick={(e) => { e.stopPropagation(); handleNext(); }}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 z-50 rounded-full border-2 border-border bg-background shadow-[4px_4px_0px_0px_var(--border)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--border)] transition-all"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 z-30 rounded-full border-2 border-border bg-background/80 backdrop-blur-sm shadow-[4px_4px_0px_0px_var(--border)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--border)] transition-all opacity-0 group-hover:opacity-100"
                   >
                     <ChevronRight className="h-6 w-6" />
                   </Button>
                 </>
               )}
 
-              {/* Layer 1: Blurred Background (Mobile only) */}
-              {isMobile && (
-                <div 
-                  className="absolute inset-0 z-0 bg-cover bg-center blur-xl opacity-50 scale-110 transition-all duration-500"
+              {/* Blurred Background Layer */}
+              <AnimatePresence custom={direction} initial={false}>
+                <motion.div 
+                  key={currentIndex}
+                  custom={direction}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 z-0 bg-cover bg-center blur-2xl opacity-40 scale-110"
                   style={{ backgroundImage: `url(${images[currentIndex]})` }}
                 />
-              )}
+              </AnimatePresence>
+              <div className="absolute inset-0 z-0 bg-black/10" /> {/* Dark overlay for contrast */}
 
-              {/* Layer 2: Main Image */}
-              <div className="absolute inset-0 z-10 flex items-center justify-center p-4 md:p-12 pointer-events-none">
-                 <div className="relative w-full h-full">
-                    <Image
-                      key={currentIndex}
-                      src={images[currentIndex]}
-                      alt={`Project preview ${currentIndex + 1}`}
-                      fill
-                      className={cn(
-                        "object-contain",
-                        isMobile && "drop-shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
-                      )}
-                      sizes="(max-width: 768px) 100vw, 1200px"
-                      priority
-                    />
-                 </div>
+              {/* Main Image Layer */}
+              <div className="absolute inset-0 z-10 flex items-center justify-center p-4 md:p-8 overflow-hidden">
+                <AnimatePresence custom={direction} initial={false} mode="popLayout">
+                   <motion.div
+                     key={currentIndex}
+                     custom={direction}
+                     variants={variants}
+                     initial="enter"
+                     animate="center"
+                     exit="exit"
+                     transition={{
+                       x: { type: "spring", stiffness: 300, damping: 30 },
+                       opacity: { duration: 0.2 }
+                     }}
+                     className="relative w-full h-full flex items-center justify-center"
+                   >
+                      <div className={cn(
+                        "relative",
+                        isMobile ? "h-full aspect-[9/19]" : "w-full h-full"
+                      )}>
+                        <Image
+                          src={images[currentIndex]}
+                          alt={`Project preview ${currentIndex + 1}`}
+                          fill
+                          className={cn(
+                            isMobile ? "object-cover rounded-[24px] border-4 border-black" : "object-contain",
+                            isMobile && "drop-shadow-[0_10px_50px_rgba(0,0,0,0.4)]"
+                          )}
+                          sizes="(max-width: 768px) 100vw, 1200px"
+                          priority
+                        />
+                      </div>
+                   </motion.div>
+                </AnimatePresence>
               </div>
             </div>
+
+            {/* Thumbnails Footer */}
+            {images.length > 1 && (
+              <div className="p-4 border-t-2 border-border bg-background overflow-x-auto">
+                <div className="flex gap-2 min-w-min mx-auto justify-center px-4">
+                  {images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setDirection(idx > currentIndex ? 1 : -1);
+                        setCurrentIndex(idx);
+                      }}
+                      className={cn(
+                        "relative h-16 aspect-square shrink-0 overflow-hidden border-2 transition-all hover:scale-105",
+                        isMobile ? "aspect-[9/16] rounded-[8px]" : "aspect-video w-24",
+                        currentIndex === idx 
+                          ? "border-main shadow-[2px_2px_0px_0px_var(--main)] scale-105" 
+                          : "border-border opacity-60 hover:opacity-100"
+                      )}
+                    >
+                      <Image
+                        src={img}
+                        alt={`Thumbnail ${idx + 1}`}
+                        fill
+                        className="object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}
