@@ -1,19 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FadeIn, StaggerContainer, StaggerItem, motion } from "@/components/ui/motion";
-import { ExternalLink, Github, Plus, RotateCcw, X, ZoomIn } from "lucide-react";
+import { ExternalLink, Github, Plus, RotateCcw, X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { AnimatePresence } from "motion/react";
+import { cn } from "@/lib/utils";
 
 const projects = [
   {
     title: "PawScan",
     description: "AI-powered pet health assessment app connecting pet owners with licensed veterinarians for real-time consultation.",
     tech: ["React Native", "Expo", "Supabase", "OpenAI", "Nativewind"],
-    image: "/projects/aicontent.png",
+    image: "/pawscan-images/Screenshot_20260102_021810_com_markbennettpineda_PawScan_MainActivity.jpg",
+    isMobile: true,
+    gallery: [
+      "/pawscan-images/Screenshot_20260102_021810_com_markbennettpineda_PawScan_MainActivity.jpg",
+      "/pawscan-images/Screenshot_20260102_021820_com_markbennettpineda_PawScan_MainActivity.jpg",
+      "/pawscan-images/Screenshot_20260102_021827_com_markbennettpineda_PawScan_MainActivity.jpg",
+      "/pawscan-images/Screenshot_20260102_021833_com_markbennettpineda_PawScan_MainActivity.jpg",
+      "/pawscan-images/Screenshot_20260102_021916_com_markbennettpineda_PawScan_MainActivity.jpg",
+      "/pawscan-images/Screenshot_20260102_021957_com_markbennettpineda_PawScan_MainActivity.jpg",
+      "/pawscan-images/Screenshot_20260102_022008_com_markbennettpineda_PawScan_MainActivity.jpg",
+      "/pawscan-images/Screenshot_20260102_022017_com_markbennettpineda_PawScan_MainActivity.jpg",
+    ],
     github: "https://github.com/bnetpineda/PawScan",
     demo: "#",
   },
@@ -35,8 +47,46 @@ const projects = [
   },
 ];
 
-function ImageViewer({ src, isOpen, onClose }: { src: string | null; isOpen: boolean; onClose: () => void }) {
-  if (!src) return null;
+function ImageViewer({ 
+  images, 
+  initialIndex = 0, 
+  isOpen, 
+  onClose,
+  isMobile 
+}: { 
+  images: string[]; 
+  initialIndex?: number;
+  isOpen: boolean; 
+  onClose: () => void;
+  isMobile?: boolean;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  useEffect(() => {
+    setCurrentIndex(initialIndex);
+  }, [initialIndex, isOpen]);
+
+  const handleNext = useCallback(() => {
+    setCurrentIndex((prev) => (prev + 1) % images.length);
+  }, [images.length]);
+
+  const handlePrev = useCallback(() => {
+    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+  }, [images.length]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+      if (e.key === "ArrowRight") handleNext();
+      if (e.key === "ArrowLeft") handlePrev();
+      if (e.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, handleNext, handlePrev, onClose]);
+
+  if (!isOpen || images.length === 0) return null;
 
   return (
     <AnimatePresence>
@@ -57,7 +107,9 @@ function ImageViewer({ src, isOpen, onClose }: { src: string | null; isOpen: boo
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b-2 border-border bg-main">
-              <h3 className="text-lg font-heading text-main-foreground">Image Viewer</h3>
+              <h3 className="text-lg font-heading text-main-foreground">
+                Image Viewer ({currentIndex + 1} / {images.length})
+              </h3>
               <Button
                 variant="ghost"
                 size="icon"
@@ -68,15 +120,54 @@ function ImageViewer({ src, isOpen, onClose }: { src: string | null; isOpen: boo
                 <span className="sr-only">Close viewer</span>
               </Button>
             </div>
-            <div className="flex-1 relative p-2 md:p-8 bg-secondary-background flex items-center justify-center overflow-hidden min-h-[300px]">
-              <div className="relative w-full h-full min-h-[300px]">
-                <Image
-                  src={src}
-                  alt="Project preview"
-                  fill
-                  className="object-contain"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 70vw"
+            
+            <div className="relative w-full h-[60vh] bg-secondary-background overflow-hidden">
+              {/* Navigation Buttons */}
+              {images.length > 1 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-50 rounded-full border-2 border-border bg-background shadow-[4px_4px_0px_0px_var(--border)] hover:translate-x-[-2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--border)] transition-all"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 z-50 rounded-full border-2 border-border bg-background shadow-[4px_4px_0px_0px_var(--border)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--border)] transition-all"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                </>
+              )}
+
+              {/* Layer 1: Blurred Background (Mobile only) */}
+              {isMobile && (
+                <div 
+                  className="absolute inset-0 z-0 bg-cover bg-center blur-xl opacity-50 scale-110 transition-all duration-500"
+                  style={{ backgroundImage: `url(${images[currentIndex]})` }}
                 />
+              )}
+
+              {/* Layer 2: Main Image */}
+              <div className="absolute inset-0 z-10 flex items-center justify-center p-4 md:p-12 pointer-events-none">
+                 <div className="relative w-full h-full">
+                    <Image
+                      key={currentIndex}
+                      src={images[currentIndex]}
+                      alt={`Project preview ${currentIndex + 1}`}
+                      fill
+                      className={cn(
+                        "object-contain",
+                        isMobile && "drop-shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
+                      )}
+                      sizes="(max-width: 768px) 100vw, 1200px"
+                      priority
+                    />
+                 </div>
               </div>
             </div>
           </motion.div>
@@ -91,7 +182,7 @@ function ProjectCard({
   onImageClick 
 }: { 
   project: typeof projects[number];
-  onImageClick: (src: string) => void;
+  onImageClick: (src: string, index: number) => void;
 }) {
   const [isFlipped, setIsFlipped] = useState(false);
 
@@ -106,19 +197,55 @@ function ProjectCard({
         className="relative h-full w-full border-2 border-border shadow-shadow bg-secondary-background"
       >
         {/* Front Face */}
-        <div className="h-full w-full bg-secondary-background" style={{ backfaceVisibility: "hidden" }}>
-          <div className="flex flex-col h-full overflow-hidden">
+        <div className="h-full w-full bg-secondary-background" style={{ backfaceVisibility: "hidden" }} aria-hidden={isFlipped}>
+          <div className={cn("flex flex-col h-full overflow-hidden", isFlipped ? "pointer-events-none" : "pointer-events-auto")}>
             <div 
-              className="relative h-48 w-full border-b-2 border-border bg-background group cursor-pointer overflow-hidden"
-              onClick={() => onImageClick(project.image)}
+              className={cn(
+                "relative h-48 w-full border-b-2 border-border bg-background group cursor-pointer overflow-hidden",
+                project.isMobile && "bg-pattern bg-secondary-background"
+              )}
+              onClick={() => onImageClick(project.image, 0)}
             >
-              <Image
-                src={project.image}
-                alt={project.title}
-                fill
-                className="object-cover transition-transform duration-500 group-hover:scale-110"
-              />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
+              {project.isMobile ? (
+                <div className="absolute inset-0 flex items-center justify-center gap-2 p-4 mt-2">
+                  <div className="relative h-full aspect-[9/19] transition-transform duration-500 group-hover:-translate-y-2 group-hover:-rotate-6 z-10">
+                    <Image
+                      src={project.gallery?.[0] || project.image}
+                      alt={`${project.title} screen 1`}
+                      fill
+                      className="object-cover border-2 border-border rounded-[12px] shadow-[4px_4px_0px_0px_var(--border)] bg-white"
+                    />
+                  </div>
+                  {project.gallery?.[1] && (
+                    <div className="relative h-full aspect-[9/19] transition-transform duration-500 group-hover:-translate-y-4 z-20">
+                      <Image
+                        src={project.gallery[1]}
+                        alt={`${project.title} screen 2`}
+                        fill
+                        className="object-cover border-2 border-border rounded-[12px] shadow-[4px_4px_0px_0px_var(--border)] bg-white"
+                      />
+                    </div>
+                  )}
+                  {project.gallery?.[2] && (
+                    <div className="relative h-full aspect-[9/19] transition-transform duration-500 group-hover:-translate-y-2 group-hover:rotate-6 z-10">
+                      <Image
+                        src={project.gallery[2]}
+                        alt={`${project.title} screen 3`}
+                        fill
+                        className="object-cover border-2 border-border rounded-[12px] shadow-[4px_4px_0px_0px_var(--border)] bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Image
+                  src={project.image}
+                  alt={project.title}
+                  fill
+                  className="object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+              )}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100 z-20">
                 <div className="bg-background text-foreground border-2 border-border px-3 py-1 font-bold shadow-[4px_4px_0px_0px_var(--border)] flex items-center gap-2">
                   <ZoomIn className="w-4 h-4" /> View
                 </div>
@@ -178,8 +305,9 @@ function ProjectCard({
         <div
           className="absolute inset-0 h-full w-full bg-secondary-background"
           style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+          aria-hidden={!isFlipped}
         >
-          <div className="flex flex-col h-full overflow-hidden">
+          <div className={cn("flex flex-col h-full overflow-hidden", !isFlipped ? "pointer-events-none" : "pointer-events-auto")}>
             <div className="flex flex-row items-center justify-between p-4 border-b-2 border-border bg-main">
               <CardTitle className="text-lg font-heading text-main-foreground">Project Gallery</CardTitle>
               <Button 
@@ -194,20 +322,28 @@ function ProjectCard({
             </div>
             <div className="flex-1 overflow-y-auto p-4 bg-background">
               <div className="grid grid-cols-2 gap-4">
-                {[1, 2, 3, 4].map((i) => (
+                {(project.gallery || [project.image]).map((img, i) => (
                   <div 
                     key={i} 
-                    className="relative aspect-square bg-secondary-background border-2 border-border shadow-[4px_4px_0px_0px_var(--border)] overflow-hidden cursor-pointer group hover:shadow-[2px_2px_0px_0px_var(--border)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
-                    onClick={() => onImageClick(project.image)}
+                    className={cn(
+                      "relative cursor-pointer group transition-all hover:scale-105",
+                      project.isMobile ? "aspect-[9/16]" : "aspect-video"
+                    )}
+                    onClick={() => onImageClick(img, i)}
                   >
-                    <Image
-                      src={project.image}
-                      alt={`${project.title} gallery image ${i}`}
-                      fill
-                      className="object-cover grayscale group-hover:grayscale-0 transition-all duration-300"
-                    />
-                    <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                      <ZoomIn className="text-white w-6 h-6 drop-shadow-md" />
+                    <div className={cn(
+                      "absolute inset-0 overflow-hidden border-2 border-border shadow-[4px_4px_0px_0px_var(--border)] group-hover:shadow-[2px_2px_0px_0px_var(--border)] group-hover:translate-x-[2px] group-hover:translate-y-[2px] transition-all bg-secondary-background",
+                      project.isMobile ? "rounded-[12px]" : ""
+                    )}>
+                      <Image
+                        src={img}
+                        alt={`${project.title} gallery image ${i}`}
+                        fill
+                        className="object-cover grayscale group-hover:grayscale-0 transition-all duration-300"
+                      />
+                      <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                        <ZoomIn className="text-white w-6 h-6 drop-shadow-md" />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -221,7 +357,19 @@ function ProjectCard({
 }
 
 export function Projects() {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedProject, setSelectedProject] = useState<{
+    images: string[];
+    index: number;
+    isMobile?: boolean;
+  } | null>(null);
+
+  const handleImageClick = (project: typeof projects[number], index: number) => {
+    setSelectedProject({
+      images: project.gallery || [project.image],
+      index,
+      isMobile: project.isMobile
+    });
+  };
 
   return (
     <section id="projects" className="py-20 px-4">
@@ -236,7 +384,7 @@ export function Projects() {
             <StaggerItem key={project.title}>
               <ProjectCard 
                 project={project} 
-                onImageClick={(src) => setSelectedImage(src)} 
+                onImageClick={(src, index) => handleImageClick(project, index)} 
               />
             </StaggerItem>
           ))}
@@ -244,9 +392,11 @@ export function Projects() {
       </div>
 
       <ImageViewer 
-        src={selectedImage} 
-        isOpen={!!selectedImage} 
-        onClose={() => setSelectedImage(null)} 
+        images={selectedProject?.images || []}
+        initialIndex={selectedProject?.index || 0}
+        isOpen={!!selectedProject} 
+        onClose={() => setSelectedProject(null)} 
+        isMobile={selectedProject?.isMobile}
       />
     </section>
   );

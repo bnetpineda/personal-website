@@ -65,29 +65,44 @@ export function Skills() {
         </FadeIn>
       </div>
 
-      <div className="flex flex-col gap-12">
-        <div className="rotate-1 bg-background py-4 border-y-2 border-border">
-          <Marquee speed={30} direction="left" className="py-2">
-            {skills.frontend.map((skill, i) => (
-              <SkillTag key={`fe-${i}`} skill={skill} />
-            ))}
-          </Marquee>
+      <div className="flex flex-col gap-8">
+        <div className="space-y-6">
+          <div className="w-fit mx-auto -rotate-2 bg-background px-6 py-2 border-2 border-border shadow-shadow">
+            <h3 className="text-xl font-heading">Frontend</h3>
+          </div>
+          <div className="rotate-1 bg-background py-4 border-y-2 border-border">
+            <Marquee speed={30} direction="left" className="py-2">
+              {skills.frontend.map((skill, i) => (
+                <SkillTag key={`fe-${i}`} skill={skill} />
+              ))}
+            </Marquee>
+          </div>
         </div>
 
-        <div className="-rotate-1 bg-background py-4 border-y-2 border-border">
-          <Marquee speed={30} direction="right" className="py-2">
-            {skills.backend.map((skill, i) => (
-              <SkillTag key={`be-${i}`} skill={skill} />
-            ))}
-          </Marquee>
+        <div className="space-y-6">
+          <div className="w-fit mx-auto rotate-1 bg-background px-6 py-2 border-2 border-border shadow-shadow">
+            <h3 className="text-xl font-heading">Backend</h3>
+          </div>
+          <div className="-rotate-1 bg-background py-4 border-y-2 border-border">
+            <Marquee speed={30} direction="right" className="py-2">
+              {skills.backend.map((skill, i) => (
+                <SkillTag key={`be-${i}`} skill={skill} />
+              ))}
+            </Marquee>
+          </div>
         </div>
 
-        <div className="rotate-1 bg-background py-4 border-y-2 border-border">
-          <Marquee speed={30} direction="left" className="py-2">
-            {skills.tools.map((skill, i) => (
-              <SkillTag key={`tools-${i}`} skill={skill} />
-            ))}
-          </Marquee>
+        <div className="space-y-6">
+          <div className="w-fit mx-auto -rotate-1 bg-background px-6 py-2 border-2 border-border shadow-shadow">
+            <h3 className="text-xl font-heading">Tools</h3>
+          </div>
+          <div className="rotate-1 bg-background py-4 border-y-2 border-border">
+            <Marquee speed={30} direction="left" className="py-2">
+              {skills.tools.map((skill, i) => (
+                <SkillTag key={`tools-${i}`} skill={skill} />
+              ))}
+            </Marquee>
+          </div>
         </div>
       </div>
     </section>
