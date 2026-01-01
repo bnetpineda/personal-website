@@ -10,28 +10,28 @@ import { AnimatePresence } from "motion/react";
 
 const projects = [
   {
-    title: "E-Commerce Platform",
-    description: "A full-stack e-commerce solution with real-time inventory management, payment processing, and admin dashboard.",
-    tech: ["Next.js", "PostgreSQL", "Stripe", "Tailwind CSS"],
-    image: "/projects/ecommerce.png",
-    github: "https://github.com/bnetpineda",
-    demo: "https://example.com",
-  },
-  {
-    title: "Task Management App",
-    description: "A collaborative project management tool with real-time updates, team workspaces, and integrations.",
-    tech: ["React", "Node.js", "MongoDB", "Socket.io"],
-    image: "/projects/taskmanager.png",
-    github: "https://github.com/bnetpineda",
-    demo: "https://example.com",
-  },
-  {
-    title: "AI Content Generator",
-    description: "An AI-powered application for generating marketing copy, blog posts, and social media content.",
-    tech: ["Next.js", "OpenAI API", "Prisma", "TypeScript"],
+    title: "PawScan",
+    description: "AI-powered pet health assessment app connecting pet owners with licensed veterinarians for real-time consultation.",
+    tech: ["React Native", "Expo", "Supabase", "OpenAI", "Nativewind"],
     image: "/projects/aicontent.png",
-    github: "https://github.com/bnetpineda",
-    demo: "https://example.com",
+    github: "https://github.com/bnetpineda/PawScan",
+    demo: "#",
+  },
+  {
+    title: "G3od",
+    description: "Interactive geometry learning platform with voice-assisted AI tutoring and 3D visualizations for students.",
+    tech: ["React Native", "Three.js", "OpenAI", "Supabase", "Nativewind"],
+    image: "/projects/taskmanager.png",
+    github: "https://github.com/bnetpineda/G3od",
+    demo: "#",
+  },
+  {
+    title: "MealWise",
+    description: "Multi-vendor food marketplace with real-time order tracking and role-based dashboards for sellers and customers.",
+    tech: ["React", "Node.js", "MongoDB", "Socket.io", "AWS EC2", "Tailwind CSS"],
+    image: "/projects/ecommerce.png",
+    github: "https://github.com/bnetpineda/MealWise",
+    demo: "#",
   },
 ];
 

@@ -69,7 +69,7 @@ export function Hero() {
         <FadeIn delay={0.4}>
           <p className="text-lg md:text-xl text-foreground/80 mb-8 max-w-2xl mx-auto font-sans min-h-[3.5rem]">
             <Typewriter 
-              text="I build modern web applications with a focus on user experience, performance, and clean code. Passionate about turning ideas into reality." 
+              text="Full-stack developer building fast, scalable web apps from frontend to backend. Turning complex ideas into clean, performant code." 
               delay={0.6}
             />
           </p>

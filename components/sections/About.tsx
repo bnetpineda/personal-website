@@ -10,7 +10,7 @@ export function About() {
       <div className="max-w-6xl mx-auto">
         <FadeIn className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-heading mb-4">
-            Featured Projects
+            About Me
           </h2>
           <div className="w-20 h-1 bg-main mx-auto"></div>
         </FadeIn>
@@ -18,21 +18,16 @@ export function About() {
         <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
           <FadeIn variant="fadeInLeft">
             <h3 className="text-2xl font-heading mb-4">
-              Building digital experiences that matter
+              I build smart, beautiful apps that people love using.
             </h3>
             <p className="text-foreground/80 mb-4">
-              I&apos;m a Full Stack Developer with 5+ years of experience
-              creating web applications that are both beautiful and functional.
-              I specialize in React, Node.js, and modern web technologies.
+              Final-year CS student obsessed with <span className="text-main font-semibold">React Native, TypeScript, AI, and clean design</span>.
             </p>
             <p className="text-foreground/80 mb-4">
-              When I&apos;m not coding, you&apos;ll find me exploring new
-              technologies, contributing to open source, or sharing knowledge
-              with the developer community.
+              I’ve shipped apps like <span className="text-main font-semibold">PawScan</span> (AI pet health + vet chat), <span className="text-main font-semibold">Smart Space</span> (AR + AI room redesign), and <span className="text-main font-semibold">MealWise</span> (real-time food marketplace).
             </p>
             <p className="text-foreground/80">
-              I believe in writing clean, maintainable code and creating
-              user-centric solutions that solve real problems.
+              From idea to deployment, I craft fast, intuitive experiences with modern tools. Always learning, always building.
             </p>
           </FadeIn>
 
@@ -40,13 +35,13 @@ export function About() {
             <StaggerItem>
               <Card>
                 <CardContent className="p-6 flex items-start gap-4">
-                  <div className="bg-main p-3 border-2 border-border">
+                  <div className="bg-main p-3 border-2 border-border rounded-lg">
                     <Code2 className="h-6 w-6 text-main-foreground" />
                   </div>
                   <div>
-                    <h4 className="font-heading text-lg mb-1">Clean Code</h4>
+                    <h4 className="font-heading text-lg mb-1">Full-Stack Craft</h4>
                     <p className="text-foreground/70 text-sm">
-                      Writing readable, maintainable, and well-documented code
+                      End-to-end apps that scale and perform
                     </p>
                   </div>
                 </CardContent>
@@ -56,13 +51,13 @@ export function About() {
             <StaggerItem>
               <Card>
                 <CardContent className="p-6 flex items-start gap-4">
-                  <div className="bg-main p-3 border-2 border-border">
+                  <div className="bg-main p-3 border-2 border-border rounded-lg">
                     <Palette className="h-6 w-6 text-main-foreground" />
                   </div>
                   <div>
-                    <h4 className="font-heading text-lg mb-1">UI/UX Focus</h4>
+                    <h4 className="font-heading text-lg mb-1">Pixel-Perfect UI</h4>
                     <p className="text-foreground/70 text-sm">
-                      Creating intuitive and visually appealing interfaces
+                      Intuitive, modern interfaces that feel great
                     </p>
                   </div>
                 </CardContent>
@@ -72,13 +67,13 @@ export function About() {
             <StaggerItem>
               <Card>
                 <CardContent className="p-6 flex items-start gap-4">
-                  <div className="bg-main p-3 border-2 border-border">
+                  <div className="bg-main p-3 border-2 border-border rounded-lg">
                     <Rocket className="h-6 w-6 text-main-foreground" />
                   </div>
                   <div>
-                    <h4 className="font-heading text-lg mb-1">Performance</h4>
+                    <h4 className="font-heading text-lg mb-1">AI & Innovation</h4>
                     <p className="text-foreground/70 text-sm">
-                      Optimizing for speed and excellent user experience
+                      Pushing boundaries with AI, AR, and real-time features
                     </p>
                   </div>
                 </CardContent>
