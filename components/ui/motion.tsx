@@ -1,7 +1,21 @@
 "use client";
 
 import { motion, type Variants, useReducedMotion } from "motion/react";
-import { type ReactNode } from "react";
+import { type ReactNode, useState, useEffect } from "react";
+
+// Custom hook to safely use reduced motion without hydration mismatch
+function useSafeReducedMotion() {
+  const [isClient, setIsClient] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Return false on server and initial client render to match SSR
+  // Only use actual value after hydration is complete
+  return isClient ? shouldReduceMotion : false;
+}
 
 // Animation variants
 const fadeInVariants: Variants = {
@@ -86,7 +100,7 @@ export function FadeIn({
   duration = 0.5,
   once = true,
 }: FadeInProps) {
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useSafeReducedMotion();
 
   const finalVariants = shouldReduceMotion
     ? {
@@ -120,7 +134,7 @@ export function StaggerContainer({
   staggerDelay = 0.1,
   once = true,
 }: StaggerContainerProps) {
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useSafeReducedMotion();
   
   return (
     <motion.div
@@ -149,7 +163,7 @@ export function StaggerItem({
   className,
   duration = 0.5,
 }: Omit<AnimatedProps, "delay" | "once">) {
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useSafeReducedMotion();
 
   const finalVariants = shouldReduceMotion
     ? {
@@ -179,7 +193,7 @@ export function HoverScale({
   className?: string;
   scale?: number;
 }) {
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useSafeReducedMotion();
 
   return (
     <motion.div
@@ -199,12 +213,12 @@ export function TextReveal({
   className,
   delay = 0,
 }: AnimatedProps) {
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useSafeReducedMotion();
 
   return (
     <motion.div
-      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20, filter: "blur(10px)" }}
-      whileInView={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: "blur(0px)" }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+      whileInView={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.6, delay: shouldReduceMotion ? 0 : delay, ease: "easeOut" }}
       className={className}
