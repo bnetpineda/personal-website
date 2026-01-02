@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { FadeIn, StaggerContainer, StaggerItem, TextReveal, motion } from "@/components/ui/motion";
+import { FadeIn, StaggerContainer, StaggerItem, TextReveal } from "@/components/ui/motion";
 import { ArrowDown, FileDown, Github, Linkedin, Mail } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 

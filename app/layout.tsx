@@ -52,21 +52,12 @@ export const metadata: Metadata = {
     title: "Mark Bennett Pineda | Full Stack Developer",
     description:
       "Full Stack Developer specializing in React, Next.js, and Node.js. Building modern web applications with a focus on user experience and performance.",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Mark Bennett Pineda - Full Stack Developer",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Mark Bennett Pineda | Full Stack Developer",
     description:
       "Full Stack Developer specializing in React, Next.js, and Node.js. Building modern web applications with a focus on user experience and performance.",
-    images: ["/og-image.png"],
     creator: "@markbennettpineda",
   },
   robots: {

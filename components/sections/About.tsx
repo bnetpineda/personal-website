@@ -24,7 +24,7 @@ export function About() {
               Final-year CS student obsessed with <span className="text-main font-semibold">React Native, TypeScript, AI, and clean design</span>.
             </p>
             <p className="text-foreground/80 mb-4">
-              I’ve shipped apps like <span className="text-main font-semibold">PawScan</span> (AI pet health + vet chat), <span className="text-main font-semibold">Smart Space</span> (AR + AI room redesign), and <span className="text-main font-semibold">MealWise</span> (real-time food marketplace).
+              I’ve built <span className="text-main font-semibold">PawScan</span> (AI pet health), <span className="text-main font-semibold">G3od</span> (AI geometry tutor), and <span className="text-main font-semibold">MealWise</span> (food marketplace).
             </p>
             <p className="text-foreground/80">
               From idea to deployment, I craft fast, intuitive experiences with modern tools. Always learning, always building.
