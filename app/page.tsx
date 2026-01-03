@@ -8,9 +8,9 @@ export default function Home() {
   return (
     <main>
       <Hero />
+      <About />
       <Projects />
       <Skills />
-      <About />
       <Contact />
       <footer className="py-8 px-4 border-t-2 border-border text-center">
         <p className="text-foreground/60 text-sm">

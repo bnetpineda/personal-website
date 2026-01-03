@@ -121,12 +121,20 @@ export function Contact() {
   const isSubmitting = status === "submitting";
 
   return (
-    <section id="contact" className="py-20 px-4 bg-secondary-background">
-      <div className="max-w-4xl mx-auto">
+    <section id="contact" className="min-h-screen py-24 px-4 bg-pattern border-y-4 border-border relative overflow-hidden flex flex-col justify-center">
+      {/* Decorative background elements */}
+      <div className="absolute top-16 right-12 w-14 h-14 bg-main/20 border-4 border-border rotate-12 hidden md:block" />
+      <div className="absolute bottom-16 left-12 w-10 h-10 bg-main/30 border-4 border-border -rotate-6 hidden md:block" />
+      <div className="absolute top-1/2 left-8 w-8 h-8 bg-main border-4 border-border rotate-45 hidden lg:block" />
+      
+      <div className="max-w-4xl mx-auto relative z-10">
         <FadeIn className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-heading mb-4">Get In Touch</h2>
-          <div className="w-20 h-1 bg-main mx-auto mb-6"></div>
-          <p className="text-foreground/80 max-w-xl mx-auto">
+          <div className="inline-block rotate-[1deg] bg-main px-8 py-4 border-4 border-border shadow-[6px_6px_0px_0px_var(--border)] mb-6">
+            <h2 className="text-3xl md:text-5xl font-heading font-black uppercase tracking-tight text-main-foreground">
+              Get In Touch
+            </h2>
+          </div>
+          <p className="text-foreground/80 max-w-xl mx-auto text-lg">
             I&apos;m currently open to new opportunities. Whether you have a question
             or just want to say hi, feel free to reach out!
           </p>
@@ -135,7 +143,7 @@ export function Contact() {
         <div className="grid md:grid-cols-2 gap-8">
           {/* Contact Form */}
           <FadeIn variant="fadeInLeft" delay={0.2}>
-            <Card>
+            <Card className="border-4 border-border shadow-[6px_6px_0px_0px_var(--border)]">
               <CardContent className="p-6">
                 {status === "success" ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -219,12 +227,12 @@ export function Contact() {
 
           {/* Contact Info */}
           <FadeIn variant="fadeInRight" delay={0.3}>
-            <Card className="h-full">
+            <Card className="h-full border-4 border-border shadow-[6px_6px_0px_0px_var(--border)]">
               <CardContent className="p-6 h-full flex flex-col justify-center">
                 <StaggerContainer className="space-y-6">
                   <StaggerItem>
                     <div className="flex items-center gap-4">
-                      <div className="bg-main p-3 border-2 border-border">
+                      <div className="bg-main p-3 border-4 border-border">
                         <Mail className="h-5 w-5 text-main-foreground" />
                       </div>
                       <div>
@@ -241,7 +249,7 @@ export function Contact() {
 
                   <StaggerItem>
                     <div className="flex items-center gap-4">
-                      <div className="bg-main p-3 border-2 border-border">
+                      <div className="bg-main p-3 border-4 border-border">
                         <MapPin className="h-5 w-5 text-main-foreground" />
                       </div>
                       <div>

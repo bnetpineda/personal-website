@@ -478,11 +478,18 @@ export function Projects() {
   };
 
   return (
-    <section id="projects" className="py-20 px-4">
-      <div className="max-w-6xl mx-auto">
+    <section id="projects" className="min-h-screen py-24 px-4 bg-pattern relative overflow-hidden flex flex-col justify-center">
+      {/* Decorative background elements */}
+      <div className="absolute top-16 left-8 w-14 h-14 bg-main/20 border-4 border-border rotate-12 hidden md:block" />
+      <div className="absolute bottom-16 right-8 w-10 h-10 bg-main/30 border-4 border-border -rotate-6 hidden md:block" />
+      
+      <div className="max-w-6xl mx-auto relative z-10">
         <FadeIn className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-heading mb-4">Featured Projects</h2>
-          <div className="w-20 h-1 bg-main mx-auto"></div>
+          <div className="inline-block rotate-[-1deg] bg-main px-8 py-4 border-4 border-border shadow-[6px_6px_0px_0px_var(--border)] mb-6">
+            <h2 className="text-3xl md:text-5xl font-heading font-black uppercase tracking-tight text-main-foreground">
+              Featured Projects
+            </h2>
+          </div>
         </FadeIn>
         
         <StaggerContainer staggerDelay={0.15} className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
