@@ -35,7 +35,7 @@ export function Header() {
       <nav className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between relative z-40">
         <a href="https://github.com/bnetpineda" target="_blank" className="flex items-center gap-2">
           <Avatar className="size-10 border-2 border-border">
-            <AvatarImage src="/image.png" alt="Profile" />
+            <AvatarImage src="/image.webp" alt="Profile" />
             <AvatarFallback>MP</AvatarFallback>
           </Avatar>
         </a>
@@ -71,7 +71,7 @@ export function Header() {
             <SheetContent side="right" className="w-full sm:w-80 border-l-4">
               <SheetHeader className="flex-row items-center gap-3 border-b-4 border-border pb-4">
                 <Avatar className="size-10 border-2 border-border">
-                  <AvatarImage src="/image.png" alt="Profile" />
+                  <AvatarImage src="/image.webp" alt="Profile" />
                   <AvatarFallback>MP</AvatarFallback>
                 </Avatar>
                 <SheetTitle className="text-left text-xl uppercase">Menu</SheetTitle>
