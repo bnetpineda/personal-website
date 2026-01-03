@@ -383,16 +383,18 @@ function ProjectCard({
                   Code
                 </a>
               </Button>
-              <Button 
-                size="sm" 
-                asChild
-                className="bg-main text-main-foreground hover:bg-secondary-background hover:text-foreground border-2 border-border shadow-[4px_4px_0px_0px_var(--border)] hover:shadow-[2px_2px_0px_0px_var(--border)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all rounded-none"
-              >
-                <a href={project.demo} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Demo
-                </a>
-              </Button>
+              {project.demo && (
+                <Button 
+                  size="sm" 
+                  asChild
+                  className="bg-main text-main-foreground hover:bg-secondary-background hover:text-foreground border-2 border-border shadow-[4px_4px_0px_0px_var(--border)] hover:shadow-[2px_2px_0px_0px_var(--border)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all rounded-none"
+                >
+                  <a href={project.demo} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Demo
+                  </a>
+                </Button>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm" 
