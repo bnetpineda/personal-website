@@ -10,7 +10,6 @@ import { Send, Loader2, CheckCircle } from "lucide-react";
 import { CONTACT_FORM_ENDPOINT, CONTACT_INFO, SOCIAL_LINKS } from "@/lib/constants";
 import { ContactInfoItem } from "@/components/ui/contact-info-item";
 import { SocialLinks } from "@/components/ui/social-links";
-import { DecorativeBackground } from "@/components/ui/decorative-background";
 
 interface FormData {
   name: string;
@@ -125,7 +124,6 @@ export function Contact() {
 
   return (
     <section id="contact" className="min-h-screen py-24 px-4 bg-pattern border-y-4 border-border relative overflow-hidden flex flex-col justify-center">
-      <DecorativeBackground />
 
       <div className="max-w-4xl mx-auto relative z-10">
         <FadeIn className="text-center mb-16">

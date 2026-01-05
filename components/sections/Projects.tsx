@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/ui/motion";
-import { DecorativeBackground } from "@/components/ui/decorative-background";
 import { ImageViewer } from "@/components/ui/image-viewer";
 import { ProjectCard } from "@/components/ui/project-card";
 import { PROJECTS } from "@/lib/data/projects";
@@ -24,7 +23,6 @@ export function Projects() {
 
   return (
     <section id="projects" className="min-h-screen py-24 px-4 bg-pattern relative overflow-hidden flex flex-col justify-center">
-      <DecorativeBackground />
 
       <div className="max-w-6xl mx-auto relative z-10">
         <FadeIn className="text-center mb-16">
