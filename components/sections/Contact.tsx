@@ -6,8 +6,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/ui/motion";
-import { Github, Linkedin, Mail, MapPin, Twitter, Send, Loader2, CheckCircle } from "lucide-react";
-import { CONTACT_FORM_ENDPOINT } from "@/lib/constants";
+import { Send, Loader2, CheckCircle } from "lucide-react";
+import { CONTACT_FORM_ENDPOINT, CONTACT_INFO, SOCIAL_LINKS } from "@/lib/constants";
+import { ContactInfoItem } from "@/components/ui/contact-info-item";
+import { SocialLinks } from "@/components/ui/social-links";
+import { DecorativeBackground } from "@/components/ui/decorative-background";
 
 interface FormData {
   name: string;
@@ -122,11 +125,8 @@ export function Contact() {
 
   return (
     <section id="contact" className="min-h-screen py-24 px-4 bg-pattern border-y-4 border-border relative overflow-hidden flex flex-col justify-center">
-      {/* Decorative background elements */}
-      <div className="absolute top-16 right-12 w-14 h-14 bg-main/20 border-4 border-border rotate-12 hidden md:block" />
-      <div className="absolute bottom-16 left-12 w-10 h-10 bg-main/30 border-4 border-border -rotate-6 hidden md:block" />
-      <div className="absolute top-1/2 left-8 w-8 h-8 bg-main border-4 border-border rotate-45 hidden lg:block" />
-      
+      <DecorativeBackground />
+
       <div className="max-w-4xl mx-auto relative z-10">
         <FadeIn className="text-center mb-16">
           <div className="inline-block rotate-[1deg] bg-main px-8 py-4 border-4 border-border shadow-[6px_6px_0px_0px_var(--border)] mb-6">
@@ -141,7 +141,6 @@ export function Contact() {
         </FadeIn>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Contact Form */}
           <FadeIn variant="fadeInLeft" delay={0.2}>
             <Card className="border-4 border-border shadow-[6px_6px_0px_0px_var(--border)]">
               <CardContent className="p-6">
@@ -225,39 +224,15 @@ export function Contact() {
             </Card>
           </FadeIn>
 
-          {/* Contact Info */}
           <FadeIn variant="fadeInRight" delay={0.3}>
             <Card className="h-full border-4 border-border shadow-[6px_6px_0px_0px_var(--border)]">
               <CardContent className="p-6 h-full flex flex-col justify-center">
                 <StaggerContainer className="space-y-6">
-                  <StaggerItem>
-                    <div className="flex items-center gap-4">
-                      <div className="bg-main p-3 border-4 border-border">
-                        <Mail className="h-5 w-5 text-main-foreground" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-foreground/60">Email</p>
-                        <a
-                          href="mailto:markbennettpineda@gmail.com"
-                          className="font-heading hover:text-main transition-colors"
-                        >
-                          markbennettpineda@gmail.com
-                        </a>
-                      </div>
-                    </div>
-                  </StaggerItem>
-
-                  <StaggerItem>
-                    <div className="flex items-center gap-4">
-                      <div className="bg-main p-3 border-4 border-border">
-                        <MapPin className="h-5 w-5 text-main-foreground" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-foreground/60">Location</p>
-                        <p className="font-heading">Angeles City, Pampanga</p>
-                      </div>
-                    </div>
-                  </StaggerItem>
+                  {CONTACT_INFO.map((info) => (
+                    <StaggerItem key={info.label}>
+                      <ContactInfoItem info={info} />
+                    </StaggerItem>
+                  ))}
 
                   <StaggerItem>
                     <div className="border-t border-border my-4"></div>
@@ -265,38 +240,11 @@ export function Contact() {
 
                   <StaggerItem>
                     <p className="text-sm text-foreground/60 mb-3">Follow me</p>
-                    <div className="flex gap-3">
-                      <Button variant="outline" size="icon" asChild>
-                        <a
-                          href="https://github.com/bnetpineda"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="GitHub"
-                        >
-                          <Github className="h-5 w-5" />
-                        </a>
-                      </Button>
-                      <Button variant="outline" size="icon" asChild>
-                        <a
-                          href="https://www.linkedin.com/in/mark-bennett-pineda-2b413927b/"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="LinkedIn"
-                        >
-                          <Linkedin className="h-5 w-5" />
-                        </a>
-                      </Button>
-                      <Button variant="outline" size="icon" asChild>
-                        <a
-                          href="https://twitter.com/its_pandesal"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Twitter"
-                        >
-                          <Twitter className="h-5 w-5" />
-                        </a>
-                      </Button>
-                    </div>
+                    <SocialLinks
+                      links={SOCIAL_LINKS}
+                      variant="outline"
+                      className="flex gap-3"
+                    />
                   </StaggerItem>
                 </StaggerContainer>
               </CardContent>

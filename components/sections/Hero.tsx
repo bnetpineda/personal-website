@@ -1,52 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Github, Linkedin, Mail, Twitter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FadeIn, StaggerContainer, StaggerItem, TextReveal } from "@/components/ui/motion";
-import { ArrowDown, FileDown, Github, Linkedin, Mail } from "lucide-react";
-import { useReducedMotion } from "motion/react";
+import { Typewriter } from "@/components/ui/typewriter";
+import { ArrowDown, FileDown } from "lucide-react";
+import { SOCIAL_LINKS } from "@/lib/constants";
 
-function Typewriter({ text, delay = 0 }: { text: string; delay?: number }) {
-  const [displayedText, setDisplayedText] = useState("");
-  const [started, setStarted] = useState(false);
-  const shouldReduceMotion = useReducedMotion();
-
-  useEffect(() => {
-    if (shouldReduceMotion) {
-      setDisplayedText(text);
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      setStarted(true);
-    }, delay * 1000);
-    return () => clearTimeout(timeout);
-  }, [delay, shouldReduceMotion, text]);
-
-  useEffect(() => {
-    if (shouldReduceMotion) return;
-    if (!started) return;
-
-    let currentIndex = 0;
-    const interval = setInterval(() => {
-      if (currentIndex <= text.length) {
-        setDisplayedText(text.slice(0, currentIndex));
-        currentIndex++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [text, started, shouldReduceMotion]);
-
-  return (
-    <span>
-      <span className="sr-only">{text}</span>
-      <span aria-hidden="true">{displayedText}</span>
-    </span>
-  );
-}
+const iconMap = {
+  github: Github,
+  linkedin: Linkedin,
+  twitter: Twitter,
+  email: Mail,
+};
 
 export function Hero() {
   return (
@@ -59,22 +25,22 @@ export function Hero() {
             </span>
           </div>
         </FadeIn>
-        
+
         <TextReveal delay={0.2}>
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-heading mb-6 leading-tight">
             Hi, I&apos;m <span className="text-main">Mark Pineda</span>
           </h1>
         </TextReveal>
-        
+
         <FadeIn delay={0.4}>
           <p className="text-lg md:text-xl text-foreground/80 mb-8 max-w-2xl mx-auto font-sans min-h-[3.5rem]">
-            <Typewriter 
-              text="Full-stack developer building fast, scalable web apps from frontend to backend. Turning complex ideas into clean, performant code." 
+            <Typewriter
+              text="Building clean, performant code."
               delay={0.6}
             />
           </p>
         </FadeIn>
-        
+
         <FadeIn delay={0.8}>
           <div className="flex flex-wrap gap-4 justify-center mb-12">
             <Button size="lg" asChild>
@@ -91,34 +57,30 @@ export function Hero() {
             </Button>
           </div>
         </FadeIn>
-        
+
         <StaggerContainer delay={1.0} className="flex gap-4 justify-center mb-16">
-          <StaggerItem>
-            <Button variant="ghost" size="icon" asChild>
-              <a href="https://github.com/bnetpineda" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                <Github className="h-5 w-5" />
-              </a>
-            </Button>
-          </StaggerItem>
-          <StaggerItem>
-            <Button variant="ghost" size="icon" asChild>
-              <a href="https://www.linkedin.com/in/mark-bennett-pineda-2b413927b/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
-                <Linkedin className="h-5 w-5" />
-              </a>
-            </Button>
-          </StaggerItem>
-          <StaggerItem>
-            <Button variant="ghost" size="icon" asChild>
-              <a href="mailto:markbennettpineda@gmail.com" aria-label="Email">
-                <Mail className="h-5 w-5" />
-              </a>
-            </Button>
-          </StaggerItem>
+          {SOCIAL_LINKS.slice(0, 3).map((link) => {
+            const Icon = iconMap[link.platform];
+            return (
+              <StaggerItem key={link.platform}>
+                <Button variant="ghost" size="icon" asChild>
+                  <a
+                    href={link.href}
+                    target={link.href.startsWith("http") ? "_blank" : undefined}
+                    rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                    aria-label={link.ariaLabel}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </a>
+                </Button>
+              </StaggerItem>
+            );
+          })}
         </StaggerContainer>
-        
+
         <FadeIn delay={1.2}>
-          <a 
-            href="#projects" 
+          <a
+            href="#about"
             className="inline-flex flex-col items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
           >
             <span className="text-sm">Scroll to explore</span>

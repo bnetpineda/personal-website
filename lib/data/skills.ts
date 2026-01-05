@@ -1,0 +1,40 @@
+import type { Skill } from "@/lib/types";
+
+export const SKILLS: readonly Skill[] = [
+  { category: "frontend", name: "React" },
+  { category: "frontend", name: "Next.js" },
+  { category: "frontend", name: "TypeScript" },
+  { category: "frontend", name: "Tailwind CSS" },
+  { category: "frontend", name: "HTML/CSS" },
+  { category: "frontend", name: "JavaScript" },
+  { category: "frontend", name: "Redux" },
+  { category: "frontend", name: "Framer Motion" },
+  { category: "frontend", name: "Shadcn UI" },
+  { category: "frontend", name: "Zustand" },
+  { category: "backend", name: "Node.js" },
+  { category: "backend", name: "Express" },
+  { category: "backend", name: "PostgreSQL" },
+  { category: "backend", name: "MongoDB" },
+  { category: "backend", name: "REST APIs" },
+  { category: "backend", name: "GraphQL" },
+  { category: "backend", name: "Prisma" },
+  { category: "backend", name: "Supabase" },
+  { category: "backend", name: "Firebase" },
+  { category: "backend", name: "JWT" },
+  { category: "tools", name: "Git" },
+  { category: "tools", name: "Docker" },
+  { category: "tools", name: "AWS" },
+  { category: "tools", name: "Vercel" },
+  { category: "tools", name: "Figma" },
+  { category: "tools", name: "VS Code" },
+  { category: "tools", name: "Postman" },
+  { category: "tools", name: "Jest" },
+  { category: "tools", name: "CI/CD" },
+  { category: "tools", name: "Linux" },
+] as const;
+
+export const SKILLS_BY_CATEGORY = {
+  frontend: SKILLS.filter((skill) => skill.category === "frontend"),
+  backend: SKILLS.filter((skill) => skill.category === "backend"),
+  tools: SKILLS.filter((skill) => skill.category === "tools"),
+} as const;

@@ -9,7 +9,7 @@ function useSafeReducedMotion() {
   const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
-    setIsClient(true);
+    setTimeout(() => setIsClient(true), 0);
   }, []);
 
   // Return false on server and initial client render to match SSR
