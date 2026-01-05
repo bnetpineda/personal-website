@@ -1,13 +1,13 @@
 "use client";
 
-import { useReducedMotion } from "motion/react";
+
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/ui/motion";
 import { NeoCard, NeoCardImageWrapper } from "@/components/ui/neo-card";
 import { DecorativeBackground } from "@/components/ui/decorative-background";
 import Image from "next/image";
 
 export function About() {
-  const shouldReduceMotion = useReducedMotion();
+
 
   return (
     <section id="about" className="min-h-screen py-24 px-4 bg-secondary-background border-y-4 border-border relative overflow-hidden flex flex-col justify-center bg-pattern">
@@ -98,21 +98,15 @@ export function About() {
              <div className="group h-full transition-all duration-300 hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_var(--border)]">
                 <NeoCard className="p-4 h-full flex flex-col">
                    <NeoCardImageWrapper className="w-full bg-black mb-4 h-80 md:h-96">
-                      {!shouldReduceMotion ? (
                       <video
-                         src="/about-me/myweightlifting.webm"
-                         autoPlay
-                         loop
-                         muted
-                         playsInline
-                         aria-label="Weightlifting workout video"
-                         className="w-full h-full object-cover object-[50%_0%] grayscale group-hover:grayscale-0 transition-all duration-500"
-                       />
-                    ) : (
-                      <div className="w-full h-full bg-gray-800 flex items-center justify-center text-white">
-                        <span>Video disabled for reduced motion</span>
-                      </div>
-                    )}
+                        src="/about-me/myweightlifting.webm"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        aria-label="Weightlifting workout video"
+                        className="w-full h-full object-cover object-[50%_0%] grayscale group-hover:grayscale-0 transition-all duration-500"
+                      />
                  </NeoCardImageWrapper>
                  <h4 className="font-heading font-bold text-lg text-center uppercase mt-auto">Iron Discipline</h4>
                </NeoCard>
@@ -123,7 +117,6 @@ export function About() {
                <div className="group h-full transition-all duration-300 hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_var(--border)]">
                 <NeoCard className="p-4 h-full flex flex-col">
                    <NeoCardImageWrapper className="w-full bg-black mb-4 h-48 md:h-96">
-                     {!shouldReduceMotion ? (
                       <video
                         src="/about-me/valorant-highlight.webm"
                         autoPlay
@@ -133,11 +126,6 @@ export function About() {
                         aria-label="Valorant gameplay highlights"
                         className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
                       />
-                   ) : (
-                     <div className="w-full h-full bg-gray-800 flex items-center justify-center text-white">
-                       <span>Video disabled for reduced motion</span>
-                     </div>
-                   )}
                  </NeoCardImageWrapper>
                  <h4 className="font-heading font-bold text-lg text-center uppercase mt-auto">Clutch Moments</h4>
                </NeoCard>
