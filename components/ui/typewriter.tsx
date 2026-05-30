@@ -1,46 +1,51 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 
-export function Typewriter({ text, delay = 0 }: { text: string; delay?: number }) {
-  const [displayedText, setDisplayedText] = useState("");
-  const [started, setStarted] = useState(false);
-  const shouldReduceMotion = useReducedMotion();
+interface TypewriterProps {
+  lines: readonly string[];
+}
 
-  useEffect(() => {
-    if (shouldReduceMotion) {
-      setDisplayedText(text);
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      setStarted(true);
-    }, delay * 1000);
-    return () => clearTimeout(timeout);
-  }, [delay, shouldReduceMotion, text]);
+/** Cycles through `lines`, typing then deleting each, with a blinking caret. */
+export function Typewriter({ lines }: TypewriterProps) {
+  const [txt, setTxt] = useState("");
+  const state = useRef({ line: 0, char: 0, del: false });
 
   useEffect(() => {
-    if (shouldReduceMotion) return;
-    if (!started) return;
-
-    let currentIndex = 0;
-    const interval = setInterval(() => {
-      if (currentIndex <= text.length) {
-        setDisplayedText(text.slice(0, currentIndex));
-        currentIndex++;
+    if (!lines.length) return;
+    let to: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const s = state.current;
+      const full = lines[s.line];
+      if (!s.del) {
+        s.char++;
+        setTxt(full.slice(0, s.char));
+        if (s.char === full.length) {
+          s.del = true;
+          to = setTimeout(tick, 1700);
+          return;
+        }
+        to = setTimeout(tick, 42 + Math.random() * 40);
       } else {
-        clearInterval(interval);
+        s.char--;
+        setTxt(full.slice(0, s.char));
+        if (s.char === 0) {
+          s.del = false;
+          s.line = (s.line + 1) % lines.length;
+          to = setTimeout(tick, 240);
+          return;
+        }
+        to = setTimeout(tick, 22);
       }
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [text, started, shouldReduceMotion]);
+    };
+    to = setTimeout(tick, 500);
+    return () => clearTimeout(to);
+  }, [lines]);
 
   return (
     <span>
-      <span className="sr-only">{text}</span>
-      <span aria-hidden="true">{displayedText}</span>
+      {txt}
+      <span className="caret">.</span>
     </span>
   );
 }

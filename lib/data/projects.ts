@@ -3,9 +3,15 @@ import type { Project } from "@/lib/types";
 export const PROJECTS: readonly Project[] = [
   {
     title: "PawScan",
-    description: "AI-powered pet health assessment app connecting pet owners with licensed veterinarians for real-time consultation.",
+    num: "01",
+    role: "Solo · Mobile",
+    year: "2025",
+    type: "AI · Health",
+    description:
+      "AI-powered pet health assessment that lets owners scan a pet, get a skin-condition read with a confidence score, and connect with licensed vets for real-time consultation.",
     tech: ["React Native", "Expo", "Supabase", "OpenAI", "Nativewind"],
     image: "/pawscan-images/Screenshot_20260102_021810_com_markbennettpineda_PawScan_MainActivity.webp",
+    coverAlt: "/pawscan-images/Screenshot_20260102_021827_com_markbennettpineda_PawScan_MainActivity.webp",
     isMobile: true,
     gallery: [
       "/pawscan-images/Screenshot_20260102_021810_com_markbennettpineda_PawScan_MainActivity.webp",
@@ -21,9 +27,15 @@ export const PROJECTS: readonly Project[] = [
   },
   {
     title: "G3od",
-    description: "Interactive geometry learning platform with voice-assisted AI tutoring and 3D visualizations for students.",
+    num: "02",
+    role: "Capstone · Mobile",
+    year: "2025",
+    type: "EdTech · 3D",
+    description:
+      "Interactive geometry learning platform with voice-assisted AI tutoring and real-time 3D visualizations — gamified with points, levels and achievements to keep students exploring.",
     tech: ["React Native", "Three.js", "OpenAI", "Supabase", "Nativewind"],
     image: "/g3od-images/Screenshot_20260102_023031_com_citycollegeofangeles_g3od_MainActivity.webp",
+    coverAlt: "/g3od-images/Screenshot_20260102_023118_com_citycollegeofangeles_g3od_MainActivity.webp",
     isMobile: true,
     gallery: [
       "/g3od-images/Screenshot_20260102_023031_com_citycollegeofangeles_g3od_MainActivity.webp",
@@ -38,9 +50,15 @@ export const PROJECTS: readonly Project[] = [
   },
   {
     title: "MealWise",
-    description: "Multi-vendor food marketplace with real-time order tracking and role-based dashboards for sellers and customers.",
+    num: "03",
+    role: "Full-stack · Web",
+    year: "2024",
+    type: "Marketplace",
+    description:
+      "A multi-vendor food marketplace built for local Pampanga markets — AI meal planning, real-time order tracking over sockets, and role-based dashboards for sellers and customers.",
     tech: ["React", "Node.js", "MongoDB", "Socket.io", "AWS EC2", "Tailwind CSS"],
     image: "/mealchoice/mealchoice-cca.vercel.app.webp",
+    isMobile: false,
     gallery: [
       "/mealchoice/mealchoice-cca.vercel.app.webp",
       "/mealchoice/mealchoice-cca.vercel.app_customer (3).webp",

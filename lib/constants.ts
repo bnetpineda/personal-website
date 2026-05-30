@@ -1,13 +1,46 @@
 import type { ContactInfo, SocialLink } from "@/lib/types";
 
+export const SITE = {
+  name: "Mark Bennett Pineda",
+  role: "Full-Stack Developer",
+  location: "Angeles City, Pampanga · PH",
+  email: "markbennettpineda@gmail.com",
+  resume: "/resume.pdf",
+  tagline: "Building clean, performant code that endures and scales.",
+} as const;
+
 export const NAV_LINKS = [
   { href: "#about", label: "About" },
-  { href: "#projects", label: "Projects" },
-  { href: "#skills", label: "Skills" },
+  { href: "#work", label: "Work" },
+  { href: "#stack", label: "Stack" },
   { href: "#contact", label: "Contact" },
 ] as const;
 
 export const SECTION_IDS = NAV_LINKS.map((link) => link.href.slice(1));
+
+export const TYPE_LINES = [
+  "Building clean, performant code that endures.",
+  "React · Next.js · Node.js · TypeScript.",
+  "Discipline from the gym to the IDE.",
+  "1% better, every single day.",
+] as const;
+
+export const HERO_STATS = [
+  { v: "3+", l: "Years writing code" },
+  { v: "3", l: "Shipped products" },
+  { v: "2022", l: "Year I started building" },
+] as const;
+
+export const MARQUEE_ITEMS = [
+  "React",
+  "Next.js",
+  "Node.js",
+  "TypeScript",
+  "Endurance",
+  "1% Better",
+  "Clean Code",
+  "Ship It",
+] as const;
 
 export const CONTACT_FORM_ENDPOINT = "https://formspree.io/f/mojvqdge";
 

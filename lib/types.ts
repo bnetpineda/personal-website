@@ -1,16 +1,31 @@
 export interface Project {
   title: string;
+  num: string;
+  role: string;
+  year: string;
+  type: string;
   description: string;
   tech: string[];
   image: string;
+  coverAlt?: string;
   isMobile?: boolean;
   gallery?: string[];
   github?: string;
   demo?: string;
 }
 
+export type SkillCategory =
+  | "languages"
+  | "frontend"
+  | "backend"
+  | "databases"
+  | "testing"
+  | "devtools"
+  | "cloud"
+  | "ai";
+
 export interface Skill {
-  category: "frontend" | "backend" | "tools";
+  category: SkillCategory;
   name: string;
 }
 
