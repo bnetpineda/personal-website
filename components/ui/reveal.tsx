@@ -32,7 +32,7 @@ export function Reveal({ children, className = "", style = {}, delay = 0 }: Reve
           io.disconnect();
         }
       },
-      { threshold: 0.1, rootMargin: "0px 0px -6% 0px" }
+      { threshold: 0, rootMargin: "0px 0px 12% 0px" }
     );
     io.observe(el);
     return () => io.disconnect();
