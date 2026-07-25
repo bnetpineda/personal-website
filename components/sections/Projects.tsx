@@ -64,7 +64,7 @@ export function Projects() {
           idx="02"
           kicker="Things I've shipped"
           title="Selected Work"
-          lead="Three products taken from idea to running code — AI, 3D, real-time. Tap any gallery to scrub through the real screens."
+          lead="Three products taken from idea to running code — AI, ops platforms, real-time marketplaces. Tap any gallery to scrub through the real screens."
         />
         <div className="proj-grid">
           {PROJECTS.map((p, i) => (
