@@ -46,38 +46,6 @@ function Swatch({
   )
 }
 
-/** Horizontal share bar (e.g. allocation). Segment widths are proportional to value. */
-function StackedBar({
-  segments,
-  className,
-  ...props
-}: Omit<React.ComponentProps<"div">, "children"> & {
-  segments: { key: string; value: number; color: string; label?: string }[]
-}) {
-  const visible = segments.filter((s) => s.value > 0)
-  const total = visible.reduce((sum, s) => sum + s.value, 0)
-  return (
-    <div
-      data-slot="stacked-bar"
-      role="img"
-      className={cn(
-        "flex h-7 w-full overflow-hidden rounded-full border-2 border-border bg-background",
-        className
-      )}
-      {...props}
-    >
-      {visible.map((s) => (
-        <span
-          key={s.key}
-          title={s.label}
-          className="h-full min-w-1 border-r-2 border-border last:border-r-0"
-          style={{ width: `${(s.value / total) * 100}%`, backgroundColor: s.color }}
-        />
-      ))}
-    </div>
-  )
-}
-
 /** Radio group of color dots; submits the chosen color under `name` in forms. */
 function SwatchPicker({
   colors,
@@ -107,4 +75,4 @@ function SwatchPicker({
   )
 }
 
-export { Swatch, swatchVariants, StackedBar, SwatchPicker }
+export { Swatch, swatchVariants, SwatchPicker }

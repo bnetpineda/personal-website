@@ -3,6 +3,7 @@ import {
   allocation,
   applyAdjustment,
   budgetProgress,
+  budgetSegments,
   computeNetWorth,
   holdingMetrics,
   monthlySeries,
@@ -108,6 +109,15 @@ describe("helpers", () => {
     expect(budgetProgress(500, null)).toBeNull();
     expect(budgetProgress(500, 0)).toBeNull();
     expect(budgetProgress(1200, 1000)).toEqual({ ratio: 1.2, over: true, remaining: -200 });
+  });
+
+  test("budget segments add up to max(spent, budget)", () => {
+    expect(budgetSegments(3200, 5000)).toEqual({ within: 3200, left: 1800, over: 0 });
+    expect(budgetSegments(6000, 5000)).toEqual({ within: 5000, left: 0, over: 1000 });
+    expect(budgetSegments(0, 5000)).toEqual({ within: 0, left: 5000, over: 0 });
+    expect(budgetSegments(750, null)).toEqual({ within: 750, left: 0, over: 0 });
+    expect(budgetSegments(750, 0)).toEqual({ within: 750, left: 0, over: 0 });
+    expect(budgetSegments(100.1, 100.3)).toEqual({ within: 100.1, left: 0.2, over: 0 });
   });
 
   test("savings rate", () => {

@@ -179,6 +179,19 @@ export function budgetProgress(
   return { ratio: spent / budget, over: spent > budget, remaining: round2(budget - spent) };
 }
 
+/** Stacked-bar segments for spend against an optional budget: within it, budget left, overspend. */
+export function budgetSegments(
+  spent: number,
+  budget: number | null | undefined
+): { within: number; left: number; over: number } {
+  if (budget == null || budget <= 0) return { within: spent, left: 0, over: 0 };
+  return {
+    within: Math.min(spent, budget),
+    left: round2(Math.max(budget - spent, 0)),
+    over: round2(Math.max(spent - budget, 0)),
+  };
+}
+
 /** Share of income kept: (income − expense) / income. */
 export function savingsRate(income: number, expense: number): number | null {
   return income > 0 ? (income - expense) / income : null;

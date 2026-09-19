@@ -52,11 +52,12 @@ Use the component that fits; don't rebuild it from `div`s.
 | Surface / KPI tile | `Card` (+ `variant="primary"` for the lime highlight), `CardHeader/Title/Description/Action/Content` |
 | Form field | `Field` + `FieldLabel` + `Input`/`Select`/`Textarea` + `FieldError`/`FieldDescription`, grouped in `FieldGroup` |
 | Choice from a list | `Select` (gives a hidden native `<select name>` for FormData) |
+| Date | `DatePicker` — `Popover` + `Calendar`; submits `YYYY-MM-DD` under `name` (hidden input) |
 | Segmented choice | `ToggleGroup` (single) · content panels → `Tabs` |
 | On/off | `Toggle` |
 | Status label | `Badge` — `default outline secondary destructive success warning` |
 | Progress / budget / utilization | `Progress` — `variant` `default success warning destructive`, or `indicatorColor` for data colors |
-| Data color dot / allocation bar / color picker | `Swatch` / `StackedBar` / `SwatchPicker` (components/ui/swatch.tsx) |
+| Data color dot / color picker | `Swatch` / `SwatchPicker` (components/ui/swatch.tsx) |
 | Lists of records | `ItemGroup` + `Item` (`ItemMedia`, `ItemContent`, `ItemTitle`, `ItemDescription`, `ItemActions`) |
 | Tables | `Table` inside `Card` (`className="gap-0 overflow-hidden py-0"`) |
 | Row actions | `DropdownMenu` → edit in `Sheet`, destructive confirm in `AlertDialog` (see `RowActions`) |
@@ -65,10 +66,11 @@ Use the component that fits; don't rebuild it from `div`s.
 | Notices | `Alert` — `default warning destructive` |
 | Loading | `Skeleton`, `Spinner` |
 | Hints on icon buttons | `Tooltip` (admin is wrapped in `TooltipProvider`) |
-| Time-series charts | `ChartContainer` + Recharts, colors from `ChartConfig` (`var(--chart-N)`) |
+| Charts (trend, allocation, breakdown) | `ChartContainer` + Recharts; series colors from `ChartConfig` (`var(--chart-N)`), per-row data colors via `<Cell fill>` |
 
 Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`,
-`Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`) — reuse them before
+`Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`, and the charts
+`NetWorthChart`, `CashFlowChart`, `AllocationChart`, `BreakdownChart`) — reuse them before
 writing new ones.
 
 ## 3. Rules (enforced — `design-system.lint.json`)
@@ -82,7 +84,8 @@ writing new ones.
 2. **Theme tokens only** (`shadcn/no-raw-colors`) — no palette colors, hex, or arbitrary colors.
 3. **No arbitrary values** (`shadcn/no-arbitrary-values`) — use the scale (`p-3`, not `p-[13px]`).
 4. **No inline styles in app code** (`shadcn/no-inline-styles`). Data-driven colors/widths go
-   through `Swatch`, `StackedBar`, `SwatchPicker`, or `Progress indicatorColor`.
+   through `Swatch`, `SwatchPicker`, `Progress indicatorColor`, or chart fills (`ChartConfig`,
+   Recharts `fill`/`<Cell fill>`).
 5. **Only classes Tailwind can generate** (`shadcn/no-unknown-classes`) — no ad-hoc CSS classes.
 6. **Static class strings on components** (`shadcn/require-static-classes`) — conditional styling
    goes through props/variants (`variant={active ? "default" : "ghost"}`), or `cn()` with literal

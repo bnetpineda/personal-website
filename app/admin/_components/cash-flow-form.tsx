@@ -1,10 +1,12 @@
 "use client";
 
 import { useId } from "react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CURRENCIES, type CashFlowKind } from "@/lib/finance/constants";
+import { todayManila } from "@/lib/finance/dates";
 import { saveCashFlow } from "../_actions/cash-flows";
 import { FormField, FormFooter, useFormAction } from "./form";
 
@@ -64,11 +66,11 @@ export function CashFlowForm({ kind, categories, accounts, defaults, entry }: Ca
           </Select>
         </FormField>
         <FormField id={id("date")} label="Date" error={error("occurredOn")}>
-          <Input
+          <DatePicker
             id={id("date")}
             name="occurredOn"
-            type="date"
             defaultValue={entry?.occurredOn ?? defaults.occurredOn}
+            today={todayManila()}
             aria-invalid={Boolean(error("occurredOn"))}
           />
         </FormField>

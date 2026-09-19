@@ -5,7 +5,7 @@ import { ArrowRight, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
-import { StackedBar, Swatch } from "@/components/ui/swatch";
+import { Swatch } from "@/components/ui/swatch";
 import {
   getCategories,
   getCategoryTotals,
@@ -21,7 +21,7 @@ import { ASSET_CLASS_META } from "@/lib/finance/constants";
 import { addDays, currentMonth, dayLabel, monthLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { formatPct } from "@/lib/finance/format";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
-import { CashFlowChart, NetWorthChart } from "../_components/charts";
+import { AllocationChart, CashFlowChart, NetWorthChart } from "../_components/charts";
 import { RefreshPricesButton } from "../_components/refresh-prices-button";
 import { Breakdown, EmptyState, Money, PageHeader, Panel, Pct, StatCards } from "../_components/ui";
 
@@ -139,15 +139,7 @@ export default async function OverviewPage() {
               <EmptyState title="No holdings yet">Add stocks, crypto, cash and more on the Holdings page.</EmptyState>
             ) : (
               <div className="flex flex-col gap-4">
-                <StackedBar
-                  aria-label="Allocation by asset class"
-                  segments={alloc.map((a) => ({
-                    key: a.assetClass,
-                    value: a.value,
-                    color: ASSET_CLASS_META[a.assetClass].color,
-                    label: ASSET_CLASS_META[a.assetClass].plural,
-                  }))}
-                />
+                <AllocationChart slices={alloc} />
                 <ul className="flex flex-col gap-2 text-sm">
                   {alloc.map((a) => (
                     <li key={a.assetClass} className="flex items-center gap-2">

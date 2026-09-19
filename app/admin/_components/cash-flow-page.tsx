@@ -14,8 +14,9 @@ import { addMonths, currentMonth, dayLabel, isMonth, monthLabel, todayManila } f
 import { formatPct } from "@/lib/finance/format";
 import { deleteCashFlow } from "../_actions/cash-flows";
 import { CashFlowForm } from "./cash-flow-form";
+import { BreakdownChart } from "./charts";
 import { RowActions } from "./row-actions";
-import { Breakdown, EmptyState, Money, MonthPicker, PageHeader, Panel, StatCards } from "./ui";
+import { EmptyState, Money, MonthPicker, PageHeader, Panel, StatCards } from "./ui";
 
 /** Shared page for /admin/expenses and /admin/income. */
 export async function CashFlowPage({ kind, month: rawMonth }: { kind: CashFlowKind; month?: string }) {
@@ -95,7 +96,7 @@ export async function CashFlowPage({ kind, month: rawMonth }: { kind: CashFlowKi
         </div>
         <div className="lg:col-span-2">
           <Panel title={expense ? "By category" : "By source"}>
-            {rows.length === 0 ? <EmptyState title="Nothing this month" /> : <Breakdown rows={rows} />}
+            {rows.length === 0 ? <EmptyState title="Nothing this month" /> : <BreakdownChart rows={rows} valueLabel={expense ? "Spent" : "Received"} />}
           </Panel>
         </div>
       </div>
