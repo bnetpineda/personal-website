@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "motion/react";
+import { useHaptic } from "@/hooks/use-haptic";
 
 export function BackToTop() {
   const [isVisible, setIsVisible] = useState(false);
+  const { lightTap } = useHaptic();
 
   useEffect(() => {
     const toggleVisibility = () => {
@@ -22,6 +24,7 @@ export function BackToTop() {
   }, []);
 
   const scrollToTop = () => {
+    lightTap();
     window.scrollTo({
       top: 0,
       behavior: "smooth",

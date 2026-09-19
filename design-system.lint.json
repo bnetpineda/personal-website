@@ -1,0 +1,36 @@
+{
+  "settings": {
+    "shadcn": {
+      "note": "Design system: see DESIGN.md. Style through component variants/sizes and theme tokens, not className overrides."
+    }
+  },
+  "rules": {
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": ["layout"],
+        "contracts": [
+          { "pattern": "^(Card|CardHeader|CardContent|CardFooter)$", "allow": ["layout", "spacing"] },
+          { "pattern": "^(CardTitle|CardDescription)$", "allow": ["layout", "typography"] },
+          { "pattern": "^(TableHead|TableCell)$", "allow": ["layout", "typography"] },
+          { "pattern": "^(FieldGroup|SheetHeader|SheetFooter)$", "allow": ["layout", "spacing"] }
+        ],
+        "message": {
+          "spacing": "{{component}} owns its spacing. Use a size ({{sizes|none defined}}) or gap on the parent. See DESIGN.md.",
+          "default": "Don't restyle {{component}} with className. Use a variant ({{variants|none defined}}), or add a variant to components/ui. See DESIGN.md."
+        }
+      }
+    ],
+    "shadcn/no-raw-colors": [
+      "error",
+      { "message": "Use a theme color token ({{tokens|none defined}}) instead of {{className}}. See DESIGN.md." }
+    ],
+    "shadcn/no-arbitrary-values": "error",
+    "shadcn/no-inline-styles": [
+      "error",
+      { "message": "No inline styles in app code. Data-driven colors go through <Swatch>, <StackedBar> or <Progress indicatorColor>. See DESIGN.md." }
+    ],
+    "shadcn/no-unknown-classes": "error",
+    "shadcn/require-static-classes": "error"
+  }
+}

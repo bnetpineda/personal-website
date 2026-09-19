@@ -18,6 +18,19 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  /* The private finance dashboard must never be framed, indexed, or leak its URL. */
+  async headers() {
+    return [
+      {
+        source: "/admin/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

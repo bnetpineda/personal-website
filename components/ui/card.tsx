@@ -1,15 +1,33 @@
 import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "cn"
 
-import { cn } from "@/lib/utils"
+const cardVariants = cva(
+  "flex flex-col gap-6 rounded-lg border-2 border-border py-6 shadow-md",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        primary:
+          "bg-primary text-primary-foreground *:data-[slot=card-header]:*:data-[slot=card-description]:text-primary-foreground/70",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+function Card({
+  className,
+  variant = "default",
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof cardVariants>) {
   return (
     <div
       data-slot="card"
-      className={cn(
-        "bg-secondary-background text-foreground flex flex-col gap-6 rounded-base border-2 border-border py-6 shadow-shadow",
-        className
-      )}
+      data-variant={variant}
+      className={cn(cardVariants({ variant }), className)}
       {...props}
     />
   )
@@ -32,7 +50,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("leading-none font-heading text-xl", className)}
+      className={cn("font-display leading-none tracking-tight uppercase", className)}
       {...props}
     />
   )
@@ -42,7 +60,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-foreground/70 text-sm", className)}
+      className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
   )
@@ -83,6 +101,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
 
 export {
   Card,
+  cardVariants,
   CardHeader,
   CardFooter,
   CardTitle,

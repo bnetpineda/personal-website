@@ -3,66 +3,130 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   DESIGN TOKENS (shadcn/ui semantic layer) — see DESIGN.md
+   Every token maps onto the "Still Building" palette defined
+   further down (--paper, --ink, --accent, …), so light/dark
+   switch automatically with the `.dark` class. Components and
+   app code use ONLY these tokens (bg-primary, text-muted-foreground…).
+   ============================================================ */
 :root {
-  --background: oklch(95.37% 0.0549 125.19);
-  --secondary-background: oklch(100% 0 0);
-  --foreground: oklch(0% 0 0);
-  --main-foreground: oklch(0% 0 0);
-  --main: oklch(83.29% 0.2331 132.51);
-  --border: oklch(0% 0 0);
-  --ring: oklch(0% 0 0);
-  --overlay: oklch(0% 0 0 / 0.8);
-  --shadow: 5px 5px 0px 0px var(--border);
-  --chart-1: #8AE500;
-  --chart-2: #0099FF;
-  --chart-3: #FF4D50;
-  --chart-4: #FACC00;
-  --chart-5: #7A83FF;
-  --chart-active-dot: #000;
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-2);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-2);
+  --popover-foreground: var(--ink);
+  /* Brand lime is the primary action + active/selected color; ink text on it in both themes. */
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-ink);
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink);
+  --muted: color-mix(in srgb, var(--ink) 7%, var(--paper));
+  --muted-foreground: var(--ink-soft);
+  /* --accent (lime) is defined by the palette below; used for hover/highlight surfaces. */
+  --accent-foreground: var(--accent-ink);
+  --destructive: var(--danger);
+  --success: #0f8f45;
+  --warning: #f5b700;
+  --warning-foreground: #15140f;
+  --border: var(--ink);
+  --input: var(--ink);
+  --ring: var(--ink);
+  --overlay: rgb(10 10 8 / 0.6);
+
+  /* Data colors (charts, asset classes, category swatches) */
+  --chart-1: #8ae500;
+  --chart-2: #0099ff;
+  --chart-3: #ff4d50;
+  --chart-4: #facc00;
+  --chart-5: #7a83ff;
+  --chart-6: #ff8a3d;
+  --chart-7: #00b3a4;
+  --chart-8: #e879f9;
+  --chart-9: #a8a29e;
+
+  /* Legacy neobrutalism aliases (public-site components: theme toggle, 404, back-to-top) */
+  --main: var(--accent);
+  --main-foreground: var(--accent-ink);
+  --secondary-background: var(--paper-2);
 }
 
 .dark {
-  --background: oklch(23.1% 0.0346 126.75);
-  --secondary-background: oklch(23.93% 0 0);
-  --foreground: oklch(92.49% 0 0);
-  --main-foreground: oklch(0% 0 0);
-  --main: oklch(76.26% 0.21309 132.4002);
-  --border: oklch(0% 0 0);
-  --ring: oklch(100% 0 0);
-  --shadow: 5px 5px 0px 0px var(--border);
-  --chart-1: #7ACC00;
-  --chart-2: #008AE5;
-  --chart-3: #FF6669;
-  --chart-4: #E0B700;
-  --chart-5: #7A83FF;
-  --chart-active-dot: #fff;
+  --muted: color-mix(in srgb, var(--ink) 10%, var(--paper));
+  --success: #3ddc84;
+  --overlay: rgb(0 0 0 / 0.7);
 }
 
 @theme inline {
-  --color-main: var(--main);
   --color-background: var(--background);
-  --color-secondary-background: var(--secondary-background);
   --color-foreground: var(--foreground);
-  --color-main-foreground: var(--main-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
-  --color-overlay: var(--overlay);
+  --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --color-chart-9: var(--chart-9);
+  --color-main: var(--main);
+  --color-main-foreground: var(--main-foreground);
+  --color-secondary-background: var(--secondary-background);
 
-  --spacing-boxShadowX: 5px;
-  --spacing-boxShadowY: 5px;
-  --spacing-reverseBoxShadowX: -5px;
-  --spacing-reverseBoxShadowY: -5px;
-  --radius-base: 5px;
+  /* Soft corners: scale derived from the palette's 14px --radius */
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-base: var(--radius);
+
+  /* Hard offset shadows — every shadow-* utility is brutalist */
+  --shadow-2xs: 1px 1px 0 0 var(--border);
+  --shadow-xs: 2px 2px 0 0 var(--border);
+  --shadow-sm: 3px 3px 0 0 var(--border);
+  --shadow-md: 4px 4px 0 0 var(--border);
+  --shadow-lg: 6px 6px 0 0 var(--border);
+  --shadow-xl: 8px 8px 0 0 var(--border);
   --shadow-shadow: var(--shadow);
+
+  /* Fonts: next/font variables live on <body>, so reference them with literal fallbacks */
+  --font-display: var(--font-head, "Archivo Black"), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-space-mono, "Space Mono"), ui-monospace, monospace;
   --font-weight-base: 600;
   --font-weight-heading: 800;
+
+  --spacing-boxShadowX: 4px;
+  --spacing-boxShadowY: 4px;
+  --spacing-reverseBoxShadowX: -4px;
+  --spacing-reverseBoxShadowY: -4px;
 }
-  
+
+/* Bottom padding that clears the iOS home indicator (fixed bottom bars). */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

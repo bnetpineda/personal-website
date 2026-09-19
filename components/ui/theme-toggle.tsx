@@ -3,12 +3,15 @@
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme-provider";
+import { useHaptic } from "@/hooks/use-haptic";
 import { cn } from "@/lib/utils";
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
+  const { lightTap } = useHaptic();
 
   const toggleTheme = () => {
+    lightTap();
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
   };
 
@@ -18,7 +21,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       size="icon"
       onClick={toggleTheme}
       aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
-      className={cn("border-2 border-transparent hover:border-border hover:bg-main hover:shadow-shadow transition-all", className)}
+      className={cn("hover:shadow-sm", className)}
     >
       {resolvedTheme === "dark" ? (
         <Sun className="h-5 w-5" />

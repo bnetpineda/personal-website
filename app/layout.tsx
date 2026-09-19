@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo_Black, Work_Sans, Space_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Header } from "@/components/ui/header";
-import { BackToTop } from "@/components/ui/back-to-top";
 import "./globals.css";
 
 const archivoBlack = Archivo_Black({
@@ -149,18 +147,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${archivoBlack.variable} ${workSans.variable} ${spaceMono.variable}`}>
-        <ThemeProvider>
-          {/* Skip to content link for keyboard accessibility */}
-          <a
-            href="#main-content"
-            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-main focus:text-main-foreground focus:border-2 focus:border-border focus:shadow-shadow focus:rounded-base focus:font-medium"
-          >
-            Skip to content
-          </a>
-          <Header />
-          <main id="main-content">{children}</main>
-          <BackToTop />
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
