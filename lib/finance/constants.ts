@@ -33,7 +33,28 @@ export const PRICE_SOURCE_LABELS: Record<PriceSource, string> = {
 export const CASH_FLOW_KINDS = ["income", "expense"] as const;
 export type CashFlowKind = (typeof CASH_FLOW_KINDS)[number];
 
-export const LIABILITY_KINDS = ["credit_card", "loan", "bnpl", "other"] as const;
+export const RECURRENCE_FREQUENCIES = [
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "yearly",
+] as const;
+export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
+
+export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = {
+  weekly: "Weekly",
+  biweekly: "Every 2 weeks",
+  semimonthly: "Twice a month",
+  monthly: "Monthly",
+  quarterly: "Every 3 months",
+  semiannual: "Every 6 months",
+  yearly: "Yearly",
+};
+
+export const LIABILITY_KINDS =["credit_card", "loan", "bnpl", "other"] as const;
 export type LiabilityKind = (typeof LIABILITY_KINDS)[number];
 
 export const LIABILITY_KIND_LABELS: Record<LiabilityKind, string> = {

@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Eye, EyeOff, LogOut } from "lucide-react";
+import { Eye, EyeOff, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -51,7 +51,7 @@ export function AdminHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 border-b-2 border-border bg-background">
+    <header className="sticky top-0 z-40 border-b-2 border-border bg-background pt-safe">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
         <Link href="/admin" className="flex items-baseline gap-2 font-display text-lg">
           <span>
@@ -64,15 +64,26 @@ export function AdminHeader() {
             const active = isActivePath(pathname, href);
             return (
               <Button key={href} asChild size="sm" variant={active ? "default" : "ghost"}>
-                <Link href={href} aria-current={active ? "page" : undefined}>
+                <Link href={href} aria-current={active ? "page" : undefined} aria-label={label}>
                   <Icon />
-                  {label}
+                  {/* Seven sections don't fit with labels between lg and xl. */}
+                  <span className="hidden xl:inline">{label}</span>
                 </Link>
               </Button>
             );
           })}
         </nav>
         <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant={isActivePath(pathname, "/admin/settings") ? "default" : "ghost"} size="icon" className="lg:hidden">
+                <Link href="/admin/settings" aria-label="Settings">
+                  <Settings />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Settings</TooltipContent>
+          </Tooltip>
           <PrivacyToggle />
           <ThemeToggle />
           <form action={logout}>
@@ -96,7 +107,7 @@ export function MobileNav() {
 
   return (
     <nav aria-label="Admin sections" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t-2 border-border bg-background pb-safe lg:hidden">
-      {ADMIN_NAV.map(({ href, short, icon: Icon }) => {
+      {ADMIN_NAV.filter((item) => item.tab).map(({ href, short, icon: Icon }) => {
         const active = isActivePath(pathname, href);
         return (
           <Link

@@ -1,10 +1,11 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { fxRates, holdings, liabilities, netWorthSnapshots } from "@/lib/db/schema";
-import { computeNetWorth, type FxTable, type NetWorth } from "./calc";
+import { cashFlows, fxRates, holdings, liabilities, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
+import { computeNetWorth, fxToPhp, round2, type FxTable, type NetWorth } from "./calc";
 import { BASE_CURRENCY } from "./constants";
-import { todayManila } from "./dates";
+import { addDays, todayManila } from "./dates";
+import { nextOccurrence, occurrencesBetween, scheduleOf } from "./recurrence";
 import { fetchCoinGeckoPrices, fetchFinnhubQuote, fetchFxRate, type Quote } from "./prices";
 
 /*
@@ -181,5 +182,94 @@ export async function snapshotQuietly(): Promise<void> {
     await upsertTodaySnapshot();
   } catch (err) {
     console.error("[admin] net-worth snapshot failed", err);
+  }
+}
+
+/* ---------- recurring income / expenses ---------- */
+
+export interface RecurringRunSummary {
+  posted: number;
+  failed: RefreshFailure[];
+}
+
+/**
+ * Posts every auto-post occurrence due up to `today` (Manila) and advances each item's
+ * cursor. Idempotent: the (recurring_id, recurring_on) unique index swallows overlaps and
+ * the cursor update only applies if nobody moved it first. Entries deleted later stay deleted.
+ */
+export async function postDueRecurring(today: string = todayManila()): Promise<RecurringRunSummary> {
+  const db = getDb();
+  const due = await db
+    .select()
+    .from(recurringCashFlows)
+    .where(
+      and(
+        eq(recurringCashFlows.autoPost, true),
+        eq(recurringCashFlows.paused, false),
+        isNotNull(recurringCashFlows.nextOn),
+        lte(recurringCashFlows.nextOn, today)
+      )
+    );
+  if (due.length === 0) return { posted: 0, failed: [] };
+
+  let fx: FxTable = {};
+  try {
+    fx = await ensureFx([...new Set(due.map((r) => r.currency))]);
+  } catch {
+    // Non-PHP items fail below and retry on the next run.
+  }
+
+  const failed: RefreshFailure[] = [];
+  const entries: (typeof cashFlows.$inferInsert)[] = [];
+  const cursors = [];
+  for (const r of due) {
+    const rate = fxToPhp(fx, r.currency);
+    if (rate == null) {
+      failed.push({ name: r.description, reason: `No ${r.currency}→PHP rate` });
+      continue;
+    }
+    const s = scheduleOf(r);
+    for (const day of occurrencesBetween(s, r.nextOn!, today)) {
+      entries.push({
+        kind: r.kind,
+        occurredOn: day,
+        amount: r.amount,
+        currency: r.currency,
+        amountPhp: round2(r.amount * rate),
+        categoryId: r.categoryId,
+        description: r.description,
+        account: r.account,
+        notes: r.notes,
+        recurringId: r.id,
+        recurringOn: day,
+      });
+    }
+    cursors.push(
+      db
+        .update(recurringCashFlows)
+        .set({ nextOn: nextOccurrence(s, addDays(today, 1)) })
+        .where(and(eq(recurringCashFlows.id, r.id), eq(recurringCashFlows.nextOn, r.nextOn!)))
+    );
+  }
+  if (cursors.length === 0) return { posted: 0, failed };
+
+  if (entries.length === 0) {
+    const [first, ...rest] = cursors;
+    await db.batch([first, ...rest]);
+    return { posted: 0, failed };
+  }
+  // One atomic batch: entries (duplicates skipped) + cursor moves.
+  const insert = db.insert(cashFlows).values(entries).onConflictDoNothing().returning({ id: cashFlows.id });
+  const [inserted] = await db.batch([insert, ...cursors]);
+  return { posted: inserted.length, failed };
+}
+
+/** For after(): posting failures must never break a request. */
+export async function postDueRecurringQuietly(): Promise<void> {
+  try {
+    const { failed } = await postDueRecurring();
+    if (failed.length > 0) console.warn("[admin] recurring items not posted", failed);
+  } catch (err) {
+    console.error("[admin] posting recurring items failed", err);
   }
 }

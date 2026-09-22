@@ -38,8 +38,10 @@ switch automatically with the `.dark` class. Never use raw colors (`bg-red-500`,
 - **Type**: `font-display` (Archivo Black — titles, buttons, big numbers; uppercase) ·
   `font-sans` (Work Sans — body) · `font-mono` (Space Mono — labels, eyebrows, numbers in tables;
   uppercase + `tracking-wider` for labels). Use `tabular-nums` for amounts.
-- Custom utilities live in `globals.css` as `@utility` (e.g. `pb-safe` for iOS home-indicator
-  padding). Don't add plain CSS classes for new UI.
+- Custom utilities live in `globals.css` as `@utility`: `pb-safe` / `mb-safe` (fixed bottom bars and
+  floating buttons clear the iOS home indicator) and `pt-safe` (sticky headers clear the notch). They
+  only take effect because `app/admin/layout.tsx` sets `viewportFit: "cover"` for the installed app.
+  Don't add plain CSS classes for new UI.
 
 ## 2. Components
 
@@ -69,9 +71,9 @@ Use the component that fits; don't rebuild it from `div`s.
 | Charts (trend, allocation, breakdown) | `ChartContainer` + Recharts; series colors from `ChartConfig` (`var(--chart-N)`), per-row data colors via `<Cell fill>` |
 
 Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`,
-`Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`, and the charts
-`NetWorthChart`, `CashFlowChart`, `AllocationChart`, `BreakdownChart`) — reuse them before
-writing new ones.
+`Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`, the recurring
+`OccurrenceList` / `DueActions`, and the charts `NetWorthChart`, `CashFlowChart`,
+`AllocationChart`, `BreakdownChart`) — reuse them before writing new ones.
 
 ## 3. Rules (enforced — `design-system.lint.json`)
 

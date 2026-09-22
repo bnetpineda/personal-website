@@ -4,14 +4,9 @@ import { count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { cashFlows, categories } from "@/lib/db/schema";
+import { pgCode } from "@/lib/db/errors";
+import { cashFlows, categories, recurringCashFlows } from "@/lib/db/schema";
 import { categorySchema, failure, invalid, type FormState } from "@/lib/finance/schemas";
-
-/** Postgres error code from a (possibly Drizzle-wrapped) driver error. */
-function pgCode(err: unknown): string | undefined {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.cause?.code ?? e?.code;
-}
 
 export async function saveCategory(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireAdmin();
@@ -70,6 +65,10 @@ export async function deleteCategory(id: number): Promise<FormState> {
   const [usage] = await db.select({ n: count() }).from(cashFlows).where(eq(cashFlows.categoryId, id));
   if (usage.n > 0) {
     return failure(`Used by ${usage.n} ${usage.n === 1 ? "entry" : "entries"} — archive it instead.`);
+  }
+  const [recurring] = await db.select({ n: count() }).from(recurringCashFlows).where(eq(recurringCashFlows.categoryId, id));
+  if (recurring.n > 0) {
+    return failure(`Used by ${recurring.n} recurring ${recurring.n === 1 ? "item" : "items"} — archive it instead.`);
   }
   try {
     await db.delete(categories).where(eq(categories.id, id));

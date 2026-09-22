@@ -15,6 +15,13 @@
       "when": 1789833160526,
       "tag": "0001_seed-categories",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790070006684,
+      "tag": "0002_recurring",
+      "breakpoints": true
     }
   ]
 }

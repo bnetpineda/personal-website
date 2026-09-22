@@ -1,8 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { pruneLoginAttempts } from "@/lib/auth/rate-limit";
-import { refreshAllPrices } from "@/lib/finance/service";
+import { postDueRecurring, refreshAllPrices } from "@/lib/finance/service";
 
-// Vercel Cron (vercel.json): refresh prices + FX, record today's net-worth point.
+// Vercel Cron (vercel.json): refresh prices + FX, post due recurring entries, record today's net-worth point.
 export const maxDuration = 60;
 
 /** Vercel sends `Authorization: Bearer $CRON_SECRET`. Digests keep the comparison length-safe. */
@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const summary = await refreshAllPrices();
+  const recurring = await postDueRecurring();
   await pruneLoginAttempts();
-  return Response.json(summary);
+  return Response.json({ ...summary, recurring });
 }

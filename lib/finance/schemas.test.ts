@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cashFlowSchema, holdingSchema, liabilitySchema } from "./schemas";
+import { cashFlowSchema, holdingSchema, liabilitySchema, recurringSchema } from "./schemas";
 
 describe("holdingSchema", () => {
   test("normalizes cash to face value and ignores price fields", () => {
@@ -105,5 +105,26 @@ describe("cashFlowSchema", () => {
       const paths = new Set(r.error.issues.map((i) => i.path.join(".")));
       expect([...paths].sort()).toEqual(["amount", "categoryId", "occurredOn"]);
     }
+  });
+});
+
+describe("recurringSchema", () => {
+  const base = { kind: "expense", amount: "549", currency: "PHP", categoryId: "3", description: "Netflix", frequency: "monthly", startOn: "2026-09-15" };
+
+  test("defaults to auto-posting with no end and no second day", () => {
+    const r = recurringSchema.parse(base);
+    expect(r).toMatchObject({ amount: 549, autoPost: true, endOn: null, secondDay: null });
+  });
+
+  test("twice a month fills in the second day 15 days apart", () => {
+    expect(recurringSchema.parse({ ...base, frequency: "semimonthly", secondDay: "auto" }).secondDay).toBe(30);
+    expect(recurringSchema.parse({ ...base, frequency: "semimonthly", secondDay: "31" }).secondDay).toBe(31);
+    expect(recurringSchema.safeParse({ ...base, frequency: "semimonthly", secondDay: "15" }).success).toBe(false);
+  });
+
+  test("confirm mode, and an end date before the start is rejected", () => {
+    expect(recurringSchema.parse({ ...base, posting: "confirm" }).autoPost).toBe(false);
+    expect(recurringSchema.safeParse({ ...base, endOn: "2026-09-01" }).success).toBe(false);
+    expect(recurringSchema.parse({ ...base, endOn: "" }).endOn).toBeNull();
   });
 });

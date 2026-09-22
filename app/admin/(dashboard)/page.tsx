@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { after } from "next/server";
-import { ArrowRight, TriangleAlert } from "lucide-react";
+import { ArrowRight, BellRing, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
@@ -14,14 +14,17 @@ import {
   getLiabilities,
   getMonthlyTotals,
   getRecentCashFlows,
+  getRecurring,
   getSnapshots,
 } from "@/lib/dal";
 import { allocation, computeNetWorth, holdingMetrics, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import { ASSET_CLASS_META } from "@/lib/finance/constants";
 import { addDays, currentMonth, dayLabel, monthLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { formatPct } from "@/lib/finance/format";
+import { dueOccurrences, upcomingOccurrences } from "@/lib/finance/recurrence";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
 import { AllocationChart, CashFlowChart, NetWorthChart } from "../_components/charts";
+import { OccurrenceList } from "../_components/recurring";
 import { RefreshPricesButton } from "../_components/refresh-prices-button";
 import { Breakdown, EmptyState, Money, PageHeader, Panel, Pct, StatCards } from "../_components/ui";
 
@@ -34,7 +37,7 @@ export default async function OverviewPage() {
   const today = todayManila(now);
   const month = currentMonth(now);
 
-  const [holdingRows, liabilityRows, fx, snapshots, monthly, expenseTotals, categories, recent] = await Promise.all([
+  const [holdingRows, liabilityRows, fx, snapshots, monthly, expenseTotals, categories, recent, recurring] = await Promise.all([
     getHoldings(),
     getLiabilities(),
     getFx(),
@@ -43,6 +46,7 @@ export default async function OverviewPage() {
     getCategoryTotals("expense", month),
     getCategories("expense"),
     getRecentCashFlows(8),
+    getRecurring(),
   ]);
 
   // Backfill today's history point after responding, in case the daily cron hasn't run yet.
@@ -80,6 +84,8 @@ export default async function OverviewPage() {
     .slice(0, 6);
 
   const alloc = allocation(nw.byClass);
+  const due = dueOccurrences(recurring, today);
+  const upcoming = upcomingOccurrences(recurring, today, today, addDays(today, 14)).slice(0, 8);
 
   return (
     <>
@@ -94,6 +100,28 @@ export default async function OverviewPage() {
           <AlertTitle>Missing exchange rates</AlertTitle>
           <AlertDescription>
             No rate yet for {nw.missingFx.join(", ")} — those amounts are left out until you refresh prices.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {due.length > 0 && (
+        <Alert className="mb-6">
+          <BellRing />
+          <AlertTitle>
+            {due.length} recurring {due.length === 1 ? "item needs" : "items need"} confirming
+          </AlertTitle>
+          <AlertDescription>
+            <p>
+              {due
+                .slice(0, 3)
+                .map((d) => d.item.description)
+                .join(", ")}
+              {due.length > 3 ? "…" : ""} —{" "}
+              <Link href="/admin/recurring" className="underline underline-offset-4">
+                post or skip them
+              </Link>
+              .
+            </p>
           </AlertDescription>
         </Alert>
       )}
@@ -176,7 +204,23 @@ export default async function OverviewPage() {
         </Panel>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <Panel
+          title="Coming up · 14 days"
+          action={
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/recurring">
+                Recurring <ArrowRight />
+              </Link>
+            </Button>
+          }
+        >
+          {upcoming.length === 0 ? (
+            <EmptyState title="Nothing scheduled">Add salary, rent and subscriptions on the Recurring page.</EmptyState>
+          ) : (
+            <OccurrenceList items={upcoming} today={today} />
+          )}
+        </Panel>
         <Panel title="Top holdings">
           {top.length === 0 ? (
             <EmptyState title="Nothing here yet" />

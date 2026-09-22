@@ -1,11 +1,14 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { cashFlows, categories } from "@/lib/db/schema";
+import { pgCode } from "@/lib/db/errors";
+import { cashFlows, categories, recurringCashFlows } from "@/lib/db/schema";
 import { fxToPhp, round2 } from "@/lib/finance/calc";
+import { addDays } from "@/lib/finance/dates";
+import { nextOccurrence, scheduleOf } from "@/lib/finance/recurrence";
 import { cashFlowSchema, failure, idSchema, invalid, type FormState } from "@/lib/finance/schemas";
 import { ensureFx } from "@/lib/finance/service";
 
@@ -31,6 +34,15 @@ export async function saveCashFlow(_prev: FormState, formData: FormData): Promis
   // Archived categories can't take new entries, but existing ones may keep them.
   if (category.archived && existing?.categoryId !== category.id) {
     return failure("That category is archived.", formData, { categoryId: ["That category is archived"] });
+  }
+
+  // Posting a due occurrence of a recurring item that waits for confirmation.
+  const [recurring] =
+    !existing && input.recurringId && input.recurringOn
+      ? await db.select().from(recurringCashFlows).where(eq(recurringCashFlows.id, input.recurringId)).limit(1)
+      : [];
+  if (input.recurringId && !existing && (!recurring || recurring.kind !== input.kind)) {
+    return failure("That recurring item no longer exists.", formData);
   }
 
   let rate: number | null;
@@ -63,8 +75,30 @@ export async function saveCashFlow(_prev: FormState, formData: FormData): Promis
     notes: input.notes ?? null,
   };
 
-  if (existing) await db.update(cashFlows).set(values).where(eq(cashFlows.id, existing.id));
-  else await db.insert(cashFlows).values(values);
+  if (existing) {
+    await db.update(cashFlows).set(values).where(eq(cashFlows.id, existing.id));
+  } else if (recurring && input.recurringOn) {
+    const on = input.recurringOn;
+    const insert = db.insert(cashFlows).values({ ...values, recurringId: recurring.id, recurringOn: on });
+    try {
+      if (recurring.nextOn && recurring.nextOn <= on) {
+        await db.batch([
+          insert,
+          db
+            .update(recurringCashFlows)
+            .set({ nextOn: nextOccurrence(scheduleOf(recurring), addDays(on, 1)) })
+            .where(and(eq(recurringCashFlows.id, recurring.id), eq(recurringCashFlows.nextOn, recurring.nextOn))),
+        ]);
+      } else {
+        await insert;
+      }
+    } catch (err) {
+      if (pgCode(err) === "23505") return failure("That one is already posted.", formData);
+      throw err;
+    }
+  } else {
+    await db.insert(cashFlows).values(values);
+  }
 
   revalidatePath("/admin", "layout");
   return { ok: true, message: existing ? "Saved." : input.kind === "expense" ? "Expense added." : "Income added." };

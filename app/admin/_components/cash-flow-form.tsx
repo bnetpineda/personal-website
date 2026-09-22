@@ -14,7 +14,17 @@ export interface CashFlowFormProps {
   kind: CashFlowKind;
   categories: { id: number; name: string; archived: boolean }[];
   accounts: string[];
-  defaults: { occurredOn: string; currency?: string | null; categoryId?: number | null; account?: string | null };
+  defaults: {
+    occurredOn: string;
+    currency?: string | null;
+    categoryId?: number | null;
+    account?: string | null;
+    amount?: number;
+    description?: string;
+    notes?: string | null;
+  };
+  /** Posting a due occurrence of a recurring item (links the entry and advances the item). */
+  recurring?: { id: string; on: string };
   entry?: {
     id: string;
     occurredOn: string;
@@ -27,7 +37,7 @@ export interface CashFlowFormProps {
   };
 }
 
-export function CashFlowForm({ kind, categories, accounts, defaults, entry }: CashFlowFormProps) {
+export function CashFlowForm({ kind, categories, accounts, defaults, entry, recurring }: CashFlowFormProps) {
   const { state, pending, onSubmit, formKey, error } = useFormAction(saveCashFlow);
   const uid = useId();
   const id = (name: string) => `${uid}-${name}`;
@@ -39,6 +49,12 @@ export function CashFlowForm({ kind, categories, accounts, defaults, entry }: Ca
     <form key={formKey} onSubmit={onSubmit} noValidate>
       <input type="hidden" name="kind" value={kind} />
       {entry && <input type="hidden" name="id" value={entry.id} />}
+      {recurring && (
+        <>
+          <input type="hidden" name="recurringId" value={recurring.id} />
+          <input type="hidden" name="recurringOn" value={recurring.on} />
+        </>
+      )}
       <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormField id={id("amount")} label="Amount" error={error("amount")}>
           <Input
@@ -47,7 +63,7 @@ export function CashFlowForm({ kind, categories, accounts, defaults, entry }: Ca
             inputMode="decimal"
             autoComplete="off"
             placeholder="0.00"
-            defaultValue={entry?.amount}
+            defaultValue={entry?.amount ?? defaults.amount}
             aria-invalid={Boolean(error("amount"))}
           />
         </FormField>
@@ -94,7 +110,7 @@ export function CashFlowForm({ kind, categories, accounts, defaults, entry }: Ca
             name="description"
             maxLength={200}
             placeholder={expense ? "Groceries at SM" : "September salary"}
-            defaultValue={entry?.description}
+            defaultValue={entry?.description ?? defaults.description}
             aria-invalid={Boolean(error("description"))}
           />
         </FormField>
@@ -114,10 +130,10 @@ export function CashFlowForm({ kind, categories, accounts, defaults, entry }: Ca
           </datalist>
         </FormField>
         <FormField id={id("notes")} label="Notes" error={error("notes")}>
-          <Input id={id("notes")} name="notes" maxLength={500} placeholder="Optional" defaultValue={entry?.notes ?? undefined} />
+          <Input id={id("notes")} name="notes" maxLength={500} placeholder="Optional" defaultValue={(entry ? entry.notes : defaults.notes) ?? undefined} />
         </FormField>
         <FormFooter state={state} pending={pending}>
-          {entry ? "Save" : expense ? "Add expense" : "Add income"}
+          {entry ? "Save" : recurring ? "Post" : expense ? "Add expense" : "Add income"}
         </FormFooter>
       </FieldGroup>
     </form>

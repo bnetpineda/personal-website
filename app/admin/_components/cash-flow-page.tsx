@@ -1,20 +1,25 @@
 import {
   getAccounts,
   getCashFlows,
+  getFx,
   getCategories,
   getCategoryTotals,
   getLastEntryDefaults,
+  getRecurring,
   type CashFlowRow,
 } from "@/lib/dal";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { budgetProgress } from "@/lib/finance/calc";
+import { budgetProgress, fxToPhp } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { addMonths, currentMonth, dayLabel, isMonth, monthLabel, todayManila } from "@/lib/finance/dates";
+import { Repeat } from "lucide-react";
+import { addDays, addMonths, currentMonth, dayLabel, isMonth, monthLabel, monthRange, todayManila } from "@/lib/finance/dates";
 import { formatPct } from "@/lib/finance/format";
+import { upcomingOccurrences } from "@/lib/finance/recurrence";
 import { deleteCashFlow } from "../_actions/cash-flows";
 import { CashFlowForm } from "./cash-flow-form";
 import { BreakdownChart } from "./charts";
+import { OccurrenceList } from "./recurring";
 import { RowActions } from "./row-actions";
 import { EmptyState, Money, MonthPicker, PageHeader, Panel, StatCards } from "./ui";
 
@@ -27,13 +32,15 @@ export async function CashFlowPage({ kind, month: rawMonth }: { kind: CashFlowKi
   const expense = kind === "expense";
   const basePath = expense ? "/admin/expenses" : "/admin/income";
 
-  const [entries, categories, totals, prevTotals, accounts, last] = await Promise.all([
+  const [entries, categories, totals, prevTotals, accounts, last, recurring, fx] = await Promise.all([
     getCashFlows(kind, month),
     getCategories(kind),
     getCategoryTotals(kind, month),
     getCategoryTotals(kind, addMonths(month, -1)),
     getAccounts(),
     getLastEntryDefaults(kind),
+    getRecurring(kind),
+    getFx(),
   ]);
 
   const total = [...totals.values()].reduce((a, b) => a + b, 0);
@@ -45,6 +52,11 @@ export async function CashFlowPage({ kind, month: rawMonth }: { kind: CashFlowKi
     budgeted.reduce((sum, c) => sum + c.monthlyBudget!, 0)
   );
   const formCategories = categories.map(({ id, name, archived }) => ({ id, name, archived }));
+
+  // Recurring items still to come this month (from today on; whole month when viewing a future one).
+  const { start, end } = monthRange(month);
+  const scheduled = month >= current ? upcomingOccurrences(recurring, today, start > today ? start : today, addDays(end, -1)) : [];
+  const scheduledTotal = scheduled.reduce((sum, o) => sum + o.item.amount * (fxToPhp(fx, o.item.currency) ?? 0), 0);
 
   const rows = categories
     .filter((c) => (totals.get(c.id) ?? 0) > 0 || (expense && !c.archived && (c.monthlyBudget ?? 0) > 0))
@@ -62,7 +74,12 @@ export async function CashFlowPage({ kind, month: rawMonth }: { kind: CashFlowKi
 
       <StatCards
         items={[
-          { label: `${expense ? "Spent" : "Earned"} · ${monthLabel(month, "short")}`, value: <Money value={total} />, primary: true },
+          {
+            label: `${expense ? "Spent" : "Earned"} · ${monthLabel(month, "short")}`,
+            value: <Money value={total} />,
+            hint: scheduledTotal > 0 ? <>+<Money value={scheduledTotal} /> scheduled</> : undefined,
+            primary: true,
+          },
           {
             label: `vs ${monthLabel(addMonths(month, -1), "short")}`,
             value: <Money value={total - prevTotal} signed />,
@@ -101,8 +118,16 @@ export async function CashFlowPage({ kind, month: rawMonth }: { kind: CashFlowKi
         </div>
       </div>
 
+      {scheduled.length > 0 && (
+        <div className="mt-6">
+          <Panel title={`Scheduled · ${scheduled.length}`}>
+            <OccurrenceList items={scheduled} today={today} />
+          </Panel>
+        </div>
+      )}
+
       <div className="mt-6">
-        <Panel title={`${monthLabel(month)} · ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}>
+        <Panel title={`${monthLabel(month)} ·${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}>
           {entries.length === 0 ? (
             <EmptyState title="No entries">{expense ? "Log your first expense above." : "Log salary, freelance or other income above."}</EmptyState>
           ) : (
@@ -120,7 +145,10 @@ export async function CashFlowPage({ kind, month: rawMonth }: { kind: CashFlowKi
                           <Swatch color={e.categoryColor} />
                         </ItemMedia>
                         <ItemContent>
-                          <ItemTitle>{e.description}</ItemTitle>
+                          <ItemTitle>
+                            {e.description}
+                            {e.recurringId && <Repeat aria-label="Recurring" className="size-3 text-muted-foreground" />}
+                          </ItemTitle>
                           <ItemDescription>{[e.categoryName, e.account, e.notes].filter(Boolean).join(" · ")}</ItemDescription>
                         </ItemContent>
                         <ItemActions>

@@ -9,6 +9,7 @@ import {
   holdings,
   liabilities,
   netWorthSnapshots,
+  recurringCashFlows,
 } from "@/lib/db/schema";
 import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
@@ -151,6 +152,19 @@ export async function getLastEntryDefaults(kind: CashFlowKind) {
   return row ?? null;
 }
 
+export type RecurringRow = Awaited<ReturnType<typeof getRecurring>>[number];
+
+/** Recurring items with their category, active first, then by next date. */
+export async function getRecurring(kind?: CashFlowKind) {
+  await requireAdmin();
+  return getDb()
+    .select({ ...getTableColumns(recurringCashFlows), categoryName: categories.name, categoryColor: categories.color })
+    .from(recurringCashFlows)
+    .innerJoin(categories, eq(recurringCashFlows.categoryId, categories.id))
+    .where(kind ? eq(recurringCashFlows.kind, kind) : undefined)
+    .orderBy(asc(recurringCashFlows.paused), sql`${recurringCashFlows.nextOn} asc nulls last`, asc(recurringCashFlows.description));
+}
+
 export async function getSnapshots() {
   await requireAdmin();
   return getDb().select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate));
@@ -160,13 +174,14 @@ export async function getSnapshots() {
 export async function getExportData() {
   await requireAdmin();
   const db = getDb();
-  const [h, l, c, f, s, x] = await Promise.all([
+  const [h, l, c, f, s, x, r] = await Promise.all([
     db.select().from(holdings).orderBy(asc(holdings.createdAt)),
     db.select().from(liabilities).orderBy(asc(liabilities.createdAt)),
     db.select().from(categories).orderBy(asc(categories.id)),
     db.select().from(cashFlows).orderBy(asc(cashFlows.occurredOn), asc(cashFlows.createdAt)),
     db.select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate)),
     db.select().from(fxRates).orderBy(asc(fxRates.currency)),
+    db.select().from(recurringCashFlows).orderBy(asc(recurringCashFlows.createdAt)),
   ]);
-  return { holdings: h, liabilities: l, categories: c, cashFlows: f, netWorthSnapshots: s, fxRates: x };
+  return { holdings: h, liabilities: l, categories: c, cashFlows: f, recurring: r, netWorthSnapshots: s, fxRates: x };
 }

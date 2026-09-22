@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { getAccounts, getCategories, getLastEntryDefaults } from "@/lib/dal";
 import { todayManila } from "@/lib/finance/dates";
+import { postDueRecurringQuietly } from "@/lib/finance/service";
 import { PRIVACY_COOKIE } from "../_components/nav";
 import { QuickAddExpense } from "../_components/quick-add-expense";
 import { AdminHeader, MobileNav, Shell } from "../_components/shell";
@@ -12,6 +14,9 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }>) {
   await requireAdmin();
+  // Catch up on recurring entries due today if the 06:00 cron hasn't posted them yet
+  // (e.g. opening the app after midnight). Shows up on the next navigation.
+  after(postDueRecurringQuietly);
   const [cookieStore, categories, accounts, last] = await Promise.all([
     cookies(),
     getCategories("expense"),

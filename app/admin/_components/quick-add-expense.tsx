@@ -8,7 +8,7 @@ import { FormSheet } from "./form";
 /** Floating "+ Expense" button on small screens; opens quick-add from any admin page. */
 export function QuickAddExpense(props: Omit<CashFlowFormProps, "kind" | "entry">) {
   return (
-    <div className="fixed right-4 bottom-24 z-40 lg:hidden">
+    <div className="fixed right-4 bottom-24 z-40 mb-safe lg:hidden">
       <FormSheet
         title="Add expense"
         trigger={

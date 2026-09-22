@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigserial,
   boolean,
   check,
@@ -24,6 +25,7 @@ import {
   CASH_FLOW_KINDS,
   LIABILITY_KINDS,
   PRICE_SOURCES,
+  RECURRENCE_FREQUENCIES,
   type AssetClass,
 } from "../finance/constants";
 
@@ -31,6 +33,7 @@ export const assetClassEnum = pgEnum("asset_class", ASSET_CLASSES);
 export const priceSourceEnum = pgEnum("price_source", PRICE_SOURCES);
 export const cashFlowKindEnum = pgEnum("cash_flow_kind", CASH_FLOW_KINDS);
 export const liabilityKindEnum = pgEnum("liability_kind", LIABILITY_KINDS);
+export const recurrenceFrequencyEnum = pgEnum("recurrence_frequency", RECURRENCE_FREQUENCIES);
 
 /* Unbounded numerics keep tiny token prices exact; money amounts use (14,2). */
 const decimal = (name: string) => numeric(name, { mode: "number" });
@@ -122,13 +125,55 @@ export const cashFlows = pgTable(
     /** Where the money moved, e.g. "GCash" or "BPI credit card". */
     account: text("account"),
     notes: text("notes"),
+    /** Set when the entry was posted from a recurring item. */
+    recurringId: uuid("recurring_id").references((): AnyPgColumn => recurringCashFlows.id, { onDelete: "set null" }),
+    /** The scheduled occurrence it was posted for (occurred_on may be edited afterwards). */
+    recurringOn: date("recurring_on"),
     ...timestamps,
   },
   (t) => [
     index("cash_flows_kind_occurred_on_idx").on(t.kind, t.occurredOn),
     index("cash_flows_category_id_idx").on(t.categoryId),
+    // One entry per scheduled occurrence, so overlapping cron/page-view runs can't double-post.
+    uniqueIndex("cash_flows_recurring_occurrence_unique").on(t.recurringId, t.recurringOn),
     check("cash_flows_amount_positive", sql`${t.amount} > 0`),
     check("cash_flows_currency_format", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+  ]
+);
+
+/** Template for income/expenses that repeat (salary, rent, subscriptions…). */
+export const recurringCashFlows = pgTable(
+  "recurring_cash_flows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: cashFlowKindEnum("kind").notNull(),
+    amount: money("amount").notNull(),
+    currency: currency(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "restrict" }),
+    description: text("description").notNull(),
+    account: text("account"),
+    notes: text("notes"),
+    frequency: recurrenceFrequencyEnum("frequency").notNull(),
+    /** First occurrence; anchors the day of month / weekday. */
+    startOn: date("start_on").notNull(),
+    /** "Twice a month" only: the other day of month. */
+    secondDay: smallint("second_day"),
+    endOn: date("end_on"),
+    /** Oldest occurrence not yet posted, confirmed or skipped; null once the schedule has ended. */
+    nextOn: date("next_on"),
+    /** true: post entries automatically on their date; false: wait for confirmation (variable bills). */
+    autoPost: boolean("auto_post").notNull().default(true),
+    paused: boolean("paused").notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [
+    index("recurring_cash_flows_next_on_idx").on(t.nextOn),
+    check("recurring_amount_positive", sql`${t.amount} > 0`),
+    check("recurring_currency_format", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("recurring_second_day_range", sql`${t.secondDay} is null or ${t.secondDay} between 1 and 31`),
+    check("recurring_end_after_start", sql`${t.endOn} is null or ${t.endOn} >= ${t.startOn}`),
   ]
 );
 
@@ -186,5 +231,6 @@ export type Holding = typeof holdings.$inferSelect;
 export type FxRate = typeof fxRates.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type CashFlow = typeof cashFlows.$inferSelect;
+export type RecurringCashFlow = typeof recurringCashFlows.$inferSelect;
 export type Liability = typeof liabilities.$inferSelect;
 export type NetWorthSnapshot = typeof netWorthSnapshots.$inferSelect;

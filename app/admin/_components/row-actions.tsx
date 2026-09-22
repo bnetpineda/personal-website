@@ -35,6 +35,7 @@ export function RowActions({
   onToggleArchive,
   onDelete,
   deleteWarning = "This can't be undone.",
+  actions,
 }: {
   name: string;
   editTitle?: string;
@@ -43,6 +44,8 @@ export function RowActions({
   onToggleArchive?: Action;
   onDelete?: Action;
   deleteWarning?: string;
+  /** Extra menu items (e.g. Pause/Resume), shown after Edit. */
+  actions?: { label: string; icon: ReactNode; run: Action }[];
 }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -73,6 +76,11 @@ export function RowActions({
               <Pencil /> Edit
             </DropdownMenuItem>
           )}
+          {actions?.map((a) => (
+            <DropdownMenuItem key={a.label} onSelect={() => run(a.run)}>
+              {a.icon} {a.label}
+            </DropdownMenuItem>
+          ))}
           {onToggleArchive && (
             <DropdownMenuItem onSelect={() => run(onToggleArchive)}>
               {archived ? <ArchiveRestore /> : <Archive />} {archived ? "Restore" : "Archive"}

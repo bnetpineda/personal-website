@@ -127,6 +127,16 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Top padding under the notch / status bar in the installed app (viewport-fit=cover). */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Lifts fixed floating buttons above the home indicator along with the tab bar. */
+@utility mb-safe {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

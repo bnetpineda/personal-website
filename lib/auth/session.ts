@@ -3,26 +3,15 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
-import { SESSION_COOKIE, SESSION_MAX_AGE, signSessionToken, verifySessionToken } from "./token";
-
-// Scoped to the admin area; deleting must pass the same path (cookies().delete defaults to "/").
-const COOKIE_PATH = "/admin";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, signSessionToken, verifySessionToken } from "./token";
 
 export async function createSession() {
   const token = await signSessionToken(env.sessionSecret());
-  (await cookies()).set({
-    name: SESSION_COOKIE,
-    value: token,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: COOKIE_PATH,
-    maxAge: SESSION_MAX_AGE,
-  });
+  (await cookies()).set({ name: SESSION_COOKIE, value: token, ...SESSION_COOKIE_OPTIONS });
 }
 
 export async function deleteSession() {
-  (await cookies()).delete({ name: SESSION_COOKIE, path: COOKIE_PATH });
+  (await cookies()).delete({ name: SESSION_COOKIE, path: SESSION_COOKIE_OPTIONS.path });
 }
 
 /** Cached per request, so every data read can call it cheaply. */

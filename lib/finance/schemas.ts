@@ -6,7 +6,9 @@ import {
   CURRENCIES,
   LIABILITY_KINDS,
   PRICE_SOURCES,
+  RECURRENCE_FREQUENCIES,
 } from "./constants";
+import { defaultSecondDay } from "./recurrence";
 
 /*
  * Form schemas + form-state helpers shared by Server Actions and client forms.
@@ -104,8 +106,44 @@ export const cashFlowSchema = z.object({
   description: text(200, "Add a short description"),
   account: optionalText(60),
   notes: optionalText(500),
+  /** Confirming a recurring occurrence ("Post" on a due item). */
+  recurringId: z.preprocess(blank, z.uuid().optional()),
+  recurringOn: z.preprocess(blank, z.iso.date().optional()),
 });
 export type CashFlowInput = z.output<typeof cashFlowSchema>;
+
+export const recurringSchema = z
+  .object({
+    kind: z.enum(CASH_FLOW_KINDS),
+    amount: amount("Enter an amount").refine((n) => n > 0, "Must be more than 0"),
+    currency,
+    categoryId: z.coerce.number({ error: "Pick a category" }).int().positive("Pick a category"),
+    description: text(200, "Add a short description"),
+    account: optionalText(60),
+    notes: optionalText(500),
+    frequency: z.enum(RECURRENCE_FREQUENCIES, { error: "Pick how often" }),
+    startOn: z.iso.date({ error: "Pick the first date" }),
+    /** "auto" (or blank) → 15 days from the start day. */
+    secondDay: z.preprocess(
+      (v) => (v === "auto" ? undefined : toNumber(v)),
+      z.number({ error: "Pick a day" }).int().min(1, "Use a day from 1 to 31").max(31, "Use a day from 1 to 31").optional()
+    ),
+    endOn: z.preprocess(blank, z.iso.date({ error: "Pick the last date" }).optional()),
+    posting: z.enum(["auto", "confirm"]).default("auto"),
+  })
+  .superRefine((v, ctx) => {
+    if (v.endOn && v.endOn < v.startOn) ctx.addIssue({ code: "custom", path: ["endOn"], message: "Must be on or after the first date" });
+    if (v.frequency === "semimonthly" && v.secondDay === Number(v.startOn.slice(8, 10))) {
+      ctx.addIssue({ code: "custom", path: ["secondDay"], message: "Pick a different day than the first date" });
+    }
+  })
+  .transform(({ posting, ...v }) => ({
+    ...v,
+    autoPost: posting === "auto",
+    secondDay: v.frequency === "semimonthly" ? (v.secondDay ?? defaultSecondDay(v.startOn)) : null,
+    endOn: v.endOn ?? null,
+  }));
+export type RecurringInput = z.output<typeof recurringSchema>;
 
 export const liabilitySchema = z.object({
   kind: z.enum(LIABILITY_KINDS, { error: "Pick a type" }),

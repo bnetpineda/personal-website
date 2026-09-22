@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { hashPassword, verifyPassword } from "./password";
-import { SESSION_MAX_AGE, signSessionToken, verifySessionToken } from "./token";
+import { SESSION_MAX_AGE, sessionIssuedAt, signSessionToken, verifySessionToken } from "./token";
 
 describe("password hashing", () => {
   test("round-trips and rejects wrong passwords", async () => {
@@ -44,6 +44,14 @@ describe("session token", () => {
     const after = new Date(issued.getTime() + (SESSION_MAX_AGE + 60) * 1000);
     expect(await verifySessionToken(token, secret, almost)).toBe(true);
     expect(await verifySessionToken(token, secret, after)).toBe(false);
+  });
+
+  test("sessionIssuedAt returns the issue time for refreshes, null when invalid", async () => {
+    const issued = new Date("2026-09-01T00:00:00Z");
+    const token = await signSessionToken(secret, issued);
+    expect(await sessionIssuedAt(token, secret, issued)).toBe(issued.getTime() / 1000);
+    expect(await sessionIssuedAt(token, "t".repeat(40), issued)).toBeNull();
+    expect(await sessionIssuedAt(undefined, secret)).toBeNull();
   });
 
   test("refuses to sign with a short secret", async () => {
