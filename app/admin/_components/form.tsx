@@ -10,6 +10,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -76,21 +77,52 @@ export function FormSheetContent({
   );
 }
 
+type Undo = () => Promise<FormState>;
+
+/** Success/error toast; `undo` adds an "Undo" button that runs it and reports the outcome. */
+export function notify(state: FormState, undo?: Undo) {
+  if (!state.message) return;
+  if (!state.ok) {
+    toast.error(state.message);
+    return;
+  }
+  toast.success(state.message, {
+    action: undo
+      ? {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              notify(await undo());
+            } catch {
+              toast.error("Couldn't undo — check your connection.");
+            }
+          },
+        }
+      : undefined,
+    duration: undo ? 8000 : 4000,
+  });
+}
+
 /**
  * useActionState + manual dispatch (no React 19 auto-reset, so typed values survive errors).
- * On success: closes the surrounding sheet and bumps `formKey` so the form remounts clean.
+ * On success: toasts the message (with "Undo" when `undo` returns one), closes the surrounding
+ * sheet and bumps `formKey` so the form remounts clean.
  */
-export function useFormAction(action: (prev: FormState, formData: FormData) => Promise<FormState>) {
+export function useFormAction<S extends FormState>(
+  action: (prev: S, formData: FormData) => Promise<S>,
+  { undo }: { undo?: (state: S) => Undo | undefined } = {}
+) {
   const sheet = useContext(FormSheetContext);
   const [formKey, setFormKey] = useState(0);
-  const [state, dispatch, pending] = useActionState(async (prev: FormState, formData: FormData) => {
+  const [state, dispatch, pending] = useActionState<S, FormData>(async (prev, formData) => {
     const result = await action(prev, formData);
     if (result.ok) {
+      notify(result, undo?.(result));
       sheet?.close();
       setFormKey((k) => k + 1);
     }
     return result;
-  }, initialFormState);
+  }, initialFormState as Awaited<S>);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -132,11 +164,12 @@ export function FormField({
   );
 }
 
+/** Submit row. Success is announced by a toast (the sheet closes), so only errors show here. */
 export function FormFooter({ state, pending, children }: { state: FormState; pending: boolean; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-3 sm:col-span-2">
-      {state.message && (
-        <p role="status" className={cn("mr-auto text-sm", state.ok ? "text-success" : "text-destructive")}>
+      {state.message && !state.ok && (
+        <p role="status" className="mr-auto text-sm text-destructive">
           {state.message}
         </p>
       )}

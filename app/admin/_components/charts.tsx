@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, LabelList, Pie, PieChart, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 import {
@@ -171,7 +172,14 @@ const truncate = (text: string, max = 14) => (text.length > max ? `${text.slice(
  * muted "budget left" track, and spending past the budget shows in red.
  */
 export function BreakdownChart({ rows, valueLabel }: { rows: BreakdownRow[]; valueLabel: string }) {
+  const router = useRouter();
   const data = rows.map((row) => ({ ...row, key: String(row.key), ...budgetSegments(row.value, row.budget) }));
+  // Rows with an href drill down on click (the category chips above the list do the same by keyboard).
+  const open = (entry: unknown) => {
+    const href = (entry as { payload?: BreakdownRow })?.payload?.href;
+    if (href) router.push(href);
+  };
+  const clickable = rows.some((row) => row.href);
   const budgeted = rows.some((row) => (row.budget ?? 0) > 0);
   const n = rows.length;
 
@@ -203,7 +211,17 @@ export function BreakdownChart({ rows, valueLabel }: { rows: BreakdownRow[]; val
             }
           />
           {budgeted && <ChartLegend content={<ChartLegendContent />} />}
-          <Bar dataKey="within" stackId="a" legendType="none" stroke="var(--border)" strokeWidth={2} maxBarSize={24} isAnimationActive={false}>
+          <Bar
+            dataKey="within"
+            stackId="a"
+            legendType="none"
+            stroke="var(--border)"
+            strokeWidth={2}
+            maxBarSize={24}
+            isAnimationActive={false}
+            onClick={open}
+            cursor={clickable ? "pointer" : undefined}
+          >
             {data.map((d) => (
               <Cell key={d.key} fill={d.color} />
             ))}
@@ -211,6 +229,8 @@ export function BreakdownChart({ rows, valueLabel }: { rows: BreakdownRow[]; val
           <Bar
             dataKey="left"
             stackId="a"
+            onClick={open}
+            cursor={clickable ? "pointer" : undefined}
             fill="var(--color-left)"
             tooltipType="none"
             stroke="var(--border)"
@@ -221,6 +241,8 @@ export function BreakdownChart({ rows, valueLabel }: { rows: BreakdownRow[]; val
           <Bar
             dataKey="over"
             stackId="a"
+            onClick={open}
+            cursor={clickable ? "pointer" : undefined}
             fill="var(--color-over)"
             tooltipType="none"
             stroke="var(--border)"

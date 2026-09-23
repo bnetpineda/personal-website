@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, Tags, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, Pencil, Plus, Tags, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { countArchivedHoldings, getFx, getHoldings } from "@/lib/dal";
@@ -15,9 +16,9 @@ import { dayLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { formatPct, formatPrice, formatQty } from "@/lib/finance/format";
 import { deleteHolding, setHoldingArchived } from "../../_actions/holdings";
 import { FormSheet } from "../../_components/form";
-import { BulkPriceForm, HoldingEditor, HoldingForm, type HoldingDTO } from "../../_components/holding-forms";
+import { AdjustForm, BulkPriceForm, HoldingForm, type HoldingDTO } from "../../_components/holding-forms";
 import { RefreshPricesButton } from "../../_components/refresh-prices-button";
-import { RowActions } from "../../_components/row-actions";
+import { EditableRow, EditableTableRow, type RowActionsProps } from "../../_components/row-actions";
 import { EmptyState, Money, PageHeader, Pct, StatCards } from "../../_components/ui";
 
 export const metadata: Metadata = {
@@ -75,6 +76,24 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
 
   const isStale = (h: Holding) =>
     h.priceSource !== "manual" && (!h.priceUpdatedAt || now.getTime() - h.priceUpdatedAt.getTime() > STALE_PRICE_MS);
+
+  // Tapping a holding opens Buy / sell (the usual change); details are one menu item away.
+  const rowActions = (h: Holding): RowActionsProps => {
+    const cash = h.assetClass === "cash";
+    return {
+      name: h.name,
+      editLabel: cash ? "Deposit / withdraw" : "Buy / sell",
+      editIcon: <ArrowLeftRight />,
+      editTitle: h.name,
+      editDescription: cash ? "Money in or out of this account." : "Record a buy or a sale — the average cost updates for you.",
+      editForm: <AdjustForm holding={toDTO(h)} />,
+      sheets: [{ label: "Edit details", icon: <Pencil />, title: `Edit ${h.name}`, content: <HoldingForm holding={toDTO(h)} /> }],
+      archived: h.archived,
+      onToggleArchive: setHoldingArchived.bind(null, h.id, !h.archived),
+      onDelete: deleteHolding.bind(null, h.id),
+      deleteWarning: "This permanently removes the holding. Archive it instead to keep it on record.",
+    };
+  };
 
   return (
     <>
@@ -147,7 +166,50 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           {showArchived ? "Archive sold-out positions to keep them out of your totals." : "Use “Add holding” for stocks, crypto, funds, cash accounts and more."}
         </EmptyState>
       ) : (
-        <Card className="gap-0 overflow-hidden py-0">
+        <>
+        {/* Phones: one card per holding (the 8-column table needs sideways scrolling there). */}
+        <Card className="gap-0 py-2 md:hidden">
+          <ItemGroup>
+            {visible.map(({ h, m }) => (
+              <EditableRow
+                key={h.id}
+                {...rowActions(h)}
+                media={
+                  <ItemMedia>
+                    <Swatch color={ASSET_CLASS_META[h.assetClass].color} />
+                  </ItemMedia>
+                }
+                aside={
+                  <span className="flex flex-col items-end font-mono text-sm">
+                    <Money value={m.valuePhp ?? m.value} currency={m.valuePhp != null ? "PHP" : h.currency} />
+                    {h.assetClass !== "cash" && (
+                      <span className="text-xs">
+                        <Pct value={m.pnlPct} tone />
+                      </span>
+                    )}
+                  </span>
+                }
+              >
+                <ItemContent>
+                  <ItemTitle>
+                    {h.name}
+                    {isStale(h) && <Badge variant="warning">Stale</Badge>}
+                  </ItemTitle>
+                  <ItemDescription>
+                    {[
+                      h.symbol ?? ASSET_CLASS_META[h.assetClass].label,
+                      h.assetClass === "cash" ? h.platform : `${formatQty(h.quantity)} @ ${formatPrice(h.avgCost, h.currency)}`,
+                      m.valuePhp != null && nw.assetsPhp > 0 ? formatPct(m.valuePhp / nw.assetsPhp) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </ItemDescription>
+                </ItemContent>
+              </EditableRow>
+            ))}
+          </ItemGroup>
+        </Card>
+        <Card className="hidden gap-0 overflow-hidden py-0 md:flex">
           <Table>
             <TableHeader>
               <TableRow>
@@ -167,18 +229,21 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
               {visible.map(({ h, m }) => {
                 const cash = h.assetClass === "cash";
                 return (
-                  <TableRow key={h.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
+                  <EditableTableRow
+                    key={h.id}
+                    {...rowActions(h)}
+                    lead={
+                      <span className="flex items-center gap-3">
                         <Swatch color={ASSET_CLASS_META[h.assetClass].color} />
-                        <div className="flex flex-col">
+                        <span className="flex flex-col">
                           <span className="font-semibold">{h.name}</span>
                           <span className="font-mono text-xs text-muted-foreground">
                             {[ASSET_CLASS_META[h.assetClass].label, h.symbol, h.platform].filter(Boolean).join(" · ")}
                           </span>
-                        </div>
-                      </div>
-                    </TableCell>
+                        </span>
+                      </span>
+                    }
+                  >
                     <TableCell className="text-right font-mono">{cash ? "—" : formatQty(h.quantity)}</TableCell>
                     <TableCell className="text-right font-mono">{cash ? "—" : formatPrice(h.avgCost, h.currency)}</TableCell>
                     <TableCell className="text-right">
@@ -219,23 +284,13 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
                     <TableCell className="text-right font-mono">
                       {m.valuePhp != null && nw.assetsPhp > 0 ? formatPct(m.valuePhp / nw.assetsPhp) : "—"}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <RowActions
-                        name={h.name}
-                        editTitle={h.name}
-                        editForm={<HoldingEditor holding={toDTO(h)} />}
-                        archived={h.archived}
-                        onToggleArchive={setHoldingArchived.bind(null, h.id, !h.archived)}
-                        onDelete={deleteHolding.bind(null, h.id)}
-                        deleteWarning="This permanently removes the holding. Archive it instead to keep it on record."
-                      />
-                    </TableCell>
-                  </TableRow>
+                  </EditableTableRow>
                 );
               })}
             </TableBody>
           </Table>
         </Card>
+        </>
       )}
     </>
   );

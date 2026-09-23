@@ -129,11 +129,14 @@ export const cashFlows = pgTable(
     recurringId: uuid("recurring_id").references((): AnyPgColumn => recurringCashFlows.id, { onDelete: "set null" }),
     /** The scheduled occurrence it was posted for (occurred_on may be edited afterwards). */
     recurringOn: date("recurring_on"),
+    /** Set when the entry records a payment towards a debt ("Pay" on the Debts page). */
+    liabilityId: uuid("liability_id").references((): AnyPgColumn => liabilities.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
     index("cash_flows_kind_occurred_on_idx").on(t.kind, t.occurredOn),
     index("cash_flows_category_id_idx").on(t.categoryId),
+    index("cash_flows_liability_id_idx").on(t.liabilityId),
     // One entry per scheduled occurrence, so overlapping cron/page-view runs can't double-post.
     uniqueIndex("cash_flows_recurring_occurrence_unique").on(t.recurringId, t.recurringOn),
     check("cash_flows_amount_positive", sql`${t.amount} > 0`),

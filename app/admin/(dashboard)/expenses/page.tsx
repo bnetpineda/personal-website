@@ -1,11 +1,9 @@
-import type { Metadata } from "next";
-import { CashFlowPage } from "../../_components/cash-flow-page";
+import { redirect } from "next/navigation";
+import { isMonth } from "@/lib/finance/dates";
+import { transactionsHref } from "../../_components/nav";
 
-export const metadata: Metadata = {
-  title: "Expenses",
-};
-
+/** Old URL (bookmarks, installed-app shortcuts): expenses now live on Transactions. */
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const { month } = await searchParams;
-  return <CashFlowPage kind="expense" month={month} />;
+  redirect(transactionsHref({ kind: "expense", month: isMonth(month) ? month : null }));
 }

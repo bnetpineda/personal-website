@@ -38,6 +38,9 @@ const itemVariants = cva(
         default: "bg-transparent",
         outline: "border-2 border-border bg-card",
         muted: "bg-muted/50",
+        /** Whole row is clickable: pair with a button using `after:absolute after:inset-0` (see EditableRow). */
+        interactive:
+          "relative cursor-pointer bg-transparent hover:bg-muted/60 has-[button:focus-visible]:border-ring [&>[data-slot=item-actions]]:relative [&>[data-slot=item-actions]]:z-10",
       },
       size: {
         default: "gap-4 p-4",

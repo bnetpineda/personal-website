@@ -1,22 +1,90 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Eye, EyeOff, LogOut, Settings } from "lucide-react";
+import { Eye, EyeOff, LogOut, Plus, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { CashFlowKind } from "@/lib/finance/constants";
 import { logout } from "../_actions/auth";
 import { ADMIN_NAV, PRIVACY_COOKIE, isActivePath } from "./nav";
 
-const PrivacyContext = createContext<{ hidden: boolean; toggle: () => void }>({ hidden: false, toggle: () => {} });
+interface AdminUi {
+  privacy: { hidden: boolean; toggle: () => void };
+  /** Kind shown in the quick-add sheet, or null when it's closed. */
+  adding: CashFlowKind | null;
+  setAdding: (kind: CashFlowKind | null) => void;
+  commandOpen: boolean;
+  setCommandOpen: (open: boolean) => void;
+}
+
+const AdminUiContext = createContext<AdminUi | null>(null);
+
+export function useAdminUi(): AdminUi {
+  const ui = useContext(AdminUiContext);
+  if (!ui) throw new Error("useAdminUi must be used inside <Shell>");
+  return ui;
+}
+
+const noop = () => () => {};
+
+/** "⌘" on Apple devices, "Ctrl" elsewhere (and during SSR). */
+export function useModKey() {
+  return useSyncExternalStore(
+    noop,
+    () => (/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl "),
+    () => "Ctrl "
+  );
+}
+
+/** Typing in a field, or a dialog/sheet/menu is open: single-key shortcuts stay out of the way. */
+function shortcutsBlocked(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("input, textarea, select, [contenteditable=true]")) return true;
+  return Boolean(document.querySelector("[role=dialog], [role=alertdialog], [role=menu]"));
+}
+
+/**
+ * Keyboard shortcuts: ⌘K / Ctrl+K or "/" opens the command menu, "e" / "i" open quick add.
+ * The handler lives in a ref so the listener is registered once.
+ */
+function useShortcuts(ui: Pick<AdminUi, "setAdding" | "setCommandOpen" | "commandOpen">) {
+  const latest = useRef(ui);
+  useEffect(() => {
+    latest.current = ui;
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const { setAdding, setCommandOpen, commandOpen } = latest.current;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen(!commandOpen);
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || shortcutsBlocked(event)) return;
+      const key = event.key.toLowerCase();
+      if (key === "/") setCommandOpen(true);
+      else if (key === "e") setAdding("expense");
+      else if (key === "i") setAdding("income");
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}
 
 /** Dashboard frame. `data-private` blurs every <Money> (group-data-[private=true]/shell). */
 export function Shell({ initialPrivate, children }: { initialPrivate: boolean; children: ReactNode }) {
   const [hidden, setHidden] = useState(initialPrivate);
+  const [adding, setAdding] = useState<CashFlowKind | null>(null);
+  const [commandOpen, setCommandOpen] = useState(false);
 
   const toggle = () => {
     const next = !hidden;
@@ -24,17 +92,20 @@ export function Shell({ initialPrivate, children }: { initialPrivate: boolean; c
     setHidden(next);
   };
 
+  useShortcuts({ setAdding, setCommandOpen, commandOpen });
+
   return (
-    <PrivacyContext.Provider value={{ hidden, toggle }}>
+    <AdminUiContext.Provider value={{ privacy: { hidden, toggle }, adding, setAdding, commandOpen, setCommandOpen }}>
       <div data-private={hidden} className="group/shell flex min-h-svh flex-col">
         {children}
       </div>
-    </PrivacyContext.Provider>
+      <Toaster />
+    </AdminUiContext.Provider>
   );
 }
 
 function PrivacyToggle() {
-  const { hidden, toggle } = useContext(PrivacyContext);
+  const { hidden, toggle } = useAdminUi().privacy;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -49,6 +120,8 @@ function PrivacyToggle() {
 
 export function AdminHeader() {
   const pathname = usePathname();
+  const { setAdding, setCommandOpen } = useAdminUi();
+  const mod = useModKey();
 
   return (
     <header className="sticky top-0 z-40 border-b-2 border-border bg-background pt-safe">
@@ -60,13 +133,13 @@ export function AdminHeader() {
           <span className="hidden font-mono text-xs text-muted-foreground sm:inline">/ admin</span>
         </Link>
         <nav aria-label="Admin" className="hidden items-center gap-1 lg:flex">
-          {ADMIN_NAV.map(({ href, label, icon: Icon }) => {
+          {ADMIN_NAV.filter((item) => item.tab).map(({ href, label, icon: Icon }) => {
             const active = isActivePath(pathname, href);
             return (
               <Button key={href} asChild size="sm" variant={active ? "default" : "ghost"}>
                 <Link href={href} aria-current={active ? "page" : undefined} aria-label={label}>
                   <Icon />
-                  {/* Seven sections don't fit with labels between lg and xl. */}
+                  {/* Labels don't fit next to search and Add between lg and xl. */}
                   <span className="hidden xl:inline">{label}</span>
                 </Link>
               </Button>
@@ -74,9 +147,30 @@ export function AdminHeader() {
           })}
         </nav>
         <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" className="hidden lg:inline-flex" onClick={() => setCommandOpen(true)}>
+            <Search /> Search <Kbd>{mod}K</Kbd>
+          </Button>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button asChild variant={isActivePath(pathname, "/admin/settings") ? "default" : "ghost"} size="icon" className="lg:hidden">
+              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Search and commands" onClick={() => setCommandOpen(true)}>
+                <Search />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Search and commands</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" className="hidden lg:inline-flex" onClick={() => setAdding("expense")}>
+                <Plus /> Add
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Expense <Kbd>E</Kbd> · Income <Kbd>I</Kbd>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant={isActivePath(pathname, "/admin/settings") ? "default" : "ghost"} size="icon">
                 <Link href="/admin/settings" aria-label="Settings">
                   <Settings />
                 </Link>
@@ -85,8 +179,9 @@ export function AdminHeader() {
             <TooltipContent>Settings</TooltipContent>
           </Tooltip>
           <PrivacyToggle />
-          <ThemeToggle />
-          <form action={logout}>
+          {/* On phones these two live in the command menu to keep the header on one line. */}
+          <ThemeToggle className="hidden sm:inline-flex" />
+          <form action={logout} className="hidden sm:block">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button type="submit" variant="ghost" size="icon" aria-label="Log out">
@@ -104,10 +199,11 @@ export function AdminHeader() {
 
 export function MobileNav() {
   const pathname = usePathname();
+  const tabs = ADMIN_NAV.filter((item) => item.tab);
 
   return (
-    <nav aria-label="Admin sections" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t-2 border-border bg-background pb-safe lg:hidden">
-      {ADMIN_NAV.filter((item) => item.tab).map(({ href, short, icon: Icon }) => {
+    <nav aria-label="Admin sections" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t-2 border-border bg-background pb-safe lg:hidden">
+      {tabs.map(({ href, short, icon: Icon }) => {
         const active = isActivePath(pathname, href);
         return (
           <Link

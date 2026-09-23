@@ -1,11 +1,12 @@
 import { cookies } from "next/headers";
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth/session";
-import { getAccounts, getCategories, getLastEntryDefaults } from "@/lib/dal";
+import { getAccounts, getCategories, getEntrySuggestions, getLastEntryDefaults } from "@/lib/dal";
 import { todayManila } from "@/lib/finance/dates";
 import { postDueRecurringQuietly } from "@/lib/finance/service";
+import { CommandMenu } from "../_components/command-menu";
 import { PRIVACY_COOKIE } from "../_components/nav";
-import { QuickAddExpense } from "../_components/quick-add-expense";
+import { QuickAdd } from "../_components/quick-add";
 import { AdminHeader, MobileNav, Shell } from "../_components/shell";
 
 export default async function DashboardLayout({
@@ -17,12 +18,24 @@ export default async function DashboardLayout({
   // Catch up on recurring entries due today if the 06:00 cron hasn't posted them yet
   // (e.g. opening the app after midnight). Shows up on the next navigation.
   after(postDueRecurringQuietly);
-  const [cookieStore, categories, accounts, last] = await Promise.all([
+  const [cookieStore, categories, accounts, suggestions, lastExpense, lastIncome] = await Promise.all([
     cookies(),
-    getCategories("expense"),
+    getCategories(),
     getAccounts(),
+    getEntrySuggestions(),
     getLastEntryDefaults("expense"),
+    getLastEntryDefaults("income"),
   ]);
+
+  const today = todayManila();
+  const formCategories = (kind: "expense" | "income") =>
+    categories.filter((c) => c.kind === kind).map(({ id, name, color, archived }) => ({ id, name, color, archived }));
+  const defaults = (last: typeof lastExpense) => ({
+    occurredOn: today,
+    categoryId: last?.categoryId,
+    account: last?.account,
+    currency: last?.currency,
+  });
 
   return (
     <Shell initialPrivate={cookieStore.get(PRIVACY_COOKIE)?.value === "1"}>
@@ -46,11 +59,13 @@ export default async function DashboardLayout({
         (ECB)
       </footer>
       <MobileNav />
-      <QuickAddExpense
-        categories={categories.map(({ id, name, archived }) => ({ id, name, archived }))}
+      <QuickAdd
+        categories={{ expense: formCategories("expense"), income: formCategories("income") }}
         accounts={accounts}
-        defaults={{ occurredOn: todayManila(), categoryId: last?.categoryId, account: last?.account, currency: last?.currency }}
+        suggestions={suggestions}
+        defaults={{ expense: defaults(lastExpense), income: defaults(lastIncome) }}
       />
+      <CommandMenu />
     </Shell>
   );
 }

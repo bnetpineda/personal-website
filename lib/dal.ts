@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, getTableColumns, gte, isNotNull, lt, max, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, ilike, isNotNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import {
@@ -80,15 +80,92 @@ const cashFlowWithCategory = {
 
 export type CashFlowRow = Awaited<ReturnType<typeof getCashFlows>>[number];
 
-export async function getCashFlows(kind: CashFlowKind, month: string) {
+/** Escapes LIKE wildcards so a search for "50%" matches literally. */
+const likeTerm = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+export const SEARCH_LIMIT = 200;
+/** Safety cap for one month's list (far above real use). */
+const MONTH_LIMIT = 5000;
+
+/**
+ * Entries for the Transactions page: one month, or — with a search term — all time
+ * (newest first, capped at SEARCH_LIMIT), optionally of one kind.
+ */
+export async function getCashFlows({ kind, month, q }: { kind?: CashFlowKind; month?: string; q?: string }) {
   await requireAdmin();
-  const { start, end } = monthRange(month);
+  const where: (SQL | undefined)[] = [kind ? eq(cashFlows.kind, kind) : undefined];
+  if (q) {
+    const term = likeTerm(q);
+    where.push(or(ilike(cashFlows.description, term), ilike(cashFlows.notes, term), ilike(cashFlows.account, term), ilike(categories.name, term)));
+  } else if (month) {
+    const { start, end } = monthRange(month);
+    where.push(gte(cashFlows.occurredOn, start), lt(cashFlows.occurredOn, end));
+  }
   return getDb()
     .select(cashFlowWithCategory)
     .from(cashFlows)
     .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
-    .where(and(eq(cashFlows.kind, kind), gte(cashFlows.occurredOn, start), lt(cashFlows.occurredOn, end)))
-    .orderBy(desc(cashFlows.occurredOn), desc(cashFlows.createdAt));
+    .where(and(...where))
+    .orderBy(desc(cashFlows.occurredOn), desc(cashFlows.createdAt))
+    .limit(q ? SEARCH_LIMIT : MONTH_LIMIT);
+}
+
+export interface EntrySuggestion {
+  kind: CashFlowKind;
+  description: string;
+  categoryId: number;
+  account: string | null;
+}
+
+/**
+ * Descriptions used before (latest spelling, category and account of each), most recent
+ * first — the quick-add form suggests them and fills in the rest when one is picked.
+ */
+export async function getEntrySuggestions(limit = 150): Promise<EntrySuggestion[]> {
+  await requireAdmin();
+  const key = sql`lower(${cashFlows.description})`;
+  const rows = await getDb()
+    .selectDistinctOn([cashFlows.kind, key], {
+      kind: cashFlows.kind,
+      description: cashFlows.description,
+      categoryId: cashFlows.categoryId,
+      account: cashFlows.account,
+      lastUsed: cashFlows.createdAt,
+    })
+    .from(cashFlows)
+    .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
+    .where(eq(categories.archived, false))
+    .orderBy(cashFlows.kind, key, desc(cashFlows.createdAt));
+  return rows
+    .sort((a, b) => b.lastUsed.getTime() - a.lastUsed.getTime())
+    .slice(0, limit)
+    .map((r) => ({ kind: r.kind, description: r.description, categoryId: r.categoryId, account: r.account }));
+}
+
+export interface LastPayment {
+  occurredOn: string;
+  amount: number;
+  currency: string;
+  categoryId: number;
+  account: string | null;
+}
+
+/** Latest payment logged against each debt (from "Pay"), keyed by liability id. */
+export async function getLastPayments(): Promise<Map<string, LastPayment>> {
+  await requireAdmin();
+  const rows = await getDb()
+    .selectDistinctOn([cashFlows.liabilityId], {
+      liabilityId: cashFlows.liabilityId,
+      occurredOn: cashFlows.occurredOn,
+      amount: cashFlows.amount,
+      currency: cashFlows.currency,
+      categoryId: cashFlows.categoryId,
+      account: cashFlows.account,
+    })
+    .from(cashFlows)
+    .where(isNotNull(cashFlows.liabilityId))
+    .orderBy(cashFlows.liabilityId, desc(cashFlows.occurredOn), desc(cashFlows.createdAt));
+  return new Map(rows.map(({ liabilityId, ...r }) => [liabilityId!, r]));
 }
 
 export async function getRecentCashFlows(limit = 8) {

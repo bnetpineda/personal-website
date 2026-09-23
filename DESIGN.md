@@ -55,14 +55,19 @@ Use the component that fits; don't rebuild it from `div`s.
 | Form field | `Field` + `FieldLabel` + `Input`/`Select`/`Textarea` + `FieldError`/`FieldDescription`, grouped in `FieldGroup` |
 | Choice from a list | `Select` (gives a hidden native `<select name>` for FormData) |
 | Date | `DatePicker` — `Popover` + `Calendar`; submits `YYYY-MM-DD` under `name` (hidden input) |
-| Segmented choice | `ToggleGroup` (single) · content panels → `Tabs` |
+| Segmented choice | `ToggleGroup` (single) · content panels → `Tabs` · pick one of many (categories) → `ToggleGroup spacing={2} className="flex-wrap"` + hidden input |
 | On/off | `Toggle` |
 | Status label | `Badge` — `default outline secondary destructive success warning` |
 | Progress / budget / utilization | `Progress` — `variant` `default success warning destructive`, or `indicatorColor` for data colors |
 | Data color dot / color picker | `Swatch` / `SwatchPicker` (components/ui/swatch.tsx) |
 | Lists of records | `ItemGroup` + `Item` (`ItemMedia`, `ItemContent`, `ItemTitle`, `ItemDescription`, `ItemActions`) |
+| Tappable record (opens its edit sheet) | `EditableRow` (list) / `EditableTableRow` (table) / `EditableCardHeader` (card) in `app/admin/_components/row-actions.tsx` — `Item variant="interactive"` + a real `<button>` whose `after:` overlay covers the row |
 | Tables | `Table` inside `Card` (`className="gap-0 overflow-hidden py-0"`) |
-| Row actions | `DropdownMenu` → edit in `Sheet`, destructive confirm in `AlertDialog` (see `RowActions`) |
+| Row actions | `DropdownMenu` → edit in `Sheet` (+ extra `sheets`/`actions`), destructive confirm in `AlertDialog` or delete-with-Undo (see `RowActions`) |
+| Feedback after an action | Toast — `notify(state, undo?)` from `app/admin/_components/form.tsx` (sonner `Toaster`, mounted once in `Shell`) |
+| Command palette | `CommandDialog` (cmdk) — `CommandMenu`, opened with ⌘K / Ctrl+K or `/` |
+| Keyboard hint | `Kbd` |
+| Checkbox | `Checkbox` inside `Field orientation="horizontal"` |
 | Create / edit forms | `Sheet` (right side) — `FormSheet` in admin |
 | Empty / zero state | `Empty` (`EmptyHeader`, `EmptyTitle`, `EmptyDescription`) |
 | Notices | `Alert` — `default warning destructive` |
@@ -72,7 +77,7 @@ Use the component that fits; don't rebuild it from `div`s.
 
 Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`,
 `Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`, the recurring
-`OccurrenceList` / `DueActions`, and the charts `NetWorthChart`, `CashFlowChart`,
+`OccurrenceList` / `DuePanel` / `DueActions`, `EditableRow`, `QuickAdd`, `BudgetsForm`, and the charts `NetWorthChart`, `CashFlowChart`,
 `AllocationChart`, `BreakdownChart`) — reuse them before writing new ones.
 
 ## 3. Rules (enforced — `design-system.lint.json`)
@@ -109,8 +114,15 @@ components without re-applying these (`--overwrite` replaces the house style).
 - **Money**: always `<Money value currency tone? signed?>` — formats with `Intl` and blurs in
   privacy mode (`group-data-[private=true]/shell:blur-sm`).
 - **Forms**: Server Action + `useFormAction` (admin) → errors from the returned `FormState`,
-  `aria-invalid` on the control, message in `FieldError`. Success closes the sheet and resets.
-- **Destructive actions**: always confirm in `AlertDialog`; never `window.confirm`.
+  `aria-invalid` on the control, message in `FieldError`. Success closes the sheet, resets, and
+  toasts the message; pass `undo` to add an "Undo" button (e.g. a new entry, a debt payment).
+- **Destructive actions**: confirm in `AlertDialog`; never `window.confirm`. Exception: cheap,
+  fully reversible deletes (single cash-flow entries) run straight away with an "Undo" toast
+  (`RowActions onRestore`).
+- **Toasts never show amounts** that weren't typed by the user — they aren't blurred by privacy mode.
+- **Adding entries**: one quick-add sheet for the whole dashboard (`QuickAdd`, opened via
+  `useAdminUi().setAdding(kind)`, the E / I keys, the command menu or `/admin?add=expense`) —
+  don't build per-page add forms for cash flows.
 - **Accessibility**: every control has a label (`FieldLabel htmlFor` or `aria-label` on icon
   buttons); status text uses `role="status"`; don't remove focus rings.
 - **Dark mode**: never hard-code light/dark values in app code — tokens flip automatically.

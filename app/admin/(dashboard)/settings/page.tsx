@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
-import { Download, Plus } from "lucide-react";
+import { Download, Plus, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getCategories, getCategoryUsage, getFxRows } from "@/lib/dal";
+import { getCategories, getCategoryTotals, getCategoryUsage, getFxRows } from "@/lib/dal";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { dayLabel } from "@/lib/finance/dates";
+import { currentMonth, dayLabel } from "@/lib/finance/dates";
 import { deleteCategory, setCategoryArchived } from "../../_actions/categories";
+import { BudgetsForm } from "../../_components/budgets-form";
 import { CategoryForm } from "../../_components/category-form";
 import { FormSheet } from "../../_components/form";
-import { RowActions } from "../../_components/row-actions";
+import { EditableRow } from "../../_components/row-actions";
 import { Money, PageHeader, Panel } from "../../_components/ui";
 
 export const metadata: Metadata = {
@@ -19,7 +20,12 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  const [categories, usage, fxRows] = await Promise.all([getCategories(), getCategoryUsage(), getFxRows()]);
+  const [categories, usage, fxRows, spent] = await Promise.all([
+    getCategories(),
+    getCategoryUsage(),
+    getFxRows(),
+    getCategoryTotals("expense", currentMonth()),
+  ]);
 
   const categoryList = (kind: CashFlowKind) => (
     <ItemGroup>
@@ -28,10 +34,19 @@ export default async function SettingsPage() {
         .map((c) => {
           const used = usage.get(c.id) ?? 0;
           return (
-            <Item key={c.id} size="sm">
-              <ItemMedia>
-                <Swatch color={c.color} />
-              </ItemMedia>
+            <EditableRow
+              key={c.id}
+              name={c.name}
+              editForm={<CategoryForm kind={kind} category={{ id: c.id, kind: c.kind, name: c.name, color: c.color, monthlyBudget: c.monthlyBudget }} />}
+              archived={c.archived}
+              onToggleArchive={setCategoryArchived.bind(null, c.id, !c.archived)}
+              onDelete={used === 0 ? deleteCategory.bind(null, c.id) : undefined}
+              media={
+                <ItemMedia>
+                  <Swatch color={c.color} />
+                </ItemMedia>
+              }
+            >
               <ItemContent>
                 <ItemTitle>
                   {c.name}
@@ -47,16 +62,7 @@ export default async function SettingsPage() {
                   ) : null}
                 </ItemDescription>
               </ItemContent>
-              <ItemActions>
-                <RowActions
-                  name={c.name}
-                  editForm={<CategoryForm kind={kind} category={{ id: c.id, kind: c.kind, name: c.name, color: c.color, monthlyBudget: c.monthlyBudget }} />}
-                  archived={c.archived}
-                  onToggleArchive={setCategoryArchived.bind(null, c.id, !c.archived)}
-                  onDelete={used === 0 ? deleteCategory.bind(null, c.id) : undefined}
-                />
-              </ItemActions>
-            </Item>
+            </EditableRow>
           );
         })}
     </ItemGroup>
@@ -80,7 +86,29 @@ export default async function SettingsPage() {
       <PageHeader eyebrow="Setup" title="Settings" />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="Expense categories & budgets" action={addButton("expense")}>
+        <Panel
+          title="Expense categories & budgets"
+          action={
+            <div className="flex items-center gap-2">
+              <FormSheet
+                title="Monthly budgets"
+                description="Per expense category, in PHP. Leave blank for no budget."
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    <SlidersHorizontal /> Budgets
+                  </Button>
+                }
+              >
+                <BudgetsForm
+                  categories={categories
+                    .filter((c) => c.kind === "expense" && !c.archived)
+                    .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, spent: spent.get(c.id) ?? 0 }))}
+                />
+              </FormSheet>
+              {addButton("expense")}
+            </div>
+          }
+        >
           {categoryList("expense")}
         </Panel>
         <Panel title="Income categories" action={addButton("income")}>

@@ -103,7 +103,8 @@ export const cashFlowSchema = z.object({
   amount: amount("Enter an amount").refine((n) => n > 0, "Must be more than 0"),
   currency,
   categoryId: z.coerce.number({ error: "Pick a category" }).int().positive("Pick a category"),
-  description: text(200, "Add a short description"),
+  /** Optional: a blank description falls back to the category name. */
+  description: optionalText(200),
   account: optionalText(60),
   notes: optionalText(500),
   /** Confirming a recurring occurrence ("Post" on a due item). */
@@ -165,6 +166,39 @@ export const liabilitySchema = z.object({
 });
 export type LiabilityInput = z.output<typeof liabilitySchema>;
 
+/** "Pay" on a debt: lowers the balance and, optionally, logs the payment as an expense. */
+export const paymentSchema = z
+  .object({
+    amount: amount("Enter the amount paid").refine((n) => n > 0, "Must be more than 0"),
+    occurredOn: z.iso.date({ error: "Pick a date" }),
+    logExpense: z.preprocess((v) => v === "on" || v === "true", z.boolean()),
+    categoryId: z.preprocess(blank, z.coerce.number().int().positive().optional()),
+    account: optionalText(60),
+  })
+  .superRefine((v, ctx) => {
+    if (v.logExpense && v.categoryId == null) ctx.addIssue({ code: "custom", path: ["categoryId"], message: "Pick a category" });
+  });
+export type PaymentInput = z.output<typeof paymentSchema>;
+
+/** A deleted entry sent back by "Undo" — re-inserted as it was. */
+export const restoreCashFlowSchema = z.object({
+  id: z.uuid(),
+  kind: z.enum(CASH_FLOW_KINDS),
+  occurredOn: z.iso.date(),
+  amount: z.number().positive().max(MAX_MONEY),
+  // Any stored code (not just today's CURRENCIES list) — it's putting back what was there.
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  amountPhp: z.number().min(0).max(MAX_MONEY),
+  categoryId: z.number().int().positive(),
+  description: z.string().trim().min(1).max(200),
+  account: z.string().max(60).nullable(),
+  notes: z.string().max(500).nullable(),
+  recurringId: z.uuid().nullable(),
+  recurringOn: z.iso.date().nullable(),
+  liabilityId: z.uuid().nullable(),
+});
+export type RestoreCashFlowInput = z.output<typeof restoreCashFlowSchema>;
+
 export const categorySchema = z.object({
   kind: z.enum(CASH_FLOW_KINDS),
   name: text(40, "Name is required"),
@@ -183,6 +217,8 @@ export interface FormState {
   errors?: FieldErrors;
   /** Submitted values echoed back on errors (React 19 resets forms after an action). */
   values?: Record<string, string>;
+  /** Id of the record a successful create made (lets the client offer "Undo"). */
+  id?: string;
 }
 
 export const initialFormState: FormState = { ok: false };

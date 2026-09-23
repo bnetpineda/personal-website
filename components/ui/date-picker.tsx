@@ -26,6 +26,8 @@ function parseDay(value: string | undefined) {
 function DatePicker({
   name,
   defaultValue,
+  value: controlledValue,
+  onValueChange,
   today,
   placeholder = "Pick a date",
   className,
@@ -34,12 +36,20 @@ function DatePicker({
   name?: string
   /** Initial day, "YYYY-MM-DD". */
   defaultValue?: string
+  /** Controlled day, "YYYY-MM-DD" (use with `onValueChange`). */
+  value?: string
+  onValueChange?: (value: string) => void
   /** Day marked as today, "YYYY-MM-DD" (defaults to the browser's date). */
   today?: string
   placeholder?: string
 }) {
   const [open, setOpen] = React.useState(false)
-  const [value, setValue] = React.useState(defaultValue ?? "")
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(defaultValue ?? "")
+  const value = controlledValue ?? uncontrolledValue
+  const setValue = (next: string) => {
+    if (controlledValue === undefined) setUncontrolledValue(next)
+    onValueChange?.(next)
+  }
   const selected = parseDay(value)
 
   return (

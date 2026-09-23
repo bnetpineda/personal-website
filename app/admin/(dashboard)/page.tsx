@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { after } from "next/server";
-import { ArrowRight, BellRing, TriangleAlert } from "lucide-react";
+import { ArrowRight, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import type { CashFlowKind } from "@/lib/finance/constants";
 import { Swatch } from "@/components/ui/swatch";
 import {
+  getAccounts,
   getCategories,
   getCategoryTotals,
   getFx,
@@ -23,8 +25,14 @@ import { addDays, currentMonth, dayLabel, monthLabel, timeAgo, todayManila } fro
 import { formatPct } from "@/lib/finance/format";
 import { dueOccurrences, upcomingOccurrences } from "@/lib/finance/recurrence";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
+import { deleteCashFlow, restoreCashFlow } from "../_actions/cash-flows";
+import { BudgetsForm } from "../_components/budgets-form";
+import { CashFlowForm, type FormCategory } from "../_components/cash-flow-form";
 import { AllocationChart, CashFlowChart, NetWorthChart } from "../_components/charts";
-import { OccurrenceList } from "../_components/recurring";
+import { FormSheet } from "../_components/form";
+import { transactionsHref } from "../_components/nav";
+import { DuePanel, OccurrenceList } from "../_components/recurring";
+import { EditableRow } from "../_components/row-actions";
 import { RefreshPricesButton } from "../_components/refresh-prices-button";
 import { Breakdown, EmptyState, Money, PageHeader, Panel, Pct, StatCards } from "../_components/ui";
 
@@ -37,17 +45,21 @@ export default async function OverviewPage() {
   const today = todayManila(now);
   const month = currentMonth(now);
 
-  const [holdingRows, liabilityRows, fx, snapshots, monthly, expenseTotals, categories, recent, recurring] = await Promise.all([
+  const [holdingRows, liabilityRows, fx, snapshots, monthly, expenseTotals, allCategories, recent, recurring, accounts] = await Promise.all([
     getHoldings(),
     getLiabilities(),
     getFx(),
     getSnapshots(),
     getMonthlyTotals(month, 12),
     getCategoryTotals("expense", month),
-    getCategories("expense"),
+    getCategories(),
     getRecentCashFlows(8),
     getRecurring(),
+    getAccounts(),
   ]);
+  const categories = allCategories.filter((c) => c.kind === "expense");
+  const formCategories: Record<CashFlowKind, FormCategory[]> = { expense: [], income: [] };
+  for (const c of allCategories) formCategories[c.kind].push({ id: c.id, name: c.name, color: c.color, archived: c.archived });
 
   // Backfill today's history point after responding, in case the daily cron hasn't run yet.
   after(async () => {
@@ -79,7 +91,14 @@ export default async function OverviewPage() {
 
   const budgetRows = categories
     .filter((c) => !c.archived && ((c.monthlyBudget ?? 0) > 0 || (expenseTotals.get(c.id) ?? 0) > 0))
-    .map((c) => ({ key: c.id, label: c.name, color: c.color, value: expenseTotals.get(c.id) ?? 0, budget: c.monthlyBudget }))
+    .map((c) => ({
+      key: c.id,
+      label: c.name,
+      color: c.color,
+      value: expenseTotals.get(c.id) ?? 0,
+      budget: c.monthlyBudget,
+      href: transactionsHref({ category: c.id }),
+    }))
     .sort((a, b) => (b.budget ? b.value / b.budget : 0) - (a.budget ? a.value / a.budget : 0) || b.value - a.value)
     .slice(0, 6);
 
@@ -105,25 +124,9 @@ export default async function OverviewPage() {
       )}
 
       {due.length > 0 && (
-        <Alert className="mb-6">
-          <BellRing />
-          <AlertTitle>
-            {due.length} recurring {due.length === 1 ? "item needs" : "items need"} confirming
-          </AlertTitle>
-          <AlertDescription>
-            <p>
-              {due
-                .slice(0, 3)
-                .map((d) => d.item.description)
-                .join(", ")}
-              {due.length > 3 ? "…" : ""} —{" "}
-              <Link href="/admin/recurring" className="underline underline-offset-4">
-                post or skip them
-              </Link>
-              .
-            </p>
-          </AlertDescription>
-        </Alert>
+        <div className="mb-6">
+          <DuePanel due={due} today={today} categories={formCategories} accounts={accounts} />
+        </div>
       )}
 
       <StatCards
@@ -193,14 +196,24 @@ export default async function OverviewPage() {
         <Panel
           title={`Budgets · ${monthLabel(month, "short")}`}
           action={
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/admin/expenses">
-                Expenses <ArrowRight />
-              </Link>
-            </Button>
+            <FormSheet
+              title="Monthly budgets"
+              description="Per expense category, in PHP. Leave blank for no budget."
+              trigger={
+                <Button variant="ghost" size="sm">
+                  <SlidersHorizontal /> Edit
+                </Button>
+              }
+            >
+              <BudgetsForm
+                categories={categories
+                  .filter((c) => !c.archived)
+                  .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, spent: expenseTotals.get(c.id) ?? 0 }))}
+              />
+            </FormSheet>
           }
         >
-          {budgetRows.length === 0 ? <EmptyState title="No spending yet">Set monthly budgets per category in Settings.</EmptyState> : <Breakdown rows={budgetRows} />}
+          {budgetRows.length === 0 ? <EmptyState title="No spending yet">Use Edit to set a monthly budget per category.</EmptyState> : <Breakdown rows={budgetRows} />}
         </Panel>
       </div>
 
@@ -252,28 +265,63 @@ export default async function OverviewPage() {
             </ItemGroup>
           )}
         </Panel>
-        <Panel title="Recent entries">
+        <Panel
+          title="Recent entries"
+          action={
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/transactions">
+                All <ArrowRight />
+              </Link>
+            </Button>
+          }
+        >
           {recent.length === 0 ? (
-            <EmptyState title="Nothing logged yet">Log expenses and income from their pages (or the + button on mobile).</EmptyState>
+            <EmptyState title="Nothing logged yet">Use Add (or press E / I) to log an expense or income.</EmptyState>
           ) : (
             <ItemGroup>
               {recent.map((r) => (
-                <Item key={r.id} size="sm">
-                  <ItemMedia>
-                    <Swatch color={r.categoryColor} />
-                  </ItemMedia>
+                <EditableRow
+                  key={r.id}
+                  name={r.description}
+                  editTitle={r.kind === "expense" ? "Edit expense" : "Edit income"}
+                  editForm={
+                    <CashFlowForm
+                      kind={r.kind}
+                      categories={formCategories[r.kind]}
+                      accounts={accounts}
+                      defaults={{ occurredOn: r.occurredOn }}
+                      entry={{
+                        id: r.id,
+                        occurredOn: r.occurredOn,
+                        amount: r.amount,
+                        currency: r.currency,
+                        categoryId: r.categoryId,
+                        description: r.description,
+                        account: r.account,
+                        notes: r.notes,
+                      }}
+                    />
+                  }
+                  onDelete={deleteCashFlow.bind(null, r.id)}
+                  onRestore={restoreCashFlow}
+                  media={
+                    <ItemMedia>
+                      <Swatch color={r.categoryColor} />
+                    </ItemMedia>
+                  }
+                  aside={
+                    <span className="font-mono text-sm">
+                      <Money value={r.kind === "expense" ? -r.amountPhp : r.amountPhp} signed tone />
+                    </span>
+                  }
+                >
                   <ItemContent>
                     <ItemTitle>{r.description}</ItemTitle>
                     <ItemDescription>
                       {dayLabel(r.occurredOn)} · {r.categoryName}
                     </ItemDescription>
                   </ItemContent>
-                  <ItemActions>
-                    <span className="font-mono text-sm">
-                      <Money value={r.kind === "expense" ? -r.amountPhp : r.amountPhp} signed tone />
-                    </span>
-                  </ItemActions>
-                </Item>
+                </EditableRow>
               ))}
             </ItemGroup>
           )}

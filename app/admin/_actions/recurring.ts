@@ -1,15 +1,16 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { categories, recurringCashFlows } from "@/lib/db/schema";
+import { cashFlows, categories, recurringCashFlows } from "@/lib/db/schema";
+import { fxToPhp, round2 } from "@/lib/finance/calc";
 import { addDays, todayManila } from "@/lib/finance/dates";
 import { nextOccurrence, scheduleOf } from "@/lib/finance/recurrence";
 import { failure, idSchema, invalid, recurringSchema, type FormState } from "@/lib/finance/schemas";
-import { postDueRecurring } from "@/lib/finance/service";
+import { ensureFx, postDueRecurring } from "@/lib/finance/service";
 
 const daySchema = z.iso.date();
 
@@ -128,4 +129,75 @@ export async function deleteRecurring(id: string): Promise<FormState> {
   await getDb().delete(recurringCashFlows).where(eq(recurringCashFlows.id, parsed.data));
   revalidatePath("/admin", "layout");
   return { ok: true, message: "Deleted." };
+}
+
+const occurrenceSchema = z.array(z.object({ id: idSchema, on: daySchema })).min(1).max(100);
+
+/**
+ * One-tap "Post" (and "Post all") for due items that wait for confirmation: posts each
+ * occurrence at the item's saved amount and moves its cursor past the latest one posted.
+ */
+export async function postRecurring(occurrences: { id: string; on: string }[]): Promise<FormState> {
+  await requireAdmin();
+  const parsed = occurrenceSchema.safeParse(occurrences);
+  if (!parsed.success) return failure("Unknown item.");
+  const db = getDb();
+
+  const ids = [...new Set(parsed.data.map((o) => o.id))];
+  const rows = await db.select().from(recurringCashFlows).where(inArray(recurringCashFlows.id, ids));
+  if (rows.length === 0) return failure("Those items no longer exist.");
+
+  let fx: Awaited<ReturnType<typeof ensureFx>> = {};
+  try {
+    fx = await ensureFx([...new Set(rows.map((r) => r.currency))]);
+  } catch {
+    // Non-PHP items are reported below.
+  }
+
+  const entries: (typeof cashFlows.$inferInsert)[] = [];
+  const cursors = [];
+  const skipped: string[] = [];
+  for (const r of rows) {
+    const rate = fxToPhp(fx, r.currency);
+    if (rate == null) {
+      skipped.push(r.description);
+      continue;
+    }
+    const days = parsed.data.filter((o) => o.id === r.id).map((o) => o.on).sort();
+    for (const on of days) {
+      entries.push({
+        kind: r.kind,
+        occurredOn: on,
+        amount: r.amount,
+        currency: r.currency,
+        amountPhp: round2(r.amount * rate),
+        categoryId: r.categoryId,
+        description: r.description,
+        account: r.account,
+        notes: r.notes,
+        recurringId: r.id,
+        recurringOn: on,
+      });
+    }
+    const last = days[days.length - 1];
+    if (r.nextOn && r.nextOn <= last) {
+      cursors.push(
+        db
+          .update(recurringCashFlows)
+          .set({ nextOn: nextOccurrence(scheduleOf(r), addDays(last, 1)) })
+          .where(and(eq(recurringCashFlows.id, r.id), eq(recurringCashFlows.nextOn, r.nextOn)))
+      );
+    }
+  }
+  if (entries.length === 0) return failure(`No FX rate for ${skipped.join(", ")} yet — try again.`);
+
+  // Duplicates (already posted by the cron or another tab) are skipped by the unique index.
+  const insert = db.insert(cashFlows).values(entries).onConflictDoNothing().returning({ id: cashFlows.id });
+  const [inserted] = await db.batch([insert, ...cursors]);
+  revalidatePath("/admin", "layout");
+
+  const posted = inserted.length;
+  const message =
+    posted === 0 ? "Already posted." : posted === 1 ? `Posted ${entries[0].description}.` : `Posted ${posted} entries.`;
+  return { ok: true, message: skipped.length ? `${message} Skipped ${skipped.join(", ")} (no FX rate).` : message };
 }

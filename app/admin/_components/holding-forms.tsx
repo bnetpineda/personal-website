@@ -4,7 +4,6 @@ import { useId, useState } from "react";
 import { FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { applyAdjustment } from "@/lib/finance/calc";
 import {
@@ -291,24 +290,6 @@ export function AdjustForm({ holding }: { holding: HoldingDTO }) {
         </FormFooter>
       </FieldGroup>
     </form>
-  );
-}
-
-/** Edit sheet body: adjust the position or edit its details. */
-export function HoldingEditor({ holding }: { holding: HoldingDTO }) {
-  return (
-    <Tabs defaultValue="adjust">
-      <TabsList>
-        <TabsTrigger value="adjust">Adjust</TabsTrigger>
-        <TabsTrigger value="details">Details</TabsTrigger>
-      </TabsList>
-      <TabsContent value="adjust">
-        <AdjustForm holding={holding} />
-      </TabsContent>
-      <TabsContent value="details">
-        <HoldingForm holding={holding} />
-      </TabsContent>
-    </Tabs>
   );
 }
 

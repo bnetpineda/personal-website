@@ -12,7 +12,7 @@ export interface LoginState {
 
 /** Only same-site admin paths — blocks //evil.com, /\evil.com and absolute URLs. */
 function safeNext(value: FormDataEntryValue | null): string {
-  if (typeof value !== "string" || !/^\/admin(\/[\w\-./?=&%]*)?$/.test(value) || value.startsWith("/admin/login")) {
+  if (typeof value !== "string" || !/^\/admin(\/[\w\-./?=&%]*|\?[\w\-.=&%]*)?$/.test(value) || value.startsWith("/admin/login")) {
     return "/admin";
   }
   return value;

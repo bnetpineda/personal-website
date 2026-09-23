@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Plus } from "lucide-react";
+import { HandCoins, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { getFx, getLiabilities } from "@/lib/dal";
+import { getAccounts, getCategories, getFx, getLastPayments, getLiabilities } from "@/lib/dal";
 import type { Liability } from "@/lib/db/schema";
 import { fxToPhp } from "@/lib/finance/calc";
 import { LIABILITY_KIND_LABELS } from "@/lib/finance/constants";
@@ -11,8 +11,8 @@ import { dayLabel, nextDueDate, todayManila } from "@/lib/finance/dates";
 import { formatPct } from "@/lib/finance/format";
 import { deleteLiability, setLiabilityArchived } from "../../_actions/liabilities";
 import { FormSheet } from "../../_components/form";
-import { LiabilityForm, type LiabilityDTO } from "../../_components/liability-form";
-import { RowActions } from "../../_components/row-actions";
+import { LiabilityForm, PaymentForm, type LiabilityDTO } from "../../_components/liability-form";
+import { EditableCardHeader } from "../../_components/row-actions";
 import { EmptyState, Money, PageHeader, StatCards } from "../../_components/ui";
 
 export const metadata: Metadata = {
@@ -36,7 +36,14 @@ function toDTO(l: Liability): LiabilityDTO {
 }
 
 export default async function DebtsPage() {
-  const [rows, fx] = await Promise.all([getLiabilities(), getFx()]);
+  const [rows, fx, expenseCategories, accounts, lastPayments] = await Promise.all([
+    getLiabilities(),
+    getFx(),
+    getCategories("expense"),
+    getAccounts(),
+    getLastPayments(),
+  ]);
+  const paymentCategories = expenseCategories.map(({ id, name, color, archived }) => ({ id, name, color, archived }));
   const today = todayManila();
   const active = rows.filter((l) => !l.archived);
   const archived = rows.filter((l) => l.archived);
@@ -51,27 +58,34 @@ export default async function DebtsPage() {
   const debtCard = (l: Liability) => {
     const utilization = l.creditLimit && l.creditLimit > 0 ? l.balance / l.creditLimit : null;
     const due = l.dueDay ? nextDueDate(l.dueDay, today) : null;
+    const lastPaid = lastPayments.get(l.id);
     const facts = [
       { label: "Next due", value: due ? `${dayLabel(due.date)} · ${due.inDays === 0 ? "today" : `in ${due.inDays} d`}` : "—" },
       { label: "Minimum", value: l.minPayment != null ? <Money value={l.minPayment} currency={l.currency} /> : "—" },
       { label: "Interest", value: l.interestRate != null ? `${l.interestRate}%` : "—" },
+      {
+        label: "Last paid",
+        value: lastPaid ? (
+          <>
+            <Money value={lastPaid.amount} currency={lastPaid.currency} /> · {dayLabel(lastPaid.occurredOn)}
+          </>
+        ) : (
+          "—"
+        ),
+      },
       { label: "Notes", value: l.notes || "—" },
     ];
     return (
       <Card key={l.id}>
-        <CardHeader>
-          <CardTitle>{l.name}</CardTitle>
-          <CardDescription>{[LIABILITY_KIND_LABELS[l.kind], l.lender, l.archived ? "Paid off" : null].filter(Boolean).join(" · ")}</CardDescription>
-          <CardAction>
-            <RowActions
-              name={l.name}
-              editForm={<LiabilityForm liability={toDTO(l)} />}
-              archived={l.archived}
-              onToggleArchive={setLiabilityArchived.bind(null, l.id, !l.archived)}
-              onDelete={deleteLiability.bind(null, l.id)}
-            />
-          </CardAction>
-        </CardHeader>
+        <EditableCardHeader
+          title={l.name}
+          description={[LIABILITY_KIND_LABELS[l.kind], l.lender, l.archived ? "Paid off" : null].filter(Boolean).join(" · ")}
+          name={l.name}
+          editForm={<LiabilityForm liability={toDTO(l)} />}
+          archived={l.archived}
+          onToggleArchive={setLiabilityArchived.bind(null, l.id, !l.archived)}
+          onDelete={deleteLiability.bind(null, l.id)}
+        />
         <CardContent className="flex flex-col gap-4">
           <div>
             <p className="font-display text-3xl">
@@ -107,6 +121,26 @@ export default async function DebtsPage() {
             ))}
           </dl>
         </CardContent>
+        {!l.archived && l.balance > 0 && (
+          <CardFooter>
+            <FormSheet
+              title={`Pay ${l.name}`}
+              description="Takes the payment off the balance."
+              trigger={
+                <Button variant="outline" size="sm">
+                  <HandCoins /> Pay
+                </Button>
+              }
+            >
+              <PaymentForm
+                debt={{ id: l.id, name: l.name, kind: l.kind, currency: l.currency, balance: l.balance, minPayment: l.minPayment }}
+                categories={paymentCategories}
+                accounts={accounts}
+                defaults={{ categoryId: lastPaid?.categoryId, account: lastPaid?.account }}
+              />
+            </FormSheet>
+          </CardFooter>
+        )}
       </Card>
     );
   };

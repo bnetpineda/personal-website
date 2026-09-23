@@ -1,6 +1,6 @@
 "use server";
 
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
@@ -78,4 +78,44 @@ export async function deleteCategory(id: number): Promise<FormState> {
   }
   revalidatePath("/admin", "layout");
   return { ok: true, message: "Deleted." };
+}
+
+/** All expense budgets in one form: fields named `budget:<categoryId>`; blank clears a budget. */
+export async function updateBudgets(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireAdmin();
+
+  const updates: { id: number; budget: number | null }[] = [];
+  const errors: Record<string, string[]> = {};
+  for (const [key, value] of formData) {
+    if (!key.startsWith("budget:") || typeof value !== "string") continue;
+    const id = Number(key.slice("budget:".length));
+    if (!Number.isInteger(id) || id <= 0) continue;
+    if (value.trim() === "") {
+      updates.push({ id, budget: null });
+      continue;
+    }
+    const budget = Number(value.replace(/[,\s₱]/g, ""));
+    if (!Number.isFinite(budget) || budget < 0 || budget > 999_999_999_999) errors[key] = ["Enter a valid amount"];
+    else updates.push({ id, budget: budget === 0 ? null : budget });
+  }
+  if (Object.keys(errors).length > 0) return failure("Fix the highlighted budgets.", formData, errors);
+
+  const db = getDb();
+  const current = await db
+    .select({ id: categories.id, monthlyBudget: categories.monthlyBudget })
+    .from(categories)
+    .where(eq(categories.kind, "expense"));
+  const byId = new Map(current.map((c) => [c.id, c.monthlyBudget]));
+  const changed = updates.filter((u) => byId.has(u.id) && byId.get(u.id) !== u.budget);
+  if (changed.length === 0) return { ok: true, message: "No changes." };
+
+  const [first, ...rest] = changed.map((u) =>
+    db
+      .update(categories)
+      .set({ monthlyBudget: u.budget })
+      .where(and(eq(categories.id, u.id), eq(categories.kind, "expense")))
+  );
+  await db.batch([first, ...rest]);
+  revalidatePath("/admin", "layout");
+  return { ok: true, message: changed.length === 1 ? "Updated 1 budget." : `Updated ${changed.length} budgets.` };
 }

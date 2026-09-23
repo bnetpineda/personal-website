@@ -2,20 +2,19 @@ import type { Metadata } from "next";
 import { Pause, Play, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { getAccounts, getCategories, getFx, getRecurring, type RecurringRow } from "@/lib/dal";
 import { fxToPhp } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addDays, todayManila } from "@/lib/finance/dates";
 import { describeSchedule, dueOccurrences, monthlyEquivalent, upcomingOccurrences } from "@/lib/finance/recurrence";
-import { deleteRecurring, setRecurringPaused, skipRecurring } from "../../_actions/recurring";
-import { CashFlowForm } from "../../_components/cash-flow-form";
-import { DueActions } from "../../_components/due-actions";
+import { deleteRecurring, setRecurringPaused } from "../../_actions/recurring";
+import type { FormCategory } from "../../_components/cash-flow-form";
 import { FormSheet } from "../../_components/form";
-import { OccurrenceList, whenLabel } from "../../_components/recurring";
+import { DuePanel, OccurrenceList, whenLabel } from "../../_components/recurring";
 import { RecurringForm, type RecurringDTO } from "../../_components/recurring-form";
-import { RowActions } from "../../_components/row-actions";
+import { EditableRow } from "../../_components/row-actions";
 import { EmptyState, Money, PageHeader, Panel, StatCards } from "../../_components/ui";
 
 export const metadata: Metadata = {
@@ -49,8 +48,9 @@ export default async function RecurringPage() {
     getFx(),
   ]);
 
-  const formCategories = { income: incomeCategories, expense: expenseCategories };
-  const categoriesFor = (kind: CashFlowKind) => formCategories[kind].map(({ id, name, archived }) => ({ id, name, archived }));
+  const toForm = (list: typeof incomeCategories): FormCategory[] => list.map(({ id, name, color, archived }) => ({ id, name, color, archived }));
+  const formCategories: Record<CashFlowKind, FormCategory[]> = { income: toForm(incomeCategories), expense: toForm(expenseCategories) };
+  const categoriesFor = (kind: CashFlowKind) => formCategories[kind];
 
   const live = rows.filter((r) => !r.paused && r.nextOn != null);
   const perMonth = (kind: CashFlowKind) =>
@@ -91,10 +91,34 @@ export default async function RecurringPage() {
         {items.map((r) => {
           const status = r.paused ? "Paused" : r.nextOn == null ? "Ended" : null;
           return (
-            <Item key={r.id} size="sm">
-              <ItemMedia>
-                <Swatch color={r.categoryColor} />
-              </ItemMedia>
+            <EditableRow
+              key={r.id}
+              name={r.description}
+              editTitle={kind === "expense" ? "Edit recurring expense" : "Edit recurring income"}
+              editForm={<RecurringForm kind={kind} categories={categoriesFor(kind)} accounts={accounts} item={toDTO(r)} />}
+              actions={[
+                r.paused
+                  ? { label: "Resume", icon: <Play />, run: setRecurringPaused.bind(null, r.id, false) }
+                  : { label: "Pause", icon: <Pause />, run: setRecurringPaused.bind(null, r.id, true) },
+              ]}
+              onDelete={deleteRecurring.bind(null, r.id)}
+              deleteWarning="Entries it already added stay. Nothing new will be added."
+              media={
+                <ItemMedia>
+                  <Swatch color={r.categoryColor} />
+                </ItemMedia>
+              }
+              aside={
+                <span className="flex flex-col items-end font-mono text-sm">
+                  <Money value={r.amount} currency={r.currency} />
+                  {r.frequency !== "monthly" && (
+                    <span className="text-xs text-muted-foreground">
+                      ≈ <Money value={monthlyEquivalent(r.amount, r.frequency)} currency={r.currency} />/mo
+                    </span>
+                  )}
+                </span>
+              }
+            >
               <ItemContent>
                 <ItemTitle>
                   {r.description}
@@ -107,29 +131,7 @@ export default async function RecurringPage() {
                     .join(" · ")}
                 </ItemDescription>
               </ItemContent>
-              <ItemActions>
-                <div className="flex flex-col items-end font-mono text-sm">
-                  <Money value={r.amount} currency={r.currency} />
-                  {r.frequency !== "monthly" && (
-                    <span className="text-xs text-muted-foreground">
-                      ≈ <Money value={monthlyEquivalent(r.amount, r.frequency)} currency={r.currency} />/mo
-                    </span>
-                  )}
-                </div>
-                <RowActions
-                  name={r.description}
-                  editTitle={kind === "expense" ? "Edit recurring expense" : "Edit recurring income"}
-                  editForm={<RecurringForm kind={kind} categories={categoriesFor(kind)} accounts={accounts} item={toDTO(r)} />}
-                  actions={[
-                    r.paused
-                      ? { label: "Resume", icon: <Play />, run: setRecurringPaused.bind(null, r.id, false) }
-                      : { label: "Pause", icon: <Pause />, run: setRecurringPaused.bind(null, r.id, true) },
-                  ]}
-                  onDelete={deleteRecurring.bind(null, r.id)}
-                  deleteWarning="Entries it already added stay. Nothing new will be added."
-                />
-              </ItemActions>
-            </Item>
+            </EditableRow>
           );
         })}
       </ItemGroup>
@@ -153,46 +155,7 @@ export default async function RecurringPage() {
 
       {due.length > 0 && (
         <div className="mb-6">
-          <Panel title={`Needs confirming · ${due.length}`}>
-            <ItemGroup>
-              {due.map(({ item: r, date }) => (
-                <Item key={`${r.id}-${date}`} size="sm">
-                  <ItemMedia>
-                    <Swatch color={r.categoryColor} />
-                  </ItemMedia>
-                  <ItemContent>
-                    <ItemTitle>{r.description}</ItemTitle>
-                    <ItemDescription>
-                      {whenLabel(date, today)} · <Money value={r.amount} currency={r.currency} />
-                    </ItemDescription>
-                  </ItemContent>
-                  <ItemActions>
-                    <DueActions
-                      name={r.description}
-                      onSkip={skipRecurring.bind(null, r.id, date)}
-                      form={
-                        <CashFlowForm
-                          kind={r.kind}
-                          categories={categoriesFor(r.kind)}
-                          accounts={accounts}
-                          recurring={{ id: r.id, on: date }}
-                          defaults={{
-                            occurredOn: date,
-                            amount: r.amount,
-                            currency: r.currency,
-                            categoryId: r.categoryId,
-                            description: r.description,
-                            account: r.account,
-                            notes: r.notes,
-                          }}
-                        />
-                      }
-                    />
-                  </ItemActions>
-                </Item>
-              ))}
-            </ItemGroup>
-          </Panel>
+          <DuePanel due={due} today={today} categories={formCategories} accounts={accounts} />
         </div>
       )}
 

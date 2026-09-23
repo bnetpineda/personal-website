@@ -73,7 +73,7 @@ export interface Stat {
 
 export function StatCards({ items }: { items: Stat[] }) {
   return (
-    <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
+    <div className={cn("mb-6 grid grid-cols-2 gap-4", items.length === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
       {items.map((item) => (
         <Card key={item.label} variant={item.primary ? "primary" : "default"} className="gap-2 py-4">
           <CardHeader className="gap-2 px-4">
@@ -115,23 +115,24 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
   );
 }
 
-export function MonthPicker({ month, current, basePath }: { month: string; current: string; basePath: string }) {
+/** Month stepper. `href` builds the link for a month (so other filters are kept). */
+export function MonthPicker({ month, current, href }: { month: string; current: string; href: (month: string) => string }) {
   return (
     <ButtonGroup aria-label="Month">
       <Button asChild variant="outline" size="icon">
-        <Link href={`${basePath}?month=${addMonths(month, -1)}`} aria-label="Previous month">
+        <Link href={href(addMonths(month, -1))} aria-label="Previous month">
           <ChevronLeft />
         </Link>
       </Button>
       <ButtonGroupText aria-current="date">{monthLabel(month)}</ButtonGroupText>
       <Button asChild variant="outline" size="icon">
-        <Link href={`${basePath}?month=${addMonths(month, 1)}`} aria-label="Next month">
+        <Link href={href(addMonths(month, 1))} aria-label="Next month">
           <ChevronRight />
         </Link>
       </Button>
       {month !== current && (
         <Button asChild variant="outline">
-          <Link href={basePath}>Today</Link>
+          <Link href={href(current)}>Today</Link>
         </Button>
       )}
     </ButtonGroup>
@@ -145,6 +146,8 @@ export interface BreakdownRow {
   value: number;
   /** With a budget the bar shows value/budget (amber ≥ 85%, red when over). */
   budget?: number | null;
+  /** Drill-down link (e.g. that category's entries). */
+  href?: string;
 }
 
 /** Budget progress when a budget exists, otherwise share of the largest row. */
@@ -161,7 +164,13 @@ export function Breakdown({ rows }: { rows: BreakdownRow[] }) {
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="flex min-w-0 items-center gap-2">
                 <Swatch color={row.color} />
-                <span className="truncate">{row.label}</span>
+                {row.href ? (
+                  <Link href={row.href} className="truncate underline-offset-4 hover:underline">
+                    {row.label}
+                  </Link>
+                ) : (
+                  <span className="truncate">{row.label}</span>
+                )}
               </span>
               <span className="shrink-0 font-mono text-xs text-muted-foreground">
                 <Money value={row.value} />
