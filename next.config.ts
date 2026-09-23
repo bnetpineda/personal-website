@@ -5,6 +5,7 @@ import { dirname } from "path";
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
   /* Pin the Turbopack workspace root to this project so CSS/module
      resolution doesn't walk up to the parent directory. */
   turbopack: {

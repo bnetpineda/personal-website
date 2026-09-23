@@ -24,4 +24,6 @@ export const env = {
   cronSecret: () => optional("CRON_SECRET"),
   finnhubApiKey: () => optional("FINNHUB_API_KEY"),
   coingeckoApiKey: () => optional("COINGECKO_API_KEY"),
+  aiGatewayApiKey: () => optional("AI_GATEWAY_API_KEY"),
+  aiCategorizeModel: () => optional("AI_CATEGORIZE_MODEL") ?? "anthropic/claude-haiku-4.5",
 };

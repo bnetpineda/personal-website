@@ -10,6 +10,7 @@ import { Swatch } from "@/components/ui/swatch";
 import {
   getAccounts,
   getCategories,
+  getConnections,
   getCategoryTotals,
   getFx,
   getHoldings,
@@ -25,6 +26,8 @@ import { addDays, currentMonth, dayLabel, monthLabel, timeAgo, todayManila } fro
 import { formatPct } from "@/lib/finance/format";
 import { dueOccurrences, upcomingOccurrences } from "@/lib/finance/recurrence";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
+import { includedPositions } from "@/lib/finance/connections/types";
+import { ConnectedAccounts, ConnectedValuationNotice } from "../_components/connected-accounts";
 import { deleteCashFlow, restoreCashFlow } from "../_actions/cash-flows";
 import { BudgetsForm } from "../_components/budgets-form";
 import { CashFlowForm, type FormCategory } from "../_components/cash-flow-form";
@@ -45,7 +48,7 @@ export default async function OverviewPage() {
   const today = todayManila(now);
   const month = currentMonth(now);
 
-  const [holdingRows, liabilityRows, fx, snapshots, monthly, expenseTotals, allCategories, recent, recurring, accounts] = await Promise.all([
+  const [holdingRows, liabilityRows, fx, snapshots, monthly, expenseTotals, allCategories, recent, recurring, accounts, connections] = await Promise.all([
     getHoldings(),
     getLiabilities(),
     getFx(),
@@ -56,6 +59,7 @@ export default async function OverviewPage() {
     getRecentCashFlows(8),
     getRecurring(),
     getAccounts(),
+    getConnections(),
   ]);
   const categories = allCategories.filter((c) => c.kind === "expense");
   const formCategories: Record<CashFlowKind, FormCategory[]> = { expense: [], income: [] };
@@ -71,7 +75,9 @@ export default async function OverviewPage() {
   });
 
   const activeDebts = liabilityRows.filter((l) => !l.archived);
-  const nw = computeNetWorth(holdingRows, activeDebts, fx);
+  const connectedPositions = includedPositions(connections);
+  const syncedObligations = connectedPositions.filter((p) => p.marketValue != null && p.marketValue < 0).length;
+  const nw = computeNetWorth(holdingRows, activeDebts, fx, connectedPositions);
   const series = monthlySeries(month, 12, monthly);
   const thisMonth = series[series.length - 1];
   const rate = savingsRate(thisMonth.income, thisMonth.expense);
@@ -137,8 +143,8 @@ export default async function OverviewPage() {
             hint: change != null ? <Money value={change} signed /> : "vs. 30 days ago: —",
             primary: true,
           },
-          { label: "Assets", value: <Money value={nw.assetsPhp} />, hint: `${holdingRows.length} holdings` },
-          { label: "Debts", value: <Money value={nw.liabilitiesPhp} />, hint: `${activeDebts.length} active` },
+          { label: "Assets", value: <Money value={nw.assetsPhp} />, hint: `${holdingRows.length} manual · ${connectedPositions.length} synced` },
+          { label: "Debts", value: <Money value={nw.liabilitiesPhp} />, hint: `${activeDebts.length} active${syncedObligations ? ` · ${syncedObligations} synced obligations` : ""}` },
           { label: "Unrealized P/L", value: <Money value={nw.unrealizedPhp} signed tone />, hint: <Pct value={nw.unrealizedPct} tone /> },
           { label: `Income · ${monthLabel(month, "short")}`, value: <Money value={thisMonth.income} /> },
           {
@@ -148,6 +154,9 @@ export default async function OverviewPage() {
           },
         ]}
       />
+
+      <ConnectedValuationNotice missingPrices={nw.missingPrices} missingCostBasis={nw.missingCostBasis} />
+      <ConnectedAccounts connections={connections} fx={fx} />
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">

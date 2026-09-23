@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Eye, EyeOff, LogOut, Plus, Search, Settings } from "lucide-react";
+import { Bell, Eye, EyeOff, LogOut, Plus, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -118,7 +118,7 @@ function PrivacyToggle() {
   );
 }
 
-export function AdminHeader() {
+export function AdminHeader({ notifications = 0 }: { notifications?: number }) {
   const pathname = usePathname();
   const { setAdding, setCommandOpen } = useAdminUi();
   const mod = useModKey();
@@ -140,7 +140,7 @@ export function AdminHeader() {
                 <Link href={href} aria-current={active ? "page" : undefined} aria-label={label}>
                   <Icon />
                   {/* Labels don't fit next to search and Add between lg and xl. */}
-                  <span className="hidden xl:inline">{label}</span>
+                  <span className="sr-only">{label}</span>
                 </Link>
               </Button>
             );
@@ -179,6 +179,11 @@ export function AdminHeader() {
             <TooltipContent>Settings</TooltipContent>
           </Tooltip>
           <PrivacyToggle />
+          <Tooltip><TooltipTrigger asChild><Button asChild variant={isActivePath(pathname, "/admin/notifications") ? "default" : "ghost"} size="icon">
+            <Link href="/admin/notifications" aria-label={`Notifications${notifications ? `, ${notifications} active` : ""}`}>
+              <Bell />{notifications > 0 && <span className="sr-only">{notifications} active</span>}
+              {notifications > 0 && <span aria-hidden="true" className="text-xs font-bold">{notifications}</span>}
+            </Link></Button></TooltipTrigger><TooltipContent>Notifications{notifications ? ` (${notifications})` : ""}</TooltipContent></Tooltip>
           {/* On phones these two live in the command menu to keep the header on one line. */}
           <ThemeToggle className="hidden sm:inline-flex" />
           <form action={logout} className="hidden sm:block">

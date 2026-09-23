@@ -1,4 +1,4 @@
-import { ArrowLeftRight, CreditCard, LayoutDashboard, Repeat, Settings, Wallet } from "lucide-react";
+import { ArrowLeftRight, Bell, CreditCard, Inbox, LayoutDashboard, Link2, Repeat, Settings, TrendingUp, Wallet } from "lucide-react";
 
 /** `tab: false` keeps an item out of the phone tab bar (it's reachable from the header instead). */
 export const ADMIN_NAV = [
@@ -8,6 +8,11 @@ export const ADMIN_NAV = [
   { href: "/admin/recurring", label: "Recurring", short: "Repeat", icon: Repeat, tab: true },
   { href: "/admin/debts", label: "Debts", short: "Debts", icon: CreditCard, tab: true },
   { href: "/admin/settings", label: "Settings", short: "Settings", icon: Settings, tab: false },
+  { href: "/admin/connections", label: "Connections", short: "Connect", icon: Link2, tab: false },
+  { href: "/admin/inbox", label: "Import inbox", short: "Inbox", icon: Inbox, tab: false },
+  { href: "/admin/earnings", label: "Investment earnings", short: "Earnings", icon: TrendingUp, tab: false },
+  { href: "/admin/history", label: "Investment history", short: "History", icon: ArrowLeftRight, tab: false },
+  { href: "/admin/notifications", label: "Notifications", short: "Alerts", icon: Bell, tab: false },
 ] as const;
 
 export function isActivePath(pathname: string, href: string): boolean {

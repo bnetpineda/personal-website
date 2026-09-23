@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Download, Plus, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,13 @@ export default async function SettingsPage() {
   return (
     <>
       <PageHeader eyebrow="Setup" title="Settings" />
+
+      <div className="mb-6">
+        <Panel title="Account connections" action={<Button asChild variant="outline"><Link href="/admin/connections">Manage connections</Link></Button>}>
+          <p className="text-sm text-muted-foreground">Sync Binance Spot and Simple Earn, IBKR investments and cash, and eligible Wise balances automatically.</p>
+          <div className="mt-4 flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link href="/admin/inbox">Import inbox & rules</Link></Button><Button asChild variant="outline" size="sm"><Link href="/admin/earnings">Earnings</Link></Button><Button asChild variant="outline" size="sm"><Link href="/admin/notifications">Notifications</Link></Button></div>
+        </Panel>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel

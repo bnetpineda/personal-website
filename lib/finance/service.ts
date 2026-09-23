@@ -1,7 +1,8 @@
 import "server-only";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { cashFlows, fxRates, holdings, liabilities, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
+import { accountConnections, cashFlows, fxRates, holdings, liabilities, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
+import { includedPositions } from "./connections/types";
 import { computeNetWorth, fxToPhp, round2, type FxTable, type NetWorth } from "./calc";
 import { BASE_CURRENCY } from "./constants";
 import { addDays, todayManila } from "./dates";
@@ -78,13 +79,15 @@ export async function ensureFx(currencies: string[]): Promise<FxTable> {
 
 export async function refreshAllPrices(): Promise<RefreshSummary> {
   const db = getDb();
-  const [rows, debts] = await Promise.all([
+  const [rows, debts, connections] = await Promise.all([
     db.select().from(holdings).where(eq(holdings.archived, false)),
     db.select({ currency: liabilities.currency }).from(liabilities).where(eq(liabilities.archived, false)),
+    db.select({ snapshot: accountConnections.snapshot }).from(accountConnections),
   ]);
 
   const failed: RefreshFailure[] = [];
-  const fx = await refreshFxRates([...rows.map((r) => r.currency), ...debts.map((d) => d.currency)]);
+  const fx = await refreshFxRates([...rows.map((r) => r.currency), ...debts.map((d) => d.currency),
+    ...connections.flatMap((c) => c.snapshot?.positions.map((p) => p.currency) ?? [])]);
   failed.push(...fx.failed);
 
   const updates: { id: string; price: number; asOf: Date }[] = [];
@@ -137,14 +140,15 @@ export async function refreshAllPrices(): Promise<RefreshSummary> {
 
 export async function currentNetWorth(): Promise<NetWorth & { empty: boolean }> {
   const db = getDb();
-  const [holdingRows, liabilityRows, fx] = await Promise.all([
+  const [holdingRows, liabilityRows, fx, connections] = await Promise.all([
     db.select().from(holdings),
     db.select().from(liabilities),
     loadFxTable(),
+    db.select({ provider: accountConnections.provider, includeInNetWorth: accountConnections.includeInNetWorth, snapshot: accountConnections.snapshot }).from(accountConnections),
   ]);
   return {
-    ...computeNetWorth(holdingRows, liabilityRows, fx),
-    empty: holdingRows.length === 0 && liabilityRows.length === 0,
+    ...computeNetWorth(holdingRows, liabilityRows, fx, includedPositions(connections)),
+    empty: holdingRows.length === 0 && liabilityRows.length === 0 && !connections.some((c) => c.includeInNetWorth && c.snapshot),
   };
 }
 

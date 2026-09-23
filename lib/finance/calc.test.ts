@@ -5,7 +5,9 @@ import {
   budgetProgress,
   budgetSegments,
   computeNetWorth,
+  connectedHoldingMetrics,
   holdingMetrics,
+  isSmallHolding,
   monthlySeries,
   savingsRate,
   type Position,
@@ -40,6 +42,53 @@ describe("holdingMetrics", () => {
     const m = holdingMetrics({ ...voo, currency: "JPY" }, fx);
     expect(m.rate).toBeNull();
     expect(m.valuePhp).toBeNull();
+  });
+});
+
+describe("connected holding display metrics", () => {
+  test("keeps Binance cost and P/L unknown while showing its market value", () => {
+    expect(connectedHoldingMetrics({ currency: "USD", marketValue: 100, costBasis: null }, fx))
+      .toEqual({ valuePhp: 5600, pnl: null, pnlPhp: null, pnlPct: null });
+  });
+
+  test("keeps unpriced balances unknown instead of valuing them at cost", () => {
+    expect(connectedHoldingMetrics({ currency: "USD", marketValue: null, costBasis: 100 }, fx))
+      .toEqual({ valuePhp: null, pnl: null, pnlPhp: null, pnlPct: null });
+    expect(connectedHoldingMetrics({ currency: "JPY", marketValue: 120, costBasis: 100 }, fx))
+      .toEqual({ valuePhp: null, pnl: 20, pnlPhp: null, pnlPct: 0.2 });
+  });
+
+  test("handles signed broker positions and zero market values without multiplying quantity again", () => {
+    expect(connectedHoldingMetrics({ currency: "USD", marketValue: -80, costBasis: -100 }, fx))
+      .toEqual({ valuePhp: -4480, pnl: 20, pnlPhp: 1120, pnlPct: 0.2 });
+    expect(connectedHoldingMetrics({ currency: "USD", marketValue: 0, costBasis: 100 }, fx).pnlPct).toBe(-1);
+    expect(connectedHoldingMetrics({ currency: "USD", marketValue: 100, costBasis: 0 }, fx).pnlPct).toBeNull();
+  });
+});
+
+describe("minimum holding value", () => {
+  test("hides values below one US dollar but keeps the boundary and larger signed positions", () => {
+    expect(isSmallHolding(0, "USD", {})).toBe(true);
+    expect(isSmallHolding(0.999, "USD", {})).toBe(true);
+    expect(isSmallHolding(1, "USD", {})).toBe(false);
+    expect(isSmallHolding(-0.5, "USD", {})).toBe(true);
+    expect(isSmallHolding(-100, "USD", {})).toBe(false);
+  });
+
+  test("converts the holding's total value, not its unit price, to USD", () => {
+    expect(isSmallHolding(55, "PHP", fx)).toBe(true);
+    expect(isSmallHolding(56, "PHP", fx)).toBe(false);
+    expect(isSmallHolding(0.5, "EUR", fx)).toBe(true);
+    expect(isSmallHolding(1, "EUR", fx)).toBe(false);
+    const pricedToken = holdingMetrics({ ...btc, quantity: 100, lastPrice: 1 }, fx);
+    expect(isSmallHolding(pricedToken.value, "PHP", fx)).toBe(false);
+  });
+
+  test("never silently hides an unpriced balance or one with missing exchange rates", () => {
+    expect(isSmallHolding(null, "USD", fx)).toBe(false);
+    expect(isSmallHolding(0.01, "JPY", fx)).toBe(false);
+    expect(isSmallHolding(10, "PHP", {})).toBe(false);
+    expect(isSmallHolding(0, "JPY", {})).toBe(true);
   });
 });
 

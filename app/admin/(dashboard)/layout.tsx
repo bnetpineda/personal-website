@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { getAccounts, getCategories, getEntrySuggestions, getLastEntryDefaults } from "@/lib/dal";
 import { todayManila } from "@/lib/finance/dates";
 import { postDueRecurringQuietly } from "@/lib/finance/service";
+import { getNotifications } from "@/lib/finance/notifications-dal";
 import { CommandMenu } from "../_components/command-menu";
 import { PRIVACY_COOKIE } from "../_components/nav";
 import { QuickAdd } from "../_components/quick-add";
@@ -18,13 +19,14 @@ export default async function DashboardLayout({
   // Catch up on recurring entries due today if the 06:00 cron hasn't posted them yet
   // (e.g. opening the app after midnight). Shows up on the next navigation.
   after(postDueRecurringQuietly);
-  const [cookieStore, categories, accounts, suggestions, lastExpense, lastIncome] = await Promise.all([
+  const [cookieStore, categories, accounts, suggestions, lastExpense, lastIncome, alerts] = await Promise.all([
     cookies(),
     getCategories(),
     getAccounts(),
     getEntrySuggestions(),
     getLastEntryDefaults("expense"),
     getLastEntryDefaults("income"),
+    getNotifications(),
   ]);
 
   const today = todayManila();
@@ -39,7 +41,7 @@ export default async function DashboardLayout({
 
   return (
     <Shell initialPrivate={cookieStore.get(PRIVACY_COOKIE)?.value === "1"}>
-      <AdminHeader />
+      <AdminHeader notifications={alerts.filter((a) => !a.dismissed).length} />
       <main id="main-content" className="mx-auto w-full max-w-6xl flex-1 px-4 pt-8 pb-40 lg:pb-12">
         {children}
       </main>

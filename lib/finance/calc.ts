@@ -1,6 +1,7 @@
 import { BASE_CURRENCY, type AssetClass, type CashFlowKind } from "./constants";
 import { addMonths } from "./dates";
 import { formatQty } from "./format";
+import type { ConnectedPosition } from "./connections/types";
 
 /* Pure portfolio math. No I/O, no server-only imports — unit-tested with `bun test`. */
 
@@ -64,6 +65,29 @@ export function holdingMetrics(h: Position, fx: FxTable): HoldingMetrics {
   };
 }
 
+/** Provider values already include contract multipliers. Missing cost is never zero cost. */
+export function connectedHoldingMetrics(position: Pick<ConnectedPosition, "marketValue" | "costBasis" | "currency">, fx: FxTable) {
+  const rate = fxToPhp(fx, position.currency);
+  const pnl = position.marketValue == null || position.costBasis == null ? null : position.marketValue - position.costBasis;
+  return {
+    valuePhp: position.marketValue == null || rate == null ? null : position.marketValue * rate,
+    pnl,
+    pnlPhp: pnl == null || rate == null ? null : pnl * rate,
+    pnlPct: pnl == null || position.costBasis == null || position.costBasis === 0 ? null : pnl / Math.abs(position.costBasis),
+  };
+}
+
+/** Display-only US$1 minimum. Keep unknown values/rates visible and compare signed positions by magnitude. */
+export function isSmallHolding(value: number | null, currency: string, fx: FxTable): boolean {
+  if (value == null || !Number.isFinite(value)) return false;
+  if (value === 0) return true;
+  if (currency === "USD") return Math.abs(value) < 1;
+  const rate = fxToPhp(fx, currency);
+  const usdRate = fxToPhp(fx, "USD");
+  if (rate == null || usdRate == null || rate <= 0 || usdRate <= 0) return false;
+  return clean(Math.abs(value) * rate / usdRate) < 1;
+}
+
 export type Adjustment =
   | { type: "buy"; quantity: number; price: number; fee?: number }
   | { type: "sell"; quantity: number };
@@ -109,12 +133,16 @@ export interface NetWorth {
   byClass: Partial<Record<AssetClass, number>>;
   /** Currencies that couldn't be converted (no FX rate yet) and were left out. */
   missingFx: string[];
+  /** Synced positions omitted from valuation or P/L because the provider lacks data. */
+  missingPrices: string[];
+  missingCostBasis: string[];
 }
 
 export function computeNetWorth(
   holdings: readonly (Position & { archived?: boolean })[],
   liabilities: readonly { balance: number; currency: string; archived?: boolean }[],
-  fx: FxTable
+  fx: FxTable,
+  connected: readonly ConnectedPosition[] = []
 ): NetWorth {
   let assets = 0;
   let invested = 0;
@@ -122,6 +150,9 @@ export function computeNetWorth(
   let nonCashCost = 0;
   const byClass: Partial<Record<AssetClass, number>> = {};
   const missing = new Set<string>();
+  const missingPrices: string[] = [];
+  const missingCostBasis: string[] = [];
+  let connectedDebts = 0;
 
   for (const h of holdings) {
     if (h.archived) continue;
@@ -137,7 +168,28 @@ export function computeNetWorth(
     byClass[h.assetClass] = (byClass[h.assetClass] ?? 0) + m.valuePhp;
   }
 
-  let debts = 0;
+  for (const p of connected) {
+    if (p.quantity === 0 && p.marketValue === 0) continue;
+    const rate = fxToPhp(fx, p.currency);
+    if (rate == null) missing.add(p.currency);
+    if (p.marketValue == null) missingPrices.push(p.name);
+    if (p.costBasis == null) missingCostBasis.push(p.name);
+    if (rate == null || p.marketValue == null) continue;
+    const value = p.marketValue * rate;
+    // Short positions and negative cash are obligations, not negative asset tiles.
+    if (value < 0) connectedDebts -= value;
+    else {
+      assets += value;
+      byClass[p.assetClass] = (byClass[p.assetClass] ?? 0) + value;
+    }
+    if (p.costBasis != null) {
+      invested += p.costBasis * rate;
+      unrealized += (p.marketValue - p.costBasis) * rate;
+      if (p.assetClass !== "cash") nonCashCost += Math.abs(p.costBasis * rate);
+    }
+  }
+
+  let debts = connectedDebts;
   for (const l of liabilities) {
     if (l.archived) continue;
     const rate = fxToPhp(fx, l.currency);
@@ -159,6 +211,8 @@ export function computeNetWorth(
     unrealizedPct: nonCashCost > 0 ? unrealized / nonCashCost : null,
     byClass,
     missingFx: [...missing].sort(),
+    missingPrices,
+    missingCostBasis,
   };
 }
 

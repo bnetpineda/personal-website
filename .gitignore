@@ -44,3 +44,4 @@ next-env.d.ts
 # MD files
 *.md
 !DESIGN.md
+!docs/account-connections.md

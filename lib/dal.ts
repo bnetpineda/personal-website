@@ -10,11 +10,17 @@ import {
   liabilities,
   netWorthSnapshots,
   recurringCashFlows,
+  importedEntries,
+  categoryRules,
+  notificationDismissals,
+  investmentReports,
+  investmentSyncs,
 } from "@/lib/db/schema";
 import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
 import { loadFxTable } from "@/lib/finance/service";
+import { loadConnectionViews } from "@/lib/finance/connections/service";
 
 /*
  * Data access for admin pages. Every read starts with requireAdmin() — layouts don't
@@ -24,6 +30,11 @@ import { loadFxTable } from "@/lib/finance/service";
 export async function getFx(): Promise<FxTable> {
   await requireAdmin();
   return loadFxTable();
+}
+
+export async function getConnections() {
+  await requireAdmin();
+  return loadConnectionViews();
 }
 
 export async function getFxRows() {
@@ -251,7 +262,7 @@ export async function getSnapshots() {
 export async function getExportData() {
   await requireAdmin();
   const db = getDb();
-  const [h, l, c, f, s, x, r] = await Promise.all([
+  const [h, l, c, f, s, x, r, connections, imports, rules, dismissals, reports, historyStreams] = await Promise.all([
     db.select().from(holdings).orderBy(asc(holdings.createdAt)),
     db.select().from(liabilities).orderBy(asc(liabilities.createdAt)),
     db.select().from(categories).orderBy(asc(categories.id)),
@@ -259,6 +270,12 @@ export async function getExportData() {
     db.select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate)),
     db.select().from(fxRates).orderBy(asc(fxRates.currency)),
     db.select().from(recurringCashFlows).orderBy(asc(recurringCashFlows.createdAt)),
+    loadConnectionViews(),
+    db.select().from(importedEntries).orderBy(asc(importedEntries.occurredOn)),
+    db.select().from(categoryRules).orderBy(asc(categoryRules.createdAt)),
+    db.select().from(notificationDismissals),
+    db.select().from(investmentReports).orderBy(asc(investmentReports.createdAt)),
+    db.select().from(investmentSyncs).orderBy(asc(investmentSyncs.createdAt)),
   ]);
-  return { holdings: h, liabilities: l, categories: c, cashFlows: f, recurring: r, netWorthSnapshots: s, fxRates: x };
+  return { holdings: h, liabilities: l, categories: c, cashFlows: f, recurring: r, netWorthSnapshots: s, fxRates: x, connections, importedEntries: imports, categoryRules: rules, notificationDismissals: dismissals, investmentReports: reports, investmentSyncs: historyStreams };
 }

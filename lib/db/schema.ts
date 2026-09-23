@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+import type { ConnectionSnapshot, Provider } from "../finance/connections/types";
+import type { CategorizedBy, EntryKind, EntryStatus, HistoryCoverage, SpotTrade } from "../finance/imports/types";
 import {
   type AnyPgColumn,
   bigserial,
@@ -69,9 +71,12 @@ export const holdings = pgTable(
     priceUpdatedAt: timestamp("price_updated_at", { withTimezone: true }),
     archived: boolean("archived").notNull().default(false),
     notes: text("notes"),
+    statementSource: text("statement_source"),
+    statementAsOf: date("statement_as_of"),
     ...timestamps,
   },
   (t) => [
+    uniqueIndex("holdings_statement_currency_unique").on(t.statementSource, t.currency),
     check("holdings_currency_format", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("holdings_quantity_nonnegative", sql`${t.quantity} >= 0`),
     check("holdings_avg_cost_nonnegative", sql`${t.avgCost} >= 0`),
@@ -229,6 +234,108 @@ export const loginAttempts = pgTable(
     index("login_attempts_created_at_idx").on(t.createdAt),
   ]
 );
+
+/** One private account connection per provider. Secrets are encrypted before persistence. */
+export const accountConnections = pgTable("account_connections", {
+  provider: text("provider").$type<Provider>().primaryKey(),
+  encryptedCredentials: text("encrypted_credentials").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  // Opt in after reviewing existing manual holdings to avoid double counting.
+  includeInNetWorth: boolean("include_in_net_worth").notNull().default(false),
+  snapshot: jsonb("snapshot").$type<ConnectionSnapshot>(),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  error: text("error"),
+  credentialsExpireOn: date("credentials_expire_on"),
+  historySyncedAt: timestamp("history_synced_at", { withTimezone: true }),
+  historyError: text("history_error"),
+  historyCoverage: jsonb("history_coverage").$type<HistoryCoverage>(),
+  syncLease: uuid("sync_lease"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  ...timestamps,
+}, (t) => [check("account_connections_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr')`)]);
+
+/** Immutable source amounts. Review decisions survive repeated imports and deleted cash-flow entries. */
+export const importedEntries = pgTable("imported_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").$type<Provider>().notNull(),
+  accountKey: text("account_key").notNull(),
+  externalId: text("external_id").notNull(),
+  occurredOn: date("occurred_on").notNull(),
+  kind: text("kind").$type<EntryKind>().notNull(),
+  amount: decimal("amount").notNull(),
+  // Supports native crypto units. Never assume a three-letter token is fiat.
+  currency: varchar("currency", { length: 30 }).notNull(),
+  description: text("description").notNull(),
+  realizedPnl: decimal("realized_pnl"),
+  trade: jsonb("trade").$type<SpotTrade>(),
+  status: text("status").$type<EntryStatus>().notNull().default("pending"),
+  categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
+  transferId: uuid("transfer_id"),
+  // Who made the review decision; AI decisions keep a one-line reason for the audit trail.
+  categorizedBy: text("categorized_by").$type<CategorizedBy>(),
+  aiReason: text("ai_reason"),
+  // Set once the model has seen the entry, so scheduled runs never pay to re-ask.
+  aiAttemptedAt: timestamp("ai_attempted_at", { withTimezone: true }),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("imported_entries_source_unique").on(t.provider, t.accountKey, t.externalId),
+  index("imported_entries_status_date_idx").on(t.status, t.occurredOn),
+  index("imported_entries_transfer_idx").on(t.transferId),
+  check("imported_entries_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr')`),
+  check("imported_entries_kind", sql`${t.kind} in ('payment','transfer','reward','dividend','interest','fee','tax','trade','other')`),
+  check("imported_entries_status", sql`${t.status} in ('pending','posted','ignored','transfer','reviewed')`),
+  check("imported_entries_categorized_by", sql`${t.categorizedBy} is null or ${t.categorizedBy} in ('rule','ai','manual')`),
+]);
+
+/** One durable cursor per Binance account and stream. No credentials are stored here. */
+export const investmentSyncs = pgTable("investment_syncs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountKey: text("account_key").notNull(),
+  scope: text("scope").notNull(),
+  fromDate: date("from_date").notNull(),
+  toDate: date("to_date").notNull(),
+  cursor: text("cursor").notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  enabled: boolean("enabled").notNull().default(true),
+  error: text("error"),
+  lease: uuid("lease"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  ...timestamps,
+}, (t) => [uniqueIndex("investment_syncs_account_scope_unique").on(t.accountKey, t.scope)]);
+
+/** Report ranges are evidence of an import, not proof that an entire account history is complete. */
+export const investmentReports = pgTable("investment_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").$type<Provider>().notNull(),
+  fileHash: text("file_hash").notNull(),
+  accounts: jsonb("accounts").$type<string[]>().notNull(),
+  fromDate: date("from_date").notNull(),
+  toDate: date("to_date").notNull(),
+  entries: integer("entries").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("investment_reports_file_unique").on(t.provider, t.fileHash)]);
+
+export const categoryRules = pgTable("category_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  contains: text("contains").notNull(),
+  provider: text("provider").$type<Provider>(),
+  kind: cashFlowKindEnum("kind").notNull(),
+  categoryId: integer("category_id").notNull().references(() => categories.id, { onDelete: "cascade" }),
+  autoPost: boolean("auto_post").notNull().default(false),
+  enabled: boolean("enabled").notNull().default(true),
+  ...timestamps,
+});
+
+/** Alert content is derived from current data; only dismissals need persistence. */
+export const notificationDismissals = pgTable("notification_dismissals", {
+  key: text("key").primaryKey(),
+  dismissedAt: timestamp("dismissed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ImportedEntry = typeof importedEntries.$inferSelect;
+export type CategoryRule = typeof categoryRules.$inferSelect;
 
 export type Holding = typeof holdings.$inferSelect;
 export type FxRate = typeof fxRates.$inferSelect;

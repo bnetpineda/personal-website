@@ -29,6 +29,34 @@
       "when": 1790159775106,
       "tag": "0003_debt-payments",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790188147110,
+      "tag": "0004_account-connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790190791656,
+      "tag": "0005_transaction-automation",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790194153856,
+      "tag": "0006_statement-balances-investment-history",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790197337562,
+      "tag": "0007_ai-categorization",
+      "breakpoints": true
     }
   ]
 }
