@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
+import { accountConnections, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
 import { ConnectionError } from "@/lib/finance/connections/types";
 import { advanceHistory, historySetupSchema, startBinanceHistory, startHeldSpotHistory } from "@/lib/finance/imports/history-service";
 import { parseIbkrHistory } from "@/lib/finance/imports/provider-parsers";
@@ -70,6 +70,16 @@ export async function prepareHoldingCosts(): Promise<FormState & { jobs?: { id: 
     revalidatePath("/admin", "layout");
     return { ok: true, ...result };
   } catch (error) { return failure(error); }
+}
+export async function holdingCostRefreshJobs() {
+  await requireAdmin();
+  const db = getDb();
+  const [connection] = await db.select({ snapshot: accountConnections.snapshot, enabled: accountConnections.enabled })
+    .from(accountConnections).where(eq(accountConnections.provider, "binance"));
+  if (!connection?.enabled || !connection.snapshot?.accountKey) return [];
+  const jobs = await db.select({ id: investmentSyncs.id, scope: investmentSyncs.scope }).from(investmentSyncs)
+    .where(and(eq(investmentSyncs.accountKey, connection.snapshot.accountKey), eq(investmentSyncs.enabled, true)));
+  return jobs.filter((j) => j.scope.startsWith("spot:")).slice(0, 20);
 }
 export async function continueInvestmentHistory(id: string): Promise<FormState & { more?: boolean }> {
   await requireAdmin();

@@ -13,6 +13,53 @@ export interface HoldingCost {
   status: "estimate" | "partial" | "unavailable";
   lines: { pair: string; currency: string; quantity: number; cost: number; averageCost: number }[];
   reasons: string[];
+  pnlEstimate: HoldingPnlEstimate | null;
+}
+
+export interface HoldingPnlEstimate {
+  currency: "USDT";
+  quantity: number;
+  coverage: number;
+  averageCost: number;
+  cost: number;
+  marketValue: number;
+  pnl: number;
+  pnlPct: number | null;
+  costUsd: number;
+  pnlUsd: number;
+}
+
+/** Portfolio estimate from the remaining purchase average, capped at held and recorded units.
+ * Extra rewards/deposits get no assumed zero basis. Reduced balances use proportional average
+ * cost because historical transfers may not identify which purchase lots left the account.
+ */
+function estimatePnl(snapshot: ConnectionSnapshot, wallets: ConnectedPosition[], lines: HoldingCost["lines"]): HoldingPnlEstimate | null {
+  if (lines.length !== 1 || lines[0].currency !== "USDT" || wallets.some((p) => p.currency !== "USD" || p.marketValue == null)) return null;
+  const held = wallets.reduce((sum, p) => sum + p.quantity, 0), line = lines[0];
+  const usdt = snapshot.positions.find((p) => p.symbol === "USDT" && p.currency === "USD" && p.quantity > 0 && p.marketValue != null);
+  const rate = snapshot.usdtUsd ?? (usdt ? usdt.marketValue! / usdt.quantity : null);
+  if (held <= 0 || !rate || rate <= 0 || !Number.isFinite(rate)) return null;
+  const quantity = Math.min(held, line.quantity), coverage = quantity / held;
+  const marketValue = wallets.reduce((sum, p) => sum + p.marketValue!, 0) * coverage / rate;
+  const cost = quantity * line.averageCost, pnl = marketValue - cost;
+  if (![quantity, marketValue, cost, pnl, cost * rate, pnl * rate].every(Number.isFinite)) return null;
+  return { currency: "USDT", quantity, coverage, averageCost: line.averageCost, cost, marketValue, pnl,
+    pnlPct: cost > 0 ? pnl / cost : null, costUsd: cost * rate, pnlUsd: pnl * rate };
+}
+
+/** A coin appears once even when Binance splits it across Spot and several Earn products. */
+export function binanceHoldingRows(positions: readonly ConnectedPosition[]): ConnectedPosition[] {
+  const grouped = new Map<string, ConnectedPosition>();
+  for (const p of removeBinanceEarnReceipts(positions)) {
+    const key = JSON.stringify([p.symbol, p.currency]), existing = grouped.get(key);
+    if (!existing) grouped.set(key, { ...p, id: `coin:${p.symbol}`, name: p.symbol });
+    else {
+      existing.quantity += p.quantity;
+      existing.marketValue = existing.marketValue == null || p.marketValue == null ? null : existing.marketValue + p.marketValue;
+      existing.costBasis = existing.costBasis == null || p.costBasis == null ? null : existing.costBasis + p.costBasis;
+    }
+  }
+  return [...grouped.values()];
 }
 
 /** Query only real supported markets, prioritizing the largest current holdings. */
@@ -68,6 +115,7 @@ export function holdingCosts(snapshot: ConnectionSnapshot | null, entries: reado
     }
     if (rows.some((e) => e.status === "ignored" && e.trade?.baseAsset === symbol)) reasons.push("Ignored trades are excluded from this estimate.");
     return { symbol, heldQuantity, trackedQuantity, positionCount: wallets.length, lines, reasons,
+      pnlEstimate: estimatePnl(snapshot, wallets, lines),
       status: !lines.length ? "unavailable" : reasons.length ? "partial" : "estimate" };
   });
 }

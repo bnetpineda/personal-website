@@ -66,6 +66,8 @@ export const snapshotSchema = z.object({
   asOf: z.iso.datetime(),
   /** Provider identity binds imported trade costs to this account, including after reconnecting. */
   accountKey: z.string().min(1).max(100).optional(),
+  /** USD per USDT used for this snapshot, so trade P/L uses the same valuation rate. */
+  usdtUsd: z.number().finite().positive().optional(),
   positions: z.array(connectedPositionSchema).max(10000),
   warnings: z.array(z.string().max(300)).max(20),
 }).superRefine(({ positions }, ctx) => {

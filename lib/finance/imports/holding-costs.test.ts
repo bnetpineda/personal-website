@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ConnectedPosition, ConnectionSnapshot } from "../connections/types";
-import { heldUsdtPairs, holdingCosts } from "./holding-costs";
+import { binanceHoldingRows, heldUsdtPairs, holdingCosts } from "./holding-costs";
 import type { SpotTrade } from "./types";
 
 const position = (symbol = "BTC", quantity = 1, id = `spot:${symbol}`): ConnectedPosition => ({
@@ -85,4 +85,52 @@ test("market discovery deduplicates wallets, requires listed pairs, preserves LD
   const selected = heldUsdtPairs(positions, positions.map((p) => `${p.symbol}USDT`));
   expect(selected.pairs).toHaveLength(20);
   expect(selected.skipped).toHaveLength(5);
+});
+
+describe("estimated holding P/L", () => {
+  test("uses the actual USDT/USD valuation rate and compares purchase cost in the same currency", () => {
+    const [cost] = holdingCosts({ ...snapshot([{ ...position(), marketValue: 198 }]), usdtUsd: 0.99 }, [entry(1)], [job]);
+    expect(cost.pnlEstimate).toMatchObject({ currency: "USDT", quantity: 1, coverage: 1, averageCost: 101, cost: 101, marketValue: 200, pnl: 99 });
+    expect(cost.pnlEstimate!.pnlUsd).toBeCloseTo(98.01);
+    expect(cost.pnlEstimate!.costUsd).toBeCloseTo(99.99);
+    expect(cost.pnlEstimate!.pnlPct).toBeCloseTo(99 / 101);
+  });
+  test("reduces cost proportionally when historical lots exceed the current balance", () => {
+    const [cost] = holdingCosts({ ...snapshot(), usdtUsd: 1 }, [entry(1, { quantity: 2, quoteQuantity: 200, commission: 2 })], [job]);
+    expect(cost.lines[0].cost).toBe(202);
+    expect(cost.status).toBe("partial");
+    expect(cost.pnlEstimate).toMatchObject({ quantity: 1, coverage: 1, cost: 101, marketValue: 200, pnl: 99 });
+  });
+  test("extra units with unknown cost do not turn into fabricated profit", () => {
+    const [cost] = holdingCosts({ ...snapshot([{ ...position("BTC", 5), marketValue: 1000 }]), usdtUsd: 1 },
+      [entry(1, { quantity: 2, quoteQuantity: 200, commission: 2 })], [job]);
+    expect(cost.pnlEstimate).toMatchObject({ quantity: 2, coverage: 0.4, cost: 202, marketValue: 400, pnl: 198 });
+    expect(cost.heldQuantity).toBe(5);
+  });
+  test("legacy snapshots recover only their own USDT rate, never assume a dollar peg", () => {
+    const s = snapshot([position(), { ...position("USDT", 10), marketValue: 9.7 }]);
+    const [cost] = holdingCosts(s, [entry(1)], [job]);
+    expect(cost.pnlEstimate!.costUsd).toBeCloseTo(97.97);
+    expect(cost.pnlEstimate!.pnlUsd).toBeCloseTo(102.03);
+    expect(holdingCosts(snapshot(), [entry(1)], [job])[0].pnlEstimate).toBeNull();
+  });
+  test("missing prices, unsupported quotes and unknown accounts stay unavailable; a zero price is a loss", () => {
+    const s = { ...snapshot(), usdtUsd: 1 };
+    expect(holdingCosts({ ...s, positions: [{ ...position(), marketValue: null }] }, [entry(1)], [job])[0].pnlEstimate).toBeNull();
+    expect(holdingCosts(s, [entry(1, { quoteAsset: "BTC" })], [job])[0].pnlEstimate).toBeNull();
+    expect(holdingCosts({ ...s, accountKey: undefined }, [entry(1)], [job])[0].pnlEstimate).toBeNull();
+    expect(holdingCosts({ ...s, positions: [{ ...position(), marketValue: 0 }] }, [entry(1)], [job])[0].pnlEstimate!.pnl).toBe(-101);
+  });
+  test("combines wallets once, preserving value and unknown prices", () => {
+    const positions = [{ ...position("BTC", 0.25), marketValue: 50 }, { ...position("BTC", 0.75, "flexible:BTC"), marketValue: 150 }];
+    const original = JSON.stringify(positions);
+    const combined = binanceHoldingRows(positions);
+    expect(combined).toHaveLength(1);
+    expect(combined[0]).toMatchObject({ quantity: 1, marketValue: 200, costBasis: null });
+    expect(JSON.stringify(positions)).toBe(original);
+    const costs = holdingCosts({ ...snapshot(positions), usdtUsd: 1 }, [entry(1)], [job]);
+    expect(costs).toHaveLength(1);
+    expect(costs[0].pnlEstimate!.pnlUsd).toBe(99);
+    expect(binanceHoldingRows([positions[0], { ...positions[1], marketValue: null }])[0].marketValue).toBeNull();
+  });
 });

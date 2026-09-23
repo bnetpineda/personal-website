@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getInvestmentHistory } from "@/lib/finance/imports/dal";
 import { utcYesterday } from "@/lib/finance/imports/history-service";
 import { FinanceLinks } from "../../_components/finance-links";
-import { ConfigureHistoryButton, ContinueHistoryButton, HistoryToggle, ImportInvestmentButton } from "../../_components/history-controls";
+import { ConfigureHistoryButton, ContinueHistoryButton, HistoryToggle, ImportHoldingCostsButton, ImportInvestmentButton } from "../../_components/history-controls";
 import { NativeAmount } from "../../_components/import-controls";
 import { EmptyState, PageHeader } from "../../_components/ui";
 
@@ -20,6 +20,7 @@ export default async function InvestmentHistoryPage({ searchParams }: { searchPa
     <FinanceLinks current="history" />
     <p className="mb-6 text-sm text-muted-foreground">Load older activity once and keep collecting new records. A completed import means the provider returned everything available for that stream; it does not prove that every product, trading pair or date is covered.</p>
     <Card className="mb-6"><CardHeader><CardTitle>Binance import progress</CardTitle><CardDescription>Spot starts at the earliest available trade for each configured pair. Earn and completed crypto transfers use your selected dates. Daily sync continues saved progress after deployment.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5">
+      <ImportHoldingCostsButton disabled={false} />
       {!data.jobs.length ? <p className="text-sm text-muted-foreground">Connect Binance, then choose Binance history above. Include pairs you sold out of.</p> : <>
         <ContinueHistoryButton jobs={data.jobs.map(({ id, scope, enabled }) => ({ id, scope, enabled }))} />
         {data.jobs.map((job) => <div key={job.id} className="flex flex-wrap items-center justify-between gap-3"><div>

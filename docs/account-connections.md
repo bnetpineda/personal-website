@@ -246,21 +246,33 @@ in other pairs are outside it. It does not alter current holdings or reported IB
 Provider retention, delisted markets, missing pairs and unsupported products can leave gaps; a stream
 marked Caught up means the API returned its available records, not certified lifetime completeness.
 
-On **Holdings → Binance → Import Spot costs**, the app discovers up to 20 currently listed USDT
+On **Investment history → Import Spot costs**, the app discovers up to 20 currently listed USDT
 markets for held coins, starting with the largest balances. It imports each market from its earliest
 available fill and saves the cursor for daily updates. Add any other traded pairs in Investment
 history, including delisted or already-sold assets where supported. Public `exchangeInfo` requests
 carry only the symbol, without signed-request parameters that Binance rejects on that endpoint.
 
-Each coin's **Details** sheet shows remaining FIFO trade cost, average remaining unit cost and
+Selecting a coin on Holdings shows its estimated P/L, average remaining purchase cost and
 the quantity represented by those lots. Costs stay in their actual quote asset (USDT is not USD).
 One report covers the coin across Spot and Simple Earn, with no duplicate cost assignment between
 wallets. Snapshots retain the Binance UID so costs never borrow records from an earlier connection.
 Missing/mismatched units, rewards/transfers, unmatched sells, other pairs, external-coin fees,
-ignored fills, unfinished imports and stale trade history are explicit gaps. A matching quantity
-alone is not proof of a complete acquisition history. These are trade-only estimates; they do not
-populate the provider's full `costBasis`, portfolio cost totals or unrealized P/L. Original records
-for acquisitions outside Spot are still required for a complete basis.
+ignored fills, unfinished imports and stale trade history remain recorded as gaps. A matching
+quantity alone is not proof of a complete acquisition history. The Holdings page displays an
+explicit **estimated P/L** for a coin with one supported USDT cost pool. Its average remaining
+purchase cost is applied to the lesser of the current balance and recorded remaining units.
+This proportionally reduces cost after movements out of the account and excludes unmatched
+extra units from profit. It does not establish which lots were transferred, and does not invent
+zero-cost acquisitions. Snapshot USDT/USD rates (or the same snapshot's USDT balance valuation
+for legacy snapshots) convert that quote-currency P/L, then current FX presents it in PHP.
+
+Holdings' estimated P/L and tracked cost summaries include these estimates for accounts included
+in totals, even when small rows are hidden. Provider-reported `costBasis` remains unchanged;
+these estimates do not rewrite the source ledger or replace the overview's reported-cost figures.
+**Refresh** updates balances, manual prices and one batch of each enabled configured Spot stream;
+paused streams stay paused, and larger backlogs continue from Investment history or daily sync.
+Spot and Earn wallets are grouped into one row per coin. Setup, import controls and provider
+warnings live on Connections and Investment history instead of the primary holdings table.
 
 References: [Binance account trade list](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/account#my-trades),
 [Binance Earn history](https://developers.binance.com/en/docs/catalog/investment-and-services-simple-earn/api/rest-api/flexible-locked#get-flexible-rewards-history),

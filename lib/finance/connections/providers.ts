@@ -88,7 +88,7 @@ async function binance(credentials: Extract<Credentials, { provider: "binance" }
     return { id: p.id, name: `${p.asset} · ${p.wallet}`, symbol: p.asset, assetClass: "crypto", currency: "USD",
       quantity: p.quantity, marketValue: usdt > 0 ? p.quantity * usdt * usdtUsd : null, costBasis: null };
   }));
-  return snapshotSchema.parse({ asOf: new Date().toISOString(), accountKey: `uid:${uid}`, positions, warnings: [
+  return snapshotSchema.parse({ asOf: new Date().toISOString(), accountKey: `uid:${uid}`, usdtUsd, positions, warnings: [
     "Spot and Simple Earn only. Funding, Margin, Futures, staking services and other Earn products are not included.",
     "USD values use Binance USDT market prices and a USDT/USD quote. Spot trade cost estimates are available on Holdings after importing history.",
     ...(positions.some((p) => p.marketValue == null) ? [BINANCE_MISSING_PRICE_WARNING] : []),

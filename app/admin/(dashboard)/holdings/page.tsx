@@ -10,18 +10,17 @@ import { Swatch } from "@/components/ui/swatch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { countArchivedHoldings, getConnections, getFx, getHoldings } from "@/lib/dal";
 import type { Holding } from "@/lib/db/schema";
-import { computeNetWorth, holdingMetrics, isSmallHolding } from "@/lib/finance/calc";
-import { ASSET_CLASSES, ASSET_CLASS_META, PRICE_SOURCE_LABELS, STALE_PRICE_MS, type AssetClass } from "@/lib/finance/constants";
+import { computeNetWorth, fxToPhp, holdingMetrics, isSmallHolding } from "@/lib/finance/calc";
+import { ASSET_CLASSES, ASSET_CLASS_META, STALE_PRICE_MS, type AssetClass } from "@/lib/finance/constants";
 import { includedPositions } from "@/lib/finance/connections/types";
 import { getBinanceHoldingCosts } from "@/lib/finance/imports/dal";
-import { dayLabel, timeAgo, todayManila } from "@/lib/finance/dates";
+import { binanceHoldingRows } from "@/lib/finance/imports/holding-costs";
+import { dayLabel, todayManila } from "@/lib/finance/dates";
 import { formatPct, formatPrice, formatQty } from "@/lib/finance/format";
 import { deleteHolding, setHoldingArchived } from "../../_actions/holdings";
 import { FormSheet } from "../../_components/form";
 import { AdjustForm, BulkPriceForm, HoldingForm, type HoldingDTO } from "../../_components/holding-forms";
-import { RefreshPricesButton } from "../../_components/refresh-prices-button";
-import { ConnectedValuationNotice } from "../../_components/connected-accounts";
-import { SyncConnectionsButton } from "../../_components/connection-controls";
+import { RefreshHoldingsButton } from "../../_components/refresh-holdings-button";
 import { SyncedHoldings } from "../../_components/synced-holdings";
 import { EditableRow, EditableTableRow, type RowActionsProps } from "../../_components/row-actions";
 import { EmptyState, Money, PageHeader, Pct, StatCards } from "../../_components/ui";
@@ -62,11 +61,18 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const activeConnections = showArchived ? [] : connections;
   const binanceCosts = showArchived ? [] : await getBinanceHoldingCosts(connections.find((c) => c.provider === "binance")?.snapshot ?? null);
   // Visibility is independent of net-worth inclusion; pausing sync keeps the last positions visible.
-  const allSyncedPositions = activeConnections.flatMap((connection) => connection.snapshot?.positions ?? []);
+  const allSyncedPositions = activeConnections.flatMap((connection) => connection.provider === "binance"
+    ? binanceHoldingRows(connection.snapshot?.positions ?? []) : connection.snapshot?.positions ?? []);
   const syncedPositions = allSyncedPositions.filter((position) => showSmall || !isSmallHolding(position.marketValue, position.currency, fx));
   const nw = computeNetWorth(rows, [], fx, includedPositions(activeConnections));
 
   const allItems = rows.map((h) => ({ h, m: holdingMetrics(h, fx) }));
+  const usdRate = fxToPhp(fx, "USD");
+  const estimates = activeConnections.some((c) => c.provider === "binance" && c.includeInNetWorth) ? binanceCosts.flatMap((c) => c.pnlEstimate ? [c.pnlEstimate] : []) : [];
+  const estimatedCostPhp = usdRate == null ? 0 : estimates.reduce((sum, e) => sum + e.costUsd * usdRate, 0);
+  const pnlPhp = nw.unrealizedPhp + (usdRate == null ? 0 : estimates.reduce((sum, e) => sum + e.pnlUsd * usdRate, 0));
+  const nonCashCost = allItems.filter(({ h }) => h.assetClass !== "cash").reduce((sum, { m }) => sum + Math.abs(m.costPhp ?? 0), 0) +
+    includedPositions(activeConnections).filter((p) => p.assetClass !== "cash" && p.costBasis != null).reduce((sum, p) => sum + Math.abs(p.costBasis! * (fxToPhp(fx, p.currency) ?? 0)), 0) + estimatedCostPhp;
   const items = allItems.filter(({ h, m }) => showSmall || !isSmallHolding(m.value, h.currency, fx));
   const smallCount = allItems.filter(({ h, m }) => isSmallHolding(m.value, h.currency, fx)).length +
     allSyncedPositions.filter((position) => isSmallHolding(position.marketValue, position.currency, fx)).length;
@@ -122,19 +128,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader eyebrow="Portfolio" title={showArchived ? "Archived" : "Holdings"}>
-        {!showArchived && <SyncConnectionsButton disabled={!connections.some((connection) => connection.enabled)} />}
-        <RefreshPricesButton />
-        <FormSheet
-          title="Manual prices"
-          description="PSE stocks, UITFs, property — anything without an automatic quote."
-          trigger={
-            <Button variant="outline">
-              <Tags /> Manual prices
-            </Button>
-          }
-        >
-          <BulkPriceForm holdings={manual} />
-        </FormSheet>
+        {!showArchived && <RefreshHoldingsButton hasConnections={connections.some((connection) => connection.enabled)} />}
         <FormSheet
           title="Add holding"
           description="Crypto is priced by CoinGecko, US stocks/ETFs by Finnhub; everything else is manual."
@@ -148,17 +142,12 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
         </FormSheet>
       </PageHeader>
 
-      {!showArchived && <p className="mb-6 max-w-3xl text-sm text-muted-foreground">
-        Connected balances and manual investments appear together here. Sync accounts updates connected holdings;
-        Refresh prices updates manual holdings. <Link href="/admin/connections" className="underline underline-offset-4">Manage connections</Link>.
-      </p>}
-
       {!showArchived && (
         <StatCards
           items={[
-            { label: "Market value", value: <Money value={nw.assetsPhp} />, primary: true, hint: "Manual + included accounts" },
-            { label: nw.missingCostBasis.length ? "Known cost basis" : "Cost basis", value: <Money value={nw.investedPhp} /> },
-            { label: "Unrealized P/L", value: <Money value={nw.unrealizedPhp} signed tone />, hint: nw.missingCostBasis.length ? "Positions with known cost only" : <Pct value={nw.unrealizedPct} tone /> },
+            { label: "Portfolio value", value: <Money value={nw.assetsPhp} />, primary: true },
+            { label: "Cost tracked", value: <Money value={nw.investedPhp + estimatedCostPhp} />, hint: "Cash + recorded purchases" },
+            { label: "Estimated P/L", value: <Money value={pnlPhp} signed tone />, hint: <span className="group-data-[private=true]/shell:blur-sm"><Pct value={nonCashCost > 0 ? pnlPhp / nonCashCost : null} tone /></span> },
           ]}
         />
       )}
@@ -171,14 +160,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
         </Alert>
       )}
 
-      {!showArchived && <ConnectedValuationNotice missingPrices={nw.missingPrices} missingCostBasis={nw.missingCostBasis} />}
-      {overlaps.length > 0 && <Alert variant="warning" className="mb-6">
-        <AlertTitle>Review overlapping manual holdings</AlertTitle>
-        <AlertDescription>
-          {overlaps.map((holding) => holding.name).join(", ")} also appear in connected accounts included in totals.
-          If these are the same assets, archive their <Link href="/admin/holdings?small=1#manual-holdings" className="underline">manual entries below</Link> to avoid counting them twice.
-        </AlertDescription>
-      </Alert>}
+      {!showArchived && nw.missingPrices.length > 0 && <p className="mb-4 text-sm text-warning">{nw.missingPrices.length} holdings need a price before they can be included in totals.</p>}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Filter by asset class" className="flex flex-wrap gap-2">
@@ -197,17 +179,16 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           {!showArchived && <Button asChild size="sm" variant={showSmall ? "default" : "outline"}>
             <Link href={filterHref(filter, !showSmall)}>{showSmall ? "Hide small balances" : "Show small balances"}</Link>
           </Button>}
-          <Button asChild size="sm" variant="ghost">
+          {(showArchived || archivedCount > 0) && <Button asChild size="sm" variant="ghost">
             <Link href={showArchived ? "/admin/holdings" : "/admin/holdings?archived=1"}>
               {showArchived ? "← Active holdings" : `Archived · ${archivedCount}`}
             </Link>
-          </Button>
+          </Button>}
         </div>
       </div>
 
-      {!showArchived && <p role="status" className="mb-4 text-sm text-muted-foreground">
-        {showSmall ? "Showing all balances." : `${smallCount} balances under US$1 hidden.`} Totals include small balances.
-        {allSyncedPositions.some((position) => position.marketValue == null) && " Positions without a price stay visible."}
+      {!showArchived && <p role="status" className="mb-4 text-xs text-muted-foreground">
+        {showSmall ? "All balances shown." : `${smallCount} balances under US$1 hidden.`} Totals include them.
       </p>}
 
       {activeConnections.length > 0 && <SyncedHoldings connections={activeConnections} fx={fx} filter={filter} now={now} showSmall={showSmall} binanceCosts={binanceCosts} />}
@@ -219,7 +200,10 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       )}
       {visible.length > 0 && (
         <section id="manual-holdings" aria-label="Manual holdings">
-        {!showArchived && <h2 className="mb-4 font-display text-lg uppercase">Manual holdings · {visible.length}</h2>}
+        {!showArchived && <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="font-display text-lg uppercase">Manual holdings</h2>
+          {manual.length > 0 && <FormSheet title="Manual prices" description="Update investments without an automatic quote." trigger={<Button variant="ghost" size="sm"><Tags />Update prices</Button>}><BulkPriceForm holdings={manual} /></FormSheet>}
+        </div>}
+        {overlaps.length > 0 && <p className="mb-3 text-xs text-warning">Possible duplicate: {overlaps.map((h) => h.name).join(", ")} also appears in a synced account. Archive the manual entry if it represents the same holding.</p>}
         {/* Phones: one card per holding (the 8-column table needs sideways scrolling there). */}
         <Card className="gap-0 py-2 md:hidden">
           <ItemGroup>
@@ -267,13 +251,11 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Holding</TableHead>
+                <TableHead>Asset</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
-                <TableHead className="text-right">Avg cost</TableHead>
-                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Avg. buy</TableHead>
                 <TableHead className="text-right">Value</TableHead>
                 <TableHead className="text-right">P/L</TableHead>
-                <TableHead className="text-right">Weight</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -299,29 +281,11 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
                       </span>
                     }
                   >
-                    <TableCell className="text-right font-mono">{cash ? "—" : formatQty(h.quantity)}</TableCell>
-                    <TableCell className="text-right font-mono">{cash ? "—" : formatPrice(h.avgCost, h.currency)}</TableCell>
-                    <TableCell className="text-right">
-                      {cash ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : h.lastPrice == null ? (
-                        <span className="text-muted-foreground">at cost</span>
-                      ) : (
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="font-mono">{formatPrice(h.lastPrice, h.currency)}</span>
-                          <span className="flex items-center gap-1">
-                            <Badge variant={isStale(h) ? "warning" : "outline"}>{PRICE_SOURCE_LABELS[h.priceSource]}</Badge>
-                            {h.priceUpdatedAt && <span className="font-mono text-xs text-muted-foreground">{timeAgo(h.priceUpdatedAt, now)}</span>}
-                          </span>
-                        </div>
-                      )}
-                    </TableCell>
+                    <TableCell className="text-right font-mono"><span className="group-data-[private=true]/shell:blur-sm">{cash ? "—" : formatQty(h.quantity)}</span></TableCell>
+                    <TableCell className="text-right font-mono"><span className="group-data-[private=true]/shell:blur-sm">{cash ? "—" : formatPrice(h.avgCost, h.currency)}</span></TableCell>
                     <TableCell className="text-right font-mono">
                       <div className="flex flex-col items-end">
-                        <Money value={m.value} currency={h.currency} />
-                        {h.currency !== "PHP" && (
-                          <span className="text-xs text-muted-foreground">{m.valuePhp != null ? <Money value={m.valuePhp} /> : "no FX rate"}</span>
-                        )}
+                        <Money value={m.valuePhp ?? m.value} currency={m.valuePhp == null ? h.currency : "PHP"} />
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono">
@@ -330,14 +294,11 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
                       ) : (
                         <div className="flex flex-col items-end">
                           <Money value={m.pnlPhp ?? m.pnl} currency={m.pnlPhp != null ? "PHP" : h.currency} signed tone />
-                          <span className="text-xs">
+                          <span className="text-xs group-data-[private=true]/shell:blur-sm">
                             <Pct value={m.pnlPct} tone />
                           </span>
                         </div>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {m.valuePhp != null && nw.assetsPhp > 0 ? formatPct(m.valuePhp / nw.assetsPhp) : "—"}
                     </TableCell>
                   </EditableTableRow>
                 );

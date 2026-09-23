@@ -50,6 +50,16 @@ export function Pct({ value, tone = false }: { value: number | null; tone?: bool
   );
 }
 
+/** Compact quote-asset prices without treating USDT as US dollars. */
+export function TokenAmount({ value, currency, signed = false, tone = false }: {
+  value: number; currency: string; signed?: boolean; tone?: boolean;
+}) {
+  return <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm", tone && value > 0 && "text-success", tone && value < 0 && "text-destructive")}>
+    {value.toLocaleString("en-US", { signDisplay: signed ? "exceptZero" : "auto", ...(value !== 0 && Math.abs(value) < 1
+      ? { minimumSignificantDigits: 2, maximumSignificantDigits: 4 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })} {currency}
+  </span>;
+}
+
 export function PageHeader({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">

@@ -74,6 +74,7 @@ describe("account API workflows", () => {
     });
     expect(snapshot.positions).toHaveLength(4);
     expect(snapshot.accountKey).toBe("uid:123");
+    expect(snapshot.usdtUsd).toBe(0.99);
     expect(snapshot.positions.some((p) => p.symbol === "LDUSDT")).toBe(false);
     expect(snapshot.warnings.some((warning) => warning.includes("no supported price pair"))).toBe(false);
     expect(snapshot.positions[0].marketValue).toBe(14.85);
