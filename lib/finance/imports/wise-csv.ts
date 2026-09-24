@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ImportError, uniqueEntries, type ImportEntry } from "./types";
+import { wiseKind, wiseRows } from "./wise-activity";
 
 /** RFC 4180, including escaped quotes, CRLF and embedded newlines. No spreadsheet evaluation. */
 export function parseCsv(text: string): string[][] {
@@ -74,19 +75,12 @@ export function parseWiseStatement(text: string, feeMode: FeeMode): { entries: I
     }
     if (amount === 0) continue;
     const rawFee = get("total fees");
-    const fee = rawFee ? Math.abs(statementDecimal(rawFee)) : 0;
-    const description = get("description").replace(/\s+/g, " ").slice(0, 200) || "Wise transaction";
-    // Currency + direction distinguishes both sides of a conversion without relying on row order.
-    const externalId = `${row[idCol]}:${currency}:${amount < 0 ? "out" : "in"}`;
-    const base = { provider: "wise" as const, accountKey: "personal", externalId, currency,
-      occurredOn, description, realizedPnl: null };
-    const kind = /^(?:FEE|CHARGE)[-_]/i.test(row[idCol]) ? "fee" :
-      /^(?:BALANCE|CONVERSION|TRANSFER)[-_]/i.test(row[idCol]) ? "transfer" : "payment";
+    const fee = feeMode === "included" && rawFee ? Math.abs(statementDecimal(rawFee)) : 0;
+    const description = get("description");
+    // Newer exports name the activity type. Older ones fall back to the ID prefix and description.
+    const kind = wiseKind(row[idCol], amount, get("transaction details type"), description);
     // User chooses the export's fee convention. Separate accounting rows must not be added twice.
-    const principal = feeMode === "included" && fee > 0 && kind !== "fee" ? amount + fee : amount;
-    if (amount < 0 && principal > 0) throw new ImportError("Fees exceed a debit. Check the selected fee format.");
-    if (principal !== 0) entries.push({ ...base, amount: principal, kind });
-    if (feeMode === "included" && fee > 0 && kind !== "fee") entries.push({ ...base, externalId: `${externalId}:fee`, amount: -fee, kind: "fee", description: `Wise fee · ${description}`.slice(0, 200) });
+    entries.push(...wiseRows({ id: row[idCol], currency, occurredOn, amount, fee, kind, description }));
   }
   const balances: WiseClosingBalance[] = [];
   let balanceWarning: string | undefined;

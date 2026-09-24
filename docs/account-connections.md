@@ -115,6 +115,11 @@ STANDARD and SAVINGS balances using the documented `2026Q3` API, values each bal
 `totalWorth` once, and leaves invested balances' cost basis unknown. Access remains subject
 to Wise's account and regional restrictions. No browser login automation is used.
 
+Transaction history cannot be synced for personal accounts. Wise documents statement access for
+personal tokens only for accounts based in the US, Canada, Australia, New Zealand, Singapore or
+Malaysia, and has since stopped accepting signed (SCA) requests from personal accounts entirely, so
+statements cannot be read through the API. Import the balance statement CSV instead.
+
 References: [token eligibility](https://docs.wise.com/guides/developer/auth-and-security/personal-api-token),
 [profile lookup](https://docs.wise.com/api-reference/profile/profilelist),
 [balance endpoint](https://docs.wise.com/api-reference/balance/balancelist).
@@ -126,6 +131,12 @@ Required columns are TransferWise ID (or Wise ID / Transaction ID / ID), Date, A
 and Description. Comma/semicolon delimiters, UTF-8 BOMs, quoted fields and embedded newlines are
 accepted. Dates use DD-MM-YYYY, DD/MM/YYYY or ISO; amounts use decimal points. Limits: 750 KB,
 2,000 source rows. Download instructions: [Wise statements](https://wise.com/help/articles/2736049/how-do-i-download-a-statement).
+
+Rows are classified by Wise's **Transaction Details Type** column when the export has it, else by ID
+prefix and description. Money received from someone else (`DEPOSIT`, incoming `TRANSFER`, or a
+"Received money from …" description) is a **payment**, so rules and AI can post it as income such as
+Salary or Freelance. Conversions, cross-balance moves, top-ups (`MONEY_ADDED`) and outgoing transfers
+stay transfers; `ACCRUAL_CHARGE` and `FEE-` rows are fees; balance interest is interest.
 
 Choose the export's fee convention before previewing. For amounts including **Total fees**, the
 import splits each gross principal and fee while preserving the original signed total. For
