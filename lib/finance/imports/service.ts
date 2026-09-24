@@ -50,7 +50,7 @@ export async function ingestEntries(input: ImportEntry[], lease?: { provider: st
 export async function postImportedEntry(id: string, categoryId: number, allowDuplicate = false, extraGuard: SQL = sql`true`) {
   const db = getDb();
   const [entry] = await db.select().from(importedEntries).where(eq(importedEntries.id, id));
-  if (!entry || entry.status !== "pending") throw new ImportError("This entry was already reviewed. Refresh the inbox.");
+  if (!entry || entry.status !== "pending") throw new ImportError("This entry was already categorized. Refresh the page.");
   if (!canPost(entry)) throw new ImportError("Keep trades and crypto units in the earnings ledger. They cannot be posted as a cash expense or income.");
   let rate: number | null = null;
   try { rate = fxToPhp(await ensureFx([entry.currency]), entry.currency); } catch { /* A missing rate blocks posting. */ }

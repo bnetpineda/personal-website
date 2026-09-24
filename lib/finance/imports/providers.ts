@@ -8,7 +8,7 @@ import { identifier, parseCapitalPage, parseIbkrHistory, parseRewardsPage } from
 /** Rolling overlap repairs missed days and deduplicates by provider identity, not import time. */
 export async function fetchHistory(credentials: Credentials, io: ProviderIO = defaultIO, now = new Date(), range?: { from: string; to: string }, expectedAccount?: string): Promise<HistoryImport> {
   const signal = AbortSignal.timeout(45_000);
-  if (credentials.provider === "wise") throw new ImportError("Import a Wise balance statement CSV from the inbox.");
+  if (credentials.provider === "wise") throw new ImportError("Import a Wise balance statement CSV from Connections.");
   if (credentials.provider === "ibkr") {
     if (!credentials.historyQueryId) throw new ImportError("Add a history Flex Query ID to import IBKR transactions and earnings.");
     return parseIbkrHistory(await fetchFlexReport(credentials, signal, io, credentials.historyQueryId));

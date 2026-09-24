@@ -8,7 +8,7 @@ export function buildNotifications(input: {
   budgets: { id: number; name: string; budget: number; spent: number }[];
   bills: { id: string; description: string; nextOn: string | null }[];
   debts: { id: string; name: string; dueDay: number | null; lastPaidOn: string | null }[];
-  /** Pending entries AI has not reached after a day, while AI is configured. Background runs fail quietly. */
+  /** Imported entries still uncategorized after a day, while AI is configured. Background runs fail quietly. */
   aiBacklog?: { waiting: number; oldest: string } | null;
 }, now = new Date()): FinanceNotification[] {
   const today = todayManila(now), month = today.slice(0, 7);
@@ -38,7 +38,7 @@ export function buildNotifications(input: {
       title: `${d.name} payment is coming up`, detail: `The saved due day falls on ${due.date}. Check the lender's statement for the amount due.`, href: "/admin/debts", severity: "warning" });
   }
   if (input.aiBacklog && input.aiBacklog.waiting > 0) alerts.push({ key: `ai:${input.aiBacklog.oldest}`, title: "AI categorization is not keeping up",
-    detail: `${input.aiBacklog.waiting} imported ${input.aiBacklog.waiting === 1 ? "entry has" : "entries have"} waited over a day. Check the AI Gateway key and credits, then run Categorize with AI.`,
-    href: "/admin/inbox", severity: "warning" });
+    detail: `${input.aiBacklog.waiting} imported ${input.aiBacklog.waiting === 1 ? "entry has" : "entries have"} waited over a day. Check the AI Gateway key and credits, then sync again.`,
+    href: "/admin/connections", severity: "warning" });
   return alerts;
 }

@@ -43,6 +43,15 @@ function date(value: string): string {
 }
 
 export type FeeMode = "included" | "separate";
+const ID_COLUMNS = ["transferwise id", "wise id", "transaction id", "id"];
+
+/** Accounting exports give fees their own FEE- rows; standard statements fold them into Amount. */
+export function detectFeeMode(text: string): FeeMode {
+  const [header, ...rows] = parseCsv(text);
+  const names = (header ?? []).map((h) => h.toLowerCase().trim());
+  const idCol = ID_COLUMNS.map((name) => names.indexOf(name)).find((i) => i >= 0) ?? -1;
+  return idCol >= 0 && rows.some((row) => /^FEE[-_]/i.test(row[idCol] ?? "")) ? "separate" : "included";
+}
 export function parseWiseCsv(text: string, feeMode: FeeMode): ImportEntry[] {
   return parseWiseStatement(text, feeMode).entries;
 }
@@ -54,7 +63,7 @@ export function parseWiseStatement(text: string, feeMode: FeeMode): { entries: I
   const names = header.map((h) => h.toLowerCase().trim());
   if (new Set(names).size !== names.length) throw new ImportError("The CSV has duplicate column headings.");
   const column = (name: string) => names.indexOf(name);
-  const idCol = ["transferwise id", "wise id", "transaction id", "id"].map(column).find((i) => i >= 0) ?? -1;
+  const idCol = ID_COLUMNS.map(column).find((i) => i >= 0) ?? -1;
   if (idCol < 0 || ["date", "amount", "currency", "description"].some((n) => column(n) < 0)) {
     throw new ImportError("Upload a Wise balance statement with ID, Date, Amount, Currency and Description columns, not a transfer-list export.");
   }
@@ -103,4 +112,28 @@ export function parseWiseStatement(text: string, feeMode: FeeMode): { entries: I
   }
   return { entries: uniqueEntries(entries), balances: balanceWarning ? [] : balances,
     balanceWarning: balanceWarning ?? (balanceColumn == null ? "No Running Balance column was found. Only transactions will be imported." : undefined) };
+}
+
+export type WiseStatement = ReturnType<typeof parseWiseStatement>;
+
+/**
+ * Wise downloads one statement per currency, so several files import together. Entries are
+ * deduplicated across files (a conversion appears in both currencies' statements, one leg each).
+ * The latest closing balance per currency wins; two files disagreeing on the same date apply neither.
+ */
+export function mergeWiseStatements(statements: (WiseStatement & { name: string })[]): WiseStatement {
+  const label = (name: string, text: string) => statements.length > 1 ? `${name}: ${text}` : text;
+  const warnings = statements.flatMap((s) => s.balanceWarning ? [label(s.name, s.balanceWarning)] : []);
+  const latest = new Map<string, WiseClosingBalance>(), conflicts = new Set<string>();
+  for (const balance of statements.flatMap((s) => s.balances)) {
+    const seen = latest.get(balance.currency);
+    if (!seen || balance.asOf > seen.asOf) latest.set(balance.currency, balance);
+    else if (balance.asOf === seen.asOf && balance.amount !== seen.amount) conflicts.add(`${balance.currency}:${balance.asOf}`);
+  }
+  const balances = [...latest.values()].filter((b) => {
+    if (!conflicts.has(`${b.currency}:${b.asOf}`)) return true;
+    warnings.push(`Two statements show different ${b.currency} balances on ${b.asOf}; that balance will not be applied.`);
+    return false;
+  }).sort((a, b) => a.currency.localeCompare(b.currency));
+  return { entries: uniqueEntries(statements.flatMap((s) => s.entries)), balances, balanceWarning: warnings.length ? warnings.join(" ") : undefined };
 }

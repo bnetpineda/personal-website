@@ -25,6 +25,6 @@ test("a stalled AI backlog alerts once per episode", () => {
   const base = { connections: [], budgets: [], bills: [], debts: [] };
   expect(buildNotifications({ ...base, aiBacklog: null }, now)).toEqual([]);
   const [alert] = buildNotifications({ ...base, aiBacklog: { waiting: 3, oldest: "2026-09-20" } }, now);
-  expect(alert).toMatchObject({ key: "ai:2026-09-20", href: "/admin/inbox", severity: "warning" });
+  expect(alert).toMatchObject({ key: "ai:2026-09-20", href: "/admin/connections", severity: "warning" });
   expect(alert.detail).toStartWith("3 imported entries have");
 });

@@ -25,6 +25,27 @@ export async function previewWiseBalances(balances: WiseClosingBalance[]): Promi
   });
 }
 
+/**
+ * For unattended imports: a closing balance is applied only where the target is certain. Wise must
+ * not already count through the API, one Wise holding (or none yet) must match the currency, and no
+ * different balance may be saved for that date. Anything else imports transactions only.
+ */
+export async function autoBalanceTargets(balances: WiseClosingBalance[]) {
+  const data = new FormData(), chosen: WiseClosingBalance[] = [], skipped: string[] = [];
+  if (!balances.length) return { data, balances: chosen, skipped, apiCounted: false };
+  const [connection] = await getDb().select({ included: accountConnections.includeInNetWorth }).from(accountConnections).where(eq(accountConnections.provider, "wise"));
+  if (connection?.included) return { data, balances: chosen, skipped, apiCounted: true };
+  data.set("updateBalances", "on");
+  for (const balance of await previewWiseBalances(balances)) {
+    const existing = balance.choices.find((h) => h.id === balance.selected);
+    if (!balance.selected || (existing?.asOf === balance.asOf && existing.amount !== balance.amount)) { skipped.push(balance.currency); continue; }
+    data.set(`holding:${balance.currency}`, balance.selected);
+    if (existing) data.set(`version:${balance.currency}`, existing.updatedAt);
+    chosen.push({ currency: balance.currency, amount: balance.amount, asOf: balance.asOf });
+  }
+  return { data, balances: chosen, skipped, apiCounted: false };
+}
+
 export interface WiseBalanceWrite extends WiseClosingBalance { id: string; version: string | null }
 export function wiseBalanceQuery(plans: WiseBalanceWrite[]) {
   const payload = plans.map((p) => ({ id: p.id, currency: p.currency, amount: p.amount, as_of: p.asOf, version: p.version }));

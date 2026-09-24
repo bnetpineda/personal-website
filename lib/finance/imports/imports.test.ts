@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CategoryRule, ImportedEntry } from "@/lib/db/schema";
 import { parseIbkrHistory, parseRewardsPage, parseCapitalPage } from "./provider-parsers";
 import { canPost, earningsByCurrency, matchingRule, transferEligible, transferSuggestions } from "./review";
-import { parseCsv, parseWiseCsv } from "./wise-csv";
+import { detectFeeMode, mergeWiseStatements, parseCsv, parseWiseCsv, parseWiseStatement } from "./wise-csv";
 import { uniqueEntries, type ImportEntry } from "./types";
 
 const header = '"TransferWise ID",Date,Amount,Currency,Description,Total fees';
@@ -43,6 +43,35 @@ describe("Wise statement parsing", () => {
       `${header}\nCARD-1,2026-09-20,NaN,USD,Shop,0`, `${header}\nCARD-1,2026-09-20,-15,USD,Shop`,
       `Date,Amount,Currency,Description\n2026-09-20,12,USD,Shop`, `${header}\nCARD-1,2026-09-20,-15,USD,"Shop,0`,
     ]) expect(() => parseWiseCsv(csv, "included")).toThrow();
+  });
+});
+
+describe("several Wise statements at once", () => {
+  const statement = (name: string, rows: string[]) => ({ name, ...parseWiseStatement([`${header},"Running Balance"`, ...rows].join("\n"), "separate") });
+  test("merges per-currency files, dedupes shared rows and keeps each currency's closing balance", () => {
+    const gbp = statement("gbp.csv", ["CARD-1,01-09-2026,-10,GBP,Tesco,0,90", "CONVERSION-7,02-09-2026,-50,GBP,Converted,0,40"]);
+    const usd = statement("usd.csv", ["CONVERSION-7,02-09-2026,63,USD,Converted,0,163"]);
+    const php = statement("php.csv", ["CARD-2,03-09-2026,-500,PHP,Jollibee,0,1500"]);
+    const again = statement("usd-copy.csv", ["CONVERSION-7,02-09-2026,63,USD,Converted,0,163"]);
+    const merged = mergeWiseStatements([gbp, usd, php, again]);
+    expect(merged.entries.map((e) => e.externalId).sort()).toEqual(["CARD-1:GBP:out", "CARD-2:PHP:out", "CONVERSION-7:GBP:out", "CONVERSION-7:USD:in"]);
+    expect(merged.balances).toEqual([{ currency: "GBP", amount: 40, asOf: "2026-09-02" }, { currency: "PHP", amount: 1500, asOf: "2026-09-03" },
+      { currency: "USD", amount: 163, asOf: "2026-09-02" }]);
+    expect(merged.balanceWarning).toBeUndefined();
+  });
+
+  test("detects the fee convention of each file", () => {
+    expect(detectFeeMode([header, "CARD-1,01-09-2026,-10.5,GBP,Tesco,0.5"].join("\n"))).toBe("included");
+    expect(detectFeeMode([header, "CARD-1,01-09-2026,-10,GBP,Tesco,0.5", "FEE-CARD-1,01-09-2026,-0.5,GBP,Fee,0"].join("\n"))).toBe("separate");
+  });
+
+  test("the latest statement's balance wins; same-day disagreements apply neither", () => {
+    const older = statement("aug.csv", ["CARD-1,20-08-2026,-10,USD,Coffee,0,100"]);
+    const newer = statement("sep.csv", ["CARD-2,05-09-2026,-5,USD,Coffee,0,95"]);
+    expect(mergeWiseStatements([newer, older]).balances).toEqual([{ currency: "USD", amount: 95, asOf: "2026-09-05" }]);
+    const clash = mergeWiseStatements([newer, statement("other.csv", ["CARD-3,05-09-2026,-5,USD,Tea,0,70"])]);
+    expect(clash.balances).toEqual([]);
+    expect(clash.balanceWarning).toContain("different USD balances on 2026-09-05");
   });
 });
 

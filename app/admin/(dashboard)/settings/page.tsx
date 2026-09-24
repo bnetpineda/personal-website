@@ -3,16 +3,19 @@ import Link from "next/link";
 import { Download, Plus, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCategories, getCategoryTotals, getCategoryUsage, getFxRows } from "@/lib/dal";
+import { PROVIDER_META } from "@/lib/finance/connections/types";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { currentMonth, dayLabel } from "@/lib/finance/dates";
+import { getCategoryRules } from "@/lib/finance/imports/dal";
 import { deleteCategory, setCategoryArchived } from "../../_actions/categories";
 import { BudgetsForm } from "../../_components/budgets-form";
 import { CategoryForm } from "../../_components/category-form";
 import { FormSheet } from "../../_components/form";
+import { AddRuleButton, RuleToggle } from "../../_components/import-controls";
 import { EditableRow } from "../../_components/row-actions";
 import { Money, PageHeader, Panel } from "../../_components/ui";
 
@@ -21,11 +24,12 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  const [categories, usage, fxRows, spent] = await Promise.all([
+  const [categories, usage, fxRows, spent, rules] = await Promise.all([
     getCategories(),
     getCategoryUsage(),
     getFxRows(),
     getCategoryTotals("expense", currentMonth()),
+    getCategoryRules(),
   ]);
 
   const categoryList = (kind: CashFlowKind) => (
@@ -89,7 +93,7 @@ export default async function SettingsPage() {
       <div className="mb-6">
         <Panel title="Account connections" action={<Button asChild variant="outline"><Link href="/admin/connections">Manage connections</Link></Button>}>
           <p className="text-sm text-muted-foreground">Sync Binance Spot and Simple Earn, IBKR investments and cash, and eligible Wise balances automatically.</p>
-          <div className="mt-4 flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link href="/admin/inbox">Import inbox & rules</Link></Button><Button asChild variant="outline" size="sm"><Link href="/admin/earnings">Earnings</Link></Button><Button asChild variant="outline" size="sm"><Link href="/admin/notifications">Notifications</Link></Button></div>
+          <div className="mt-4 flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link href="/admin/earnings">Earnings</Link></Button><Button asChild variant="outline" size="sm"><Link href="/admin/notifications">Notifications</Link></Button></div>
         </Panel>
       </div>
 
@@ -121,6 +125,33 @@ export default async function SettingsPage() {
         </Panel>
         <Panel title="Income categories" action={addButton("income")}>
           {categoryList("income")}
+        </Panel>
+      </div>
+
+      <div className="mt-6">
+        <Panel title="Category rules" action={<AddRuleButton categories={categories} />}>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Imports and syncs run your rules first, then AI files everything else. Use a rule only when you want a merchant pinned to one category.
+          </p>
+          {!rules.length ? (
+            <p className="text-sm text-muted-foreground">No rules. AI categorizes all imported activity.</p>
+          ) : (
+            <ItemGroup>
+              {rules.map((r) => (
+                <Item key={r.id} size="sm">
+                  <ItemContent>
+                    <ItemTitle>“{r.contains}” → {categories.find((c) => c.id === r.categoryId)?.name ?? "Unavailable category"}</ItemTitle>
+                    <ItemDescription>
+                      {r.provider ? PROVIDER_META[r.provider].name : "Any provider"} · {r.kind} · {r.autoPost ? "Posts automatically" : "Left to AI"} · {r.enabled ? "Active" : "Paused"}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <RuleToggle id={r.id} enabled={r.enabled} />
+                  </ItemActions>
+                </Item>
+              ))}
+            </ItemGroup>
+          )}
         </Panel>
       </div>
 

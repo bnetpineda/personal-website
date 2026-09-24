@@ -86,7 +86,7 @@ For automatic transactions and earnings, create a **second Activity Flex Query**
 Empty included sections are valid; missing sections, blank numeric fields and summary/lot
 trade rows fail the history import. History errors are separate from successfully updated balances.
 Realized P/L follows IBKR's reported value, which already includes trade commissions.
-Cash transaction types that aren't recognized remain in the inbox for review.
+Cash transaction types that aren't recognized are filed by AI like any other entry.
 
 IBKR values reflect the statement date, not live quotes. The parser uses reported position
 values (so option contract multipliers are respected), preserves short positions and negative
@@ -102,7 +102,7 @@ Reference: [IBKR Flex Web Service](https://www.interactivebrokers.com/docs/web-a
 ## Wise
 
 The dashboard accepts an existing Wise API token for a personal or business profile. API
-balance access depends on the token's permissions. Use **Import inbox → Import Wise CSV**
+balance access depends on the token's permissions. Use **Import Wise CSV** on the Wise card in Connections
 for transaction history. Statement imports and **Holdings** also support tracking balances
 when API balance access is unavailable.
 
@@ -124,12 +124,16 @@ References: [token eligibility](https://docs.wise.com/guides/developer/auth-and-
 [profile lookup](https://docs.wise.com/api-reference/profile/profilelist),
 [balance endpoint](https://docs.wise.com/api-reference/balance/balancelist).
 
-## Inbox, CSV imports and category rules
+## CSV imports and category rules
 
-`/admin/inbox` supports a Wise English **balance statement** CSV, not the transfer-list export.
+**Import Wise CSVs** (Wise card on `/admin/connections`) supports Wise English **balance statement** CSVs, not the transfer-list export. Wise exports one
+statement per currency: pick them all in the file picker, or drag them onto the button (up to 10 files,
+2.5 MB in total). There is no preview step: the files import, then rules and AI file them, in one action.
+A conversion appears in both currencies' files and is kept once per leg; the latest closing balance per
+currency wins, and two files disagreeing on the same date apply neither.
 Required columns are TransferWise ID (or Wise ID / Transaction ID / ID), Date, Amount, Currency,
 and Description. Comma/semicolon delimiters, UTF-8 BOMs, quoted fields and embedded newlines are
-accepted. Dates use DD-MM-YYYY, DD/MM/YYYY or ISO; amounts use decimal points. Limits: 750 KB,
+accepted. Dates use DD-MM-YYYY, DD/MM/YYYY or ISO; amounts use decimal points. Limits per file: 750 KB,
 2,000 source rows. Download instructions: [Wise statements](https://wise.com/help/articles/2736049/how-do-i-download-a-statement).
 
 Rows are classified by Wise's **Transaction Details Type** column when the export has it, else by ID
@@ -138,22 +142,20 @@ prefix and description. Money received from someone else (`DEPOSIT`, incoming `T
 Salary or Freelance. Conversions, cross-balance moves, top-ups (`MONEY_ADDED`) and outgoing transfers
 stay transfers; `ACCRUAL_CHARGE` and `FEE-` rows are fees; balance interest is interest.
 
-Choose the export's fee convention before previewing. For amounts including **Total fees**, the
-import splits each gross principal and fee while preserving the original signed total. For
-accounting exports with separate fee rows, amounts are kept as-is. The preview shows the first
-10 entries and duplicate/conflict counts; confirmation imports the whole validated file atomically.
+The fee convention is detected per file: a file with its own `FEE-` rows is an accounting export and
+its amounts are kept as-is; otherwise amounts include **Total fees**, and the import splits each gross
+principal and fee while preserving the original signed total. All files import atomically: a conflict
+with a previous import (same ID, different amount or date) rejects the whole batch and changes nothing.
 CSV data is never evaluated as spreadsheet formulas, and uploaded files are not retained.
 
-If the CSV contains **Running Balance**, the preview also shows a closing balance per currency,
-dated to the last transaction shown. The running-balance chain determines ascending/descending
-order, including same-day entries; ambiguous order, inconsistent totals or negative balances
-disable balance updates without inventing a result. Files without that column still import activity.
-Choose **Apply statement closing balances to Holdings** to update an existing Wise cash holding,
-or create one when no matching holding exists. Choose among multiple candidates explicitly.
-Transactions and balances commit together. Older statements cannot roll back a newer dated
-balance; conflicting same-day balances require manual review. Concurrent edits invalidate the preview.
-If Wise API balances already count in net worth, import transactions only. One personal balance per
-currency is supported; separate profiles/jars must not be combined through this import.
+If a CSV contains **Running Balance**, its closing balance per currency (dated to the last transaction
+shown) updates the Wise cash holding, or creates one when none exists. The running-balance chain
+determines ascending/descending order, including same-day entries; ambiguous order, inconsistent totals
+or negative balances skip the balance without inventing a result. Files without that column still import
+activity. A balance is skipped, and the result message says so, when Wise API balances already count in
+net worth, when several Wise holdings match the currency, or when a different balance is saved for that
+date. Transactions and balances commit together, and older statements cannot roll back a newer dated
+balance. One personal balance per currency is supported; separate profiles/jars must not be combined.
 
 Source identity is provider + account + external transaction ID. Wise adds currency and direction
 to distinguish conversion legs and reversals. Binance uses the account UID and provider history
@@ -161,62 +163,62 @@ identifiers; Earn has no event ID, so it uses product/position, asset, reward ty
 Conflicting amounts for an existing identity reject the entire import instead of rewriting reviews.
 Repeated imports preserve category choices, ignored records and posted/deleted entries.
 
-Rules match description text (case-insensitive), income/expense direction and optional provider.
-The longest matching text wins; equally specific conflicting rules leave the entry for review.
-Rules either suggest a category or automatically post, using PHP FX at posting time. Up to 500
-eligible entries are processed per pass. Larger backlogs continue with the next import/sync or
-**Apply rules**. Unknown transaction types, transfer principal, trades and Binance crypto units
-never auto-post. Potential same-date/currency/amount/direction duplicates stay in the inbox;
-manual review can explicitly override after checking Transactions. Posted entries use the import
-UUID as their cash-flow UUID and are changed/deleted/undone in Transactions.
+Rules live in **Settings → Category rules**. They match description text (case-insensitive),
+income/expense direction and optional provider, and post automatically using PHP FX at posting time.
+The longest matching text wins; equally specific conflicting rules leave the entry to AI. Rules saved
+before posting became automatic ("Left to AI") no longer hold entries back. Up to 500 eligible entries
+are processed per pass; larger backlogs continue with the next import or sync. Unknown transaction
+types, transfer principal, trades and Binance crypto units never match a rule. Posted entries use the
+import UUID as their cash-flow UUID and are changed/deleted/undone in Transactions.
 
 ## AI categorization
 
 With `AI_GATEWAY_API_KEY` set (Vercel AI Gateway; model `AI_CATEGORIZE_MODEL`, default
-`anthropic/claude-haiku-4.5`), whatever rules leave pending is categorized by AI after every sync,
-Wise CSV import, IBKR report import and the daily cron. **Categorize with AI** in the inbox runs
-it on demand, including entries it skipped before. Without the key, only rules run.
+`anthropic/claude-haiku-4.5`), whatever rules leave pending is categorized by AI during every sync,
+Wise CSV import and IBKR report import, before the action returns, so the result message and the
+refreshed pages already show where each entry went. The daily cron runs it too. There is no review
+queue: the model's answer is final. Without the key, only rules run and new activity stays uncategorized.
 
 Set `AI_CATEGORIZE_MODEL=typesafe-ai/jev` to classify with TypeSafe AI's Jev evaluation model instead.
 Jev answers one native choice question per entry, and the options are exactly the decisions that entry
 allows (one per category of the matching direction). Cash dividends, interest, broker fees and
 withholding tax in a budget currency are posted to the matching category; the investment-ledger option
-is not offered for those. A choice under 80% likely, or within 20 points of the next option, stays
-pending with that choice filled in. Its reason records the chosen option and its probability, e.g.
-`Jev: Subscriptions (98% likely)`. Language models answer batches of 100 in one prompt.
-Crypto rewards and fees, whose only sensible answer is the earnings ledger, are decided without a model.
+is not offered for those. Jev's top choice is applied whatever its probability; the reason records the
+choice and its probability, e.g. `Jev: Subscriptions (98% likely)`. Language models answer batches of 100
+in one prompt. Crypto rewards and fees, whose only sensible answer is the earnings ledger, are decided
+without a model. So is Wise activity in a currency the budget cannot convert: own-account movements
+become transfers and everything else is ignored.
 
-Each entry gets one decision, validated server-side against what review accepts:
+Each entry gets one decision, validated server-side against what posting and the ledger accept:
 
 - **post**: fiat Wise/IBKR income or expense goes to Transactions under a category whose kind
-  matches the amount's sign (same FX, duplicate and archived-category guards as rules).
+  matches the amount's sign. If the same date, currency, amount and direction is already in
+  Transactions (a recurring or manual entry), the import is ignored as `Already in Transactions`.
 - **transfer**: principal moving between your own accounts (payment/transfer/other types only).
 - **investment**: IBKR/Binance activity kept in the earnings ledger (status `reviewed`).
 - **ignore**: noise such as holds or reversals.
 
-Before the model runs, the inbox's unambiguous transfer suggestions (same currency, exact opposite
-amounts, within seven days) are linked as transfer pairs. Entries a suggest-only rule already
-categorized stay with you. So does Wise spending in a currency the budget cannot convert.
+Before the model runs, unambiguous transfer pairs (same currency, exact opposite amounts, within
+seven days, different accounts) are linked. Binance and IBKR deposits without a partner are filed by
+the model like everything else.
 
-Invalid answers leave the entry pending. Each entry is claimed before the model call
-(`ai_attempted_at`), so overlapping sync/import/cron runs never pay twice for the same row.
-A failed call releases its claim for the next run. If entries wait more than a day while a key is set,
-a notification points at the key or credits. Possible duplicates and missing FX rates stay pending, with the
-AI's category pre-selected. The model receives only the provider, type, date, signed amount,
+Each entry is claimed before the model call (`ai_attempted_at`), so overlapping sync/import/cron runs
+never pay twice for the same row. A failed call releases its claim for the next run. Invalid answers and
+posts without a PHP exchange rate stay pending and are asked again on the first run an hour or more later.
+One sync or import categorizes up to 1,200 entries within about 2.5 minutes; the rest continue on the next
+sync or the daily cron. If entries wait more than a day while a key is set, a notification points at the
+key or credits. The model receives only the provider, type, date, signed amount,
 currency and description of each entry, the active category list, and up to 80 of your own
 past decisions (posts, transfers, ignores) as examples. Descriptions are treated as data, never as instructions. Account IDs, source IDs, credentials and balances are never sent.
-AI decisions show `AI · reason` in the inbox, and posted rows carry the reason in their notes.
-To correct one, edit it in Transactions or reopen it from the inbox. Manual and rule decisions then
-teach later runs.
+Posted rows carry the reason in their notes (`Categorized by AI: …`). To correct one, edit its category
+in Transactions; that correction teaches later runs.
 
 ## Transfers and investment earnings
 
-Suggestions require opposite amounts in the same currency, within seven days, with an unambiguous
-candidate in another account. Confirm ownership before linking. Manual matching supports different
-amounts/currencies for FX conversions and searches the latest 500 pending entries. If the counterpart
-is not imported, review the entry as a transfer to/from your own account. Transfer principal stays out
-of income, expenses and budgets; fee entries remain separate. Reopening a linked transfer reopens both
-sides. Ignoring an entry also excludes it from earnings, while keeping it in investment history does not.
+Automatic linking requires opposite amounts in the same currency, within seven days, with an unambiguous
+candidate in another account. Other movements between your own accounts are filed as unlinked transfers by AI.
+Transfer principal stays out of income, expenses and budgets; fee entries remain separate. Ignoring an entry
+also excludes it from earnings, while keeping it in investment history does not.
 
 Binance imports **30 completed UTC days** of Flexible (ALL reward types) and Locked rewards, plus
 completed crypto deposits and withdrawals. Each collection is fully paginated within bounded limits;
@@ -226,7 +228,7 @@ are kept; no historical fiat price or cost basis is invented. Withdrawal amount 
 as separate reported fields; no exchange-rate or net-received amount is inferred.
 
 `/admin/earnings` shows monthly or all-time native-currency contributions, rewards, dividends, interest, reported
-realized P/L, fees and taxes. Confirmed transfers into/out of investment accounts form net contributions;
+realized P/L, fees and taxes. Transfers into/out of investment accounts form net contributions;
 matched transfers between Binance/IBKR accounts are excluded. Wise activity is outside this investment
 summary. Fees shown beside IBKR realized P/L must not be subtracted again from that P/L. Current
 unrealized P/L is a separate snapshot of positions with known values and cost basis. History coverage

@@ -33,12 +33,16 @@ const TRANSFER_KINDS: readonly string[] = ["payment", "transfer", "other"];
 const CASH_ENTRY_KINDS: readonly string[] = ["dividend", "interest", "fee", "tax"];
 const direction = (amount: number): CashFlowKind => amount > 0 ? "income" : "expense";
 
-/**
- * Mirrors what review, posting and the earnings ledger accept for this entry. Empty means a person
- * should look: Wise spending in a currency the budget cannot convert must not be silently ignored.
- */
+/** Wise money the budget cannot convert: own-account movements stay transfers, anything else is set aside. */
+function unconvertibleWise(entry: Entry): AiDecisionKind | null {
+  if (entry.provider !== "wise" || canPost(entry)) return null;
+  return TRANSFER_KINDS.includes(entry.kind) && entry.kind !== "payment" ? "transfer" : "ignore";
+}
+
+/** Mirrors what posting and the earnings ledger accept for this entry. */
 export function allowedDecisions(entry: Entry): AiDecisionKind[] {
-  if (entry.provider === "wise" && !canPost(entry)) return TRANSFER_KINDS.includes(entry.kind) && entry.kind !== "payment" ? ["transfer"] : [];
+  const only = unconvertibleWise(entry);
+  if (only) return [only];
   const allowed: AiDecisionKind[] = [];
   if (canPost(entry)) allowed.push("post");
   if (TRANSFER_KINDS.includes(entry.kind)) allowed.push("transfer");
@@ -47,29 +51,6 @@ export function allowedDecisions(entry: Entry): AiDecisionKind[] {
   if (entry.provider !== "wise" && !(canPost(entry) && CASH_ENTRY_KINDS.includes(entry.kind))) allowed.push("investment");
   allowed.push("ignore");
   return allowed;
-}
-
-/** Auto-file only a choice this far ahead of the runner-up. Closer calls stay in the inbox. */
-export const AI_CONFIDENCE_MIN = 0.8;
-export const AI_CONFIDENCE_GAP = 0.2;
-
-/** A choice without a probability has unknown confidence, so it stays in the inbox too. */
-export function confidentChoice(choice: string, probabilities?: Record<string, number> | null): boolean {
-  const chosen = probabilities?.[choice];
-  if (chosen == null || !Number.isFinite(chosen)) return false;
-  const second = Math.max(0, ...Object.entries(probabilities ?? {}).filter(([key]) => key !== choice).map(([, probability]) => Number.isFinite(probability) ? probability : 0));
-  return chosen >= AI_CONFIDENCE_MIN && chosen - second >= AI_CONFIDENCE_GAP;
-}
-
-const REVIEW_FOR_SUGGESTION = { transfer: "transfer", investment: "reviewed", ignore: "ignored" } as const;
-
-/** Review-form default for a suggestion the AI left pending. Confirmed saves become the person's own decision. */
-export function suggestedReview(entry: Pick<ImportedEntry, "provider" | "currency" | "kind" | "amount" | "status" | "categorizedBy" | "categoryId" | "aiSuggestion">): "post" | "reviewed" | "ignored" | "transfer" {
-  if (entry.status === "pending" && entry.categorizedBy === "ai" && entry.aiSuggestion) {
-    if (entry.aiSuggestion !== "post") return REVIEW_FOR_SUGGESTION[entry.aiSuggestion];
-    if (entry.categoryId) return "post";
-  }
-  return canPost(entry) && entry.kind !== "transfer" ? "post" : "reviewed";
 }
 
 const LEDGER_REASONS: Partial<Record<string, string>> = {
@@ -84,6 +65,13 @@ const LEDGER_REASONS: Partial<Record<string, string>> = {
 export function ledgerDecision(entry: Entry): AiDecision | null {
   const reason = LEDGER_REASONS[entry.kind];
   return reason && entry.provider !== "wise" && !canPost(entry) ? { id: entry.id, decision: "investment", reason } : null;
+}
+
+/** Wise activity in a currency the budget cannot convert has one possible answer, so the model is not asked. */
+export function unconvertibleDecision(entry: Entry): AiDecision | null {
+  const only = unconvertibleWise(entry);
+  if (only === "transfer") return { id: entry.id, decision: "transfer", reason: "Own-account movement in a currency the budget cannot convert" };
+  return only ? { id: entry.id, decision: "ignore", reason: "Wise activity in a currency the budget cannot convert" } : null;
 }
 
 const INSTRUCTIONS = `You categorize a person's financial activity imported from Wise (multi-currency money account), Interactive Brokers (IBKR, stock broker) and Binance (crypto exchange).
@@ -108,23 +96,7 @@ export function buildCategorizePrompt(entries: Entry[], categories: CategoryOpti
   return { instructions: INSTRUCTIONS, prompt: JSON.stringify(payload) };
 }
 
-/**
- * Binance and IBKR deposits stay pending until a person confirms them.
- * Exact partner matches are linked before the model runs, so they never reach this list.
- */
-export function deferUnmatchedBrokerTransfers<T extends { id: string }>(
-  entries: { id: string; provider: string; kind: string }[],
-  decisions: T[],
-  suggestions: T[],
-): { decisions: T[]; suggestions: T[] } {
-  const unmatched = new Set(entries.filter((entry) => (entry.provider === "binance" || entry.provider === "ibkr") && entry.kind === "transfer").map((entry) => entry.id));
-  if (!unmatched.size) return { decisions, suggestions };
-  const deferred = decisions.filter((decision) => unmatched.has(decision.id));
-  if (!deferred.length) return { decisions, suggestions };
-  return { decisions: decisions.filter((decision) => !unmatched.has(decision.id)), suggestions: [...suggestions, ...deferred] };
-}
-
-/** Anything unexpected is dropped; the entry stays in the inbox for a person to review. */
+/** Anything unexpected is dropped; the entry stays pending and a later run asks again. */
 export function validateDecisions(entries: Entry[], categories: CategoryOption[], output: AiOutput) {
   const byRef = new Map(entries.map((e, i) => [`e${i + 1}`, e]));
   const accepted = new Map<string, AiDecision>();

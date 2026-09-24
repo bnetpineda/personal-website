@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, gte, isNull, lt, max, min, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, lt, max, min, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { accountConnections, cashFlows, categories, importedEntries, liabilities, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
@@ -29,8 +29,7 @@ export async function getNotifications() {
       .from(liabilities).leftJoin(cashFlows, eq(cashFlows.liabilityId, liabilities.id)).where(and(eq(liabilities.archived, false), gt(liabilities.balance, 0))).groupBy(liabilities.id),
     db.select({ key: notificationDismissals.key }).from(notificationDismissals),
     env.aiGatewayApiKey() ? db.select({ waiting: sql<number>`count(*)`.mapWith(Number), oldest: min(e.occurredOn) }).from(e)
-      .where(and(eq(e.status, "pending"), isNull(e.aiAttemptedAt), or(isNull(e.categorizedBy), ne(e.categorizedBy, "rule")),
-        lt(e.createdAt, sql`now() - interval '1 day'`))).then(([row]) => row?.oldest ? { waiting: row.waiting, oldest: row.oldest } : null)
+      .where(and(eq(e.status, "pending"), lt(e.createdAt, sql`now() - interval '1 day'`))).then(([row]) => row?.oldest ? { waiting: row.waiting, oldest: row.oldest } : null)
       : Promise.resolve(null),
   ]);
   const keys = new Set(dismissed.map((d) => d.key));

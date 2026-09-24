@@ -222,7 +222,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   return (
     <>
       <PageHeader eyebrow="Money in & out" title="Transactions">
-        <Button asChild variant="outline"><Link href="/admin/inbox">Import inbox</Link></Button>
+        <Button asChild variant="outline"><Link href="/admin/connections">Import & sync</Link></Button>
         {!q && <MonthPicker month={month} current={current} href={(m) => href({ month: m })} />}
         <AddEntryButton kind={kind ?? "expense"} />
       </PageHeader>

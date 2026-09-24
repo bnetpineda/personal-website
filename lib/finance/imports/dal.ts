@@ -4,9 +4,8 @@ import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { categoryRules, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
 import { monthRange } from "../dates";
-import { earningsByCurrency, transferSuggestions } from "./review";
-import type { CategorizedBy, EntryStatus } from "./types";
-import type { ConnectionSnapshot, Provider } from "../connections/types";
+import { earningsByCurrency } from "./review";
+import type { ConnectionSnapshot } from "../connections/types";
 import { holdingCosts } from "./holding-costs";
 import { readAllSpotFifo, readSpotFifo } from "./spot-fifo";
 
@@ -27,24 +26,9 @@ export async function getBinanceHoldingCosts(snapshot: ConnectionSnapshot | null
   return holdingCosts(snapshot, entries, jobs, prepared);
 }
 
-export async function getInbox(status: EntryStatus | "all", page: number, filters: { provider?: Provider; by?: CategorizedBy } = {}) {
+export async function getCategoryRules() {
   await requireAdmin();
-  const db = getDb();
-  // Source and categorizer narrow both the list and the per-status counts.
-  const scope = and(filters.provider ? eq(importedEntries.provider, filters.provider) : undefined,
-    filters.by ? eq(importedEntries.categorizedBy, filters.by) : undefined);
-  const condition = and(scope, status === "all" ? undefined : eq(importedEntries.status, status));
-  const [entries, totals, rules, candidates] = await Promise.all([
-    db.select().from(importedEntries).where(condition).orderBy(desc(importedEntries.occurredOn), asc(importedEntries.id)).limit(50).offset(page * 50),
-    db.select({ status: importedEntries.status, total: count() }).from(importedEntries).where(scope).groupBy(importedEntries.status),
-    db.select().from(categoryRules).orderBy(desc(categoryRules.enabled), asc(categoryRules.contains)),
-    db.select({ id: importedEntries.id, provider: importedEntries.provider, accountKey: importedEntries.accountKey,
-      occurredOn: importedEntries.occurredOn, amount: importedEntries.amount, currency: importedEntries.currency,
-      description: importedEntries.description, kind: importedEntries.kind, status: importedEntries.status,
-    }).from(importedEntries).where(eq(importedEntries.status, "pending")).orderBy(desc(importedEntries.occurredOn)).limit(500),
-  ]);
-  const total = totals.filter((r) => status === "all" || r.status === status).reduce((sum, r) => sum + r.total, 0);
-  return { entries, totals, total, rules, candidates, suggestions: transferSuggestions(candidates) };
+  return getDb().select().from(categoryRules).orderBy(desc(categoryRules.enabled), asc(categoryRules.contains));
 }
 
 export async function getEarnings(month: string | null) {
@@ -60,9 +44,8 @@ export async function getEarnings(month: string | null) {
     realizedPnl: sql<number | null>`sum(${e.realizedPnl})`.mapWith(Number),
   }).from(e).where(filter)
     .groupBy(e.provider, e.currency, e.kind, e.status);
-  const [pending] = await getDb().select({ total: count() }).from(e).where(and(eq(e.status, "pending"), eq(e.kind, "transfer"), filter));
   const earnings = earningsByCurrency(rows);
-  return { rows: earnings.rows, pendingTransfers: pending.total, postedCash: earnings.postedCash };
+  return { rows: earnings.rows, postedCash: earnings.postedCash };
 }
 
 export async function getInvestmentHistory(provider: "binance" | "ibkr" | "all", page: number) {

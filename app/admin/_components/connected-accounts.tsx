@@ -10,6 +10,7 @@ import { PROVIDERS, PROVIDER_META, isConnectionStale, type ConnectionView } from
 import { dayLabel, timeAgo } from "@/lib/finance/dates";
 import { formatQty } from "@/lib/finance/format";
 import { ConnectAccountButton, ConnectionSettings, CredentialExpiryButton, SyncConnectionsButton } from "./connection-controls";
+import { ImportWiseButton } from "./import-controls";
 import { Money } from "./ui";
 
 export function ConnectedAccounts({ connections, fx, detailed = false }: { connections: ConnectionView[]; fx: FxTable; detailed?: boolean }) {
@@ -65,7 +66,10 @@ export function ConnectedAccounts({ connections, fx, detailed = false }: { conne
                     <p className="text-xs text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ?? "No reminder set"}</p>
                     <CredentialExpiryButton provider={provider} expiresOn={connection.credentialsExpireOn} />
                   </> : <ConnectAccountButton provider={provider} />}
-                  {provider === "wise" && <Button asChild variant="outline" size="sm"><Link href="/admin/inbox">Import Wise statement <ArrowRight /></Link></Button>}
+                  {provider === "wise" && <>
+                    <ImportWiseButton />
+                    <p className="text-xs text-muted-foreground">Select or drag all your Wise statement CSVs at once, one per currency. They import and categorize in one step.</p>
+                  </>}
                 </> : !connection && <Button asChild variant="outline" size="sm"><Link href="/admin/connections"><Link2 />Connect {meta.name}</Link></Button>}
               </CardContent>
             </Card>

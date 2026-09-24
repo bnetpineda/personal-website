@@ -3,14 +3,13 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { accountConnections, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
 import { ConnectionError } from "@/lib/finance/connections/types";
 import { advanceHistory, historySetupSchema, startBinanceHistory, startHeldSpotHistory } from "@/lib/finance/imports/history-service";
 import { parseIbkrHistory } from "@/lib/finance/imports/provider-parsers";
-import { categorizeQuietly } from "@/lib/finance/imports/ai-service";
+import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { applyCategoryRules, ingestQuery } from "@/lib/finance/imports/service";
 import { ImportError, sameSource, sourceKey, type HistoryCoverage, type ImportEntry } from "@/lib/finance/imports/types";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
@@ -48,9 +47,9 @@ export async function importInvestmentReport(data: FormData): Promise<FormState>
         fromDate: parsed.coverage.from, toDate: parsed.coverage.to, entries: parsed.entries.length }).onConflictDoNothing(),
     ]);
     await applyCategoryRules();
-    after(categorizeQuietly);
+    const ai = await categorizeQuietly();
     revalidatePath("/admin", "layout");
-    return { ok: true, message: `Imported ${Number(saved.rows[0]?.inserted ?? 0)} new entries; skipped ${Number(saved.rows[0]?.duplicates ?? 0)} duplicates. Review cash activity in the inbox.` };
+    return { ok: true, message: `Imported ${Number(saved.rows[0]?.inserted ?? 0)} new entries; skipped ${Number(saved.rows[0]?.duplicates ?? 0)} duplicates.${describeAiRun(ai)}` };
   } catch (error) { return failure(error); }
 }
 export async function configureInvestmentHistory(_previous: FormState, data: FormData): Promise<FormState> {

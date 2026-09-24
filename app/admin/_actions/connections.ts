@@ -15,15 +15,20 @@ import { ConnectionError, credentialsSchema, providerSchema, wiseTokenSchema, ty
 import type { FormState } from "@/lib/finance/schemas";
 import { ensureFx, snapshotQuietly } from "@/lib/finance/service";
 import { applyCategoryRules } from "@/lib/finance/imports/service";
-import { categorizeQuietly } from "@/lib/finance/imports/ai-service";
+import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 
-async function refreshTotals() {
+/** After a sync, rules and AI file the new activity before the action answers; the result is the message tail. */
+async function refreshTotals({ categorize = false } = {}) {
   const rows = await getDb().select({ snapshot: accountConnections.snapshot }).from(accountConnections);
   try { await ensureFx(rows.flatMap((r) => r.snapshot?.positions.map((p) => p.currency) ?? [])); } catch { /* UI reports missing FX. */ }
   after(snapshotQuietly);
-  await applyCategoryRules();
-  after(categorizeQuietly);
+  let summary = "";
+  if (categorize) {
+    await applyCategoryRules();
+    summary = describeAiRun(await categorizeQuietly());
+  }
   revalidatePath("/admin", "layout");
+  return summary;
 }
 
 export async function findWiseProfiles(data: FormData): Promise<WiseProfileLookup> {
@@ -62,8 +67,8 @@ export async function saveConnection(_previous: FormState, data: FormData): Prom
     await db.insert(accountConnections).values({ provider: credentials.provider, ...values })
       .onConflictDoUpdate({ target: accountConnections.provider, set: values });
     const result = await syncAccount(credentials.provider);
-    await refreshTotals();
-    return { ok: true, message: result.ok ? "Connected and synced. Review the balances before including them in net worth." : "Connection saved. Open its sync status to resolve the first sync." };
+    const summary = await refreshTotals({ categorize: true });
+    return { ok: true, message: result.ok ? `Connected and synced. Review the balances before including them in net worth.${summary}` : "Connection saved. Open its sync status to resolve the first sync." };
   } catch {
     return { ok: false, message: "The connection could not be saved. Try again." };
   }
@@ -84,10 +89,10 @@ export async function syncConnections(provider?: Provider): Promise<FormState> {
   if (provider !== undefined && !providerSchema.safeParse(provider).success) return { ok: false, message: "Unknown provider." };
   try {
     const results = provider ? [await syncAccount(provider)] : await syncAllAccounts();
-    await refreshTotals();
+    const summary = await refreshTotals({ categorize: true });
     if (results.length === 0) return { ok: false, message: "Connect an account first." };
     const failed = results.filter((r) => !r.ok);
-    return { ok: failed.length === 0, message: failed.length ? failed.map((r) => `${r.provider.toUpperCase()}: ${r.message}`).join(" ") : "Account balances updated." };
+    return { ok: failed.length === 0, message: `${failed.length ? failed.map((r) => `${r.provider.toUpperCase()}: ${r.message}`).join(" ") : "Account balances updated."}${summary}` };
   } catch {
     return { ok: false, message: "Sync could not finish. Try again later." };
   }

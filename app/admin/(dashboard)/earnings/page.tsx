@@ -27,9 +27,8 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
     <FinanceLinks current="earnings" />
     <div className="mb-4 flex gap-2"><Button asChild size="sm" variant={allTime ? "default" : "outline"}><Link href="/admin/earnings?period=all">All time</Link></Button><Button asChild size="sm" variant={allTime ? "outline" : "default"}><Link href={`/admin/earnings?month=${month}`}>Selected month</Link></Button></div>
     <Alert className="mb-6"><AlertTitle>Imported activity, in its original currency</AlertTitle><AlertDescription>
-      Totals cover imported Binance and IBKR records {allTime ? "across all imported dates" : "for this month"}, including investment history awaiting review. Ignored entries are excluded. Contributions require transfer confirmation; linked transfers between investment accounts are excluded. This is not a total-return calculation.
+      Totals cover imported Binance and IBKR records {allTime ? "across all imported dates" : "for this month"}, including activity AI has not filed yet. Ignored entries are excluded. Contributions count deposits and withdrawals filed as transfers; linked transfers between investment accounts are excluded. This is not a total-return calculation.
     </AlertDescription></Alert>
-    {data.pendingTransfers > 0 && <p className="mb-4 text-sm text-warning">{data.pendingTransfers} transfers still need review before contributions are complete. <Link href="/admin/inbox" className="underline">Open inbox</Link></p>}
     {data.postedCash > 0 && <p className="mb-4 text-sm text-muted-foreground">Cash dividends, interest, fees and taxes you posted are on Transactions, not in these columns.</p>}
     {!data.rows.length ? <EmptyState title="No imported earnings yet">Connect Binance or configure an IBKR history Flex Query to start collecting rewards, dividends and trade results.</EmptyState> : <Card className="mb-6 gap-0 overflow-hidden py-0"><Table>
       <TableHeader><TableRow>{["Currency / asset", "Net contributions", "Earn rewards", "Dividends", "Interest", "Realized P/L", "Fees", "Taxes"].map((t) => <TableHead key={t}>{t}</TableHead>)}</TableRow></TableHeader>
