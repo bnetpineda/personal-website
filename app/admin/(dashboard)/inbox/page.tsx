@@ -5,20 +5,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCategories } from "@/lib/dal";
 import { getInbox } from "@/lib/finance/imports/dal";
-import { ENTRY_STATUSES, type EntryStatus } from "@/lib/finance/imports/types";
-import { PROVIDER_META } from "@/lib/finance/connections/types";
+import { CATEGORIZED_BY, ENTRY_STATUSES, type CategorizedBy, type EntryStatus } from "@/lib/finance/imports/types";
+import { PROVIDERS, PROVIDER_META, type Provider } from "@/lib/finance/connections/types";
 import { AddRuleButton, AiCategorizeButton, ApplyRulesButton, ImportWiseButton, NativeAmount, ReopenImportButton, ReviewButton, RuleToggle, TransferButton } from "../../_components/import-controls";
 import { FinanceLinks } from "../../_components/finance-links";
 import { EmptyState, PageHeader, Panel } from "../../_components/ui";
 
 // AI categorization of a large backlog can take a few model calls.
 export const maxDuration = 300;
-export default async function InboxPage({ searchParams }: { searchParams: Promise<{ status?: string; page?: string }> }) {
+const BY_LABEL: Record<CategorizedBy, string> = { ai: "AI", rule: "rules", manual: "you" };
+
+export default async function InboxPage({ searchParams }: { searchParams: Promise<{ status?: string; page?: string; provider?: string; by?: string }> }) {
   const params = await searchParams;
   const status = params.status === "all" ? "all" : ENTRY_STATUSES.includes(params.status as EntryStatus) ? params.status as EntryStatus : "pending";
   const page = /^\d{1,5}$/.test(params.page ?? "") ? Number(params.page) : 0;
-  const [data, categories] = await Promise.all([getInbox(status, page), getCategories()]);
-  const href = (s: string, p = 0) => `/admin/inbox?status=${s}&page=${p}`;
+  const provider = PROVIDERS.includes(params.provider as Provider) ? params.provider as Provider : undefined;
+  const by = CATEGORIZED_BY.includes(params.by as CategorizedBy) ? params.by as CategorizedBy : undefined;
+  const [data, categories] = await Promise.all([getInbox(status, page, { provider, by }), getCategories()]);
+  const href = (s: string, p = 0, next: { provider?: Provider; by?: CategorizedBy } = { provider, by }) =>
+    `/admin/inbox?${new URLSearchParams({ status: s, page: String(p), ...(next.provider && { provider: next.provider }), ...(next.by && { by: next.by }) })}`;
   return <>
     <PageHeader eyebrow="Private finance · automation" title="Import inbox"><ImportWiseButton /><ApplyRulesButton /><AiCategorizeButton /></PageHeader>
     <FinanceLinks current="inbox" />
@@ -31,6 +36,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
     </Panel></div>}
     <div className="mb-4 flex flex-wrap gap-2" aria-label="Inbox status">
       {["pending", "all", "posted", "transfer", "reviewed", "ignored"].map((s) => <Button key={s} asChild variant={status === s ? "default" : "outline"} size="sm"><Link href={href(s)}>{s === "pending" ? "Needs review" : s} {s !== "all" && `(${data.totals.find((r) => r.status === s)?.total ?? 0})`}</Link></Button>)}
+    </div>
+    <div className="mb-4 flex flex-wrap gap-2" aria-label="Inbox source">
+      {[undefined, ...PROVIDERS].map((p) => <Button key={p ?? "any"} asChild variant={provider === p ? "default" : "outline"} size="xs"><Link href={href(status, 0, { provider: p, by })}>{p ? PROVIDER_META[p].name : "Any source"}</Link></Button>)}
+    </div>
+    <div className="mb-4 flex flex-wrap gap-2" aria-label="Categorized by">
+      {[undefined, ...CATEGORIZED_BY].map((b) => <Button key={b ?? "any"} asChild variant={by === b ? "default" : "outline"} size="xs"><Link href={href(status, 0, { provider, by: b })}>{b ? `By ${BY_LABEL[b]}` : "Anyone"}</Link></Button>)}
     </div>
     {!data.entries.length ? <EmptyState title="Your inbox is clear">Import a Wise CSV or sync connected Binance and IBKR accounts. New activity will appear here.</EmptyState> : <Card className="mb-4 gap-0 overflow-hidden py-0"><Table>
       <TableHeader><TableRow><TableHead>Activity</TableHead><TableHead className="text-right">Native amount</TableHead><TableHead>Review</TableHead></TableRow></TableHeader>

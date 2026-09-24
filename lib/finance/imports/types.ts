@@ -5,7 +5,8 @@ export const ENTRY_KINDS = ["payment", "transfer", "reward", "dividend", "intere
 export type EntryKind = typeof ENTRY_KINDS[number];
 export const ENTRY_STATUSES = ["pending", "posted", "ignored", "transfer", "reviewed"] as const;
 export type EntryStatus = typeof ENTRY_STATUSES[number];
-export type CategorizedBy = "rule" | "ai" | "manual";
+export const CATEGORIZED_BY = ["ai", "rule", "manual"] as const;
+export type CategorizedBy = typeof CATEGORIZED_BY[number];
 /** The AI decision behind a pending entry's prefilled review, kept separately from its human-readable reason. */
 export type AiSuggestion = "post" | "transfer" | "investment" | "ignore";
 export const spotTradeSchema = z.object({

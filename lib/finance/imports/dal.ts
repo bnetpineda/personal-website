@@ -5,8 +5,8 @@ import { getDb } from "@/lib/db";
 import { categoryRules, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
 import { monthRange } from "../dates";
 import { earningsByCurrency, transferSuggestions } from "./review";
-import type { EntryStatus } from "./types";
-import type { ConnectionSnapshot } from "../connections/types";
+import type { CategorizedBy, EntryStatus } from "./types";
+import type { ConnectionSnapshot, Provider } from "../connections/types";
 import { holdingCosts } from "./holding-costs";
 import { readAllSpotFifo, readSpotFifo } from "./spot-fifo";
 
@@ -27,13 +27,16 @@ export async function getBinanceHoldingCosts(snapshot: ConnectionSnapshot | null
   return holdingCosts(snapshot, entries, jobs, prepared);
 }
 
-export async function getInbox(status: EntryStatus | "all", page: number) {
+export async function getInbox(status: EntryStatus | "all", page: number, filters: { provider?: Provider; by?: CategorizedBy } = {}) {
   await requireAdmin();
   const db = getDb();
-  const condition = status === "all" ? undefined : eq(importedEntries.status, status);
+  // Source and categorizer narrow both the list and the per-status counts.
+  const scope = and(filters.provider ? eq(importedEntries.provider, filters.provider) : undefined,
+    filters.by ? eq(importedEntries.categorizedBy, filters.by) : undefined);
+  const condition = and(scope, status === "all" ? undefined : eq(importedEntries.status, status));
   const [entries, totals, rules, candidates] = await Promise.all([
     db.select().from(importedEntries).where(condition).orderBy(desc(importedEntries.occurredOn), asc(importedEntries.id)).limit(50).offset(page * 50),
-    db.select({ status: importedEntries.status, total: count() }).from(importedEntries).groupBy(importedEntries.status),
+    db.select({ status: importedEntries.status, total: count() }).from(importedEntries).where(scope).groupBy(importedEntries.status),
     db.select().from(categoryRules).orderBy(desc(categoryRules.enabled), asc(categoryRules.contains)),
     db.select({ id: importedEntries.id, provider: importedEntries.provider, accountKey: importedEntries.accountKey,
       occurredOn: importedEntries.occurredOn, amount: importedEntries.amount, currency: importedEntries.currency,
