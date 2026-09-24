@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatPct, formatQty } from "@/lib/finance/format";
@@ -8,11 +9,17 @@ import { FormSheet } from "./form";
 import { useAdminUi } from "./shell";
 import { TokenAmount } from "./ui";
 
-export function BinanceCostDetails({ cost }: { cost: HoldingCost }) {
+/**
+ * Cost and P/L sheet for a Binance coin. With `children`, they become the trigger and its overlay
+ * covers the nearest positioned ancestor, so the whole table row / list item opens the sheet.
+ */
+export function BinanceCostDetails({ cost, children }: { cost: HoldingCost; children?: ReactNode }) {
   const { hidden } = useAdminUi().privacy;
   const estimate = cost.pnlEstimate;
   return <FormSheet title={cost.symbol} description="Purchase cost and estimated profit / loss."
-    trigger={<Button variant="link" size="sm" aria-label={`${cost.symbol} cost and P/L details`}>{cost.symbol}</Button>}>
+    trigger={children ? <button type="button" aria-label={`${cost.symbol} cost and P/L details`}
+      className="text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset">{children}</button> :
+      <Button variant="link" size="sm" aria-label={`${cost.symbol} cost and P/L details`}>{cost.symbol}</Button>}>
     <div className="group/shell flex flex-col gap-5" data-private={hidden}>
       {cost.reasons.length > 0 && <ul className="flex flex-col gap-2 text-sm text-muted-foreground">{cost.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
       {cost.status === "partial" && <p className="text-sm">Holdings totals skip this estimate until these gaps are closed.</p>}
