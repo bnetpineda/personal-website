@@ -9,6 +9,7 @@ import type { Holding } from "@/lib/db/schema";
 import { connectedHoldingMetrics, fxToPhp, isSmallHolding, type FxTable, type HoldingMetrics } from "@/lib/finance/calc";
 import { ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
 import { isConnectionStale, PROVIDER_META, type ConnectionView } from "@/lib/finance/connections/types";
+import { formatQty } from "@/lib/finance/format";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { BinanceCostDetails } from "./holding-cost-details";
 import { EditableRow, EditableTableRow, type RowActionsProps } from "./row-actions";
@@ -29,9 +30,11 @@ interface Row {
   title: ReactNode;
   /** Where it is held (account or platform). */
   meta: string | null;
-  value: ReactNode;
+  /** null for cash, where the value already says it all. */
+  quantity: string | null;
+  value: () => ReactNode;
   /** null for cash and positions without a cost. */
-  pnl: ReactNode;
+  pnl: (() => ReactNode) | null;
   pnlPct: number | null;
   /** Manual holdings only: tapping the row opens Buy / sell. */
   actions?: RowActionsProps;
@@ -49,8 +52,9 @@ function manualRow({ h, m, stale, actions }: ManualHoldingItem): Row {
     valuePhp: m.valuePhp,
     title: <>{h.name}{stale && <Badge variant="warning">Stale</Badge>}</>,
     meta: h.platform,
-    value: <Money value={m.valuePhp ?? m.value} currency={m.valuePhp == null ? h.currency : "PHP"} />,
-    pnl: cash ? null : <Money value={m.pnlPhp ?? m.pnl} currency={m.pnlPhp != null ? "PHP" : h.currency} signed tone />,
+    quantity: cash ? null : formatQty(h.quantity),
+    value: () => <Money value={m.valuePhp ?? m.value} currency={m.valuePhp == null ? h.currency : "PHP"} />,
+    pnl: cash ? null : () => <Money value={m.pnlPhp ?? m.pnl} currency={m.pnlPhp != null ? "PHP" : h.currency} signed tone />,
     pnlPct: cash ? null : m.pnlPct,
     actions,
   };
@@ -65,15 +69,17 @@ function syncedRows(connection: ConnectionView, fx: FxTable, costs: Map<string, 
     const cost = provider === "binance" ? costs.get(p.symbol) : undefined;
     const estimate = cost?.pnlEstimate;
     const metrics = connectedHoldingMetrics(p, fx);
+    const pnl = metrics.pnlPhp ?? metrics.pnl;
     return {
       key: `${provider}:${p.id}`,
       assetClass: p.assetClass,
       valuePhp: metrics.valuePhp,
       title: cost ? p.symbol : p.name,
       meta: PROVIDER_META[provider].name,
-      value: p.marketValue == null ? dash : <Money value={metrics.valuePhp ?? p.marketValue} currency={metrics.valuePhp == null ? p.currency : "PHP"} />,
-      pnl: estimate ? (usdRate == null ? <TokenAmount value={estimate.pnl} currency="USDT" signed tone /> : <Money value={estimate.pnlUsd * usdRate} signed tone />) :
-        !cash && metrics.pnl != null ? <Money value={metrics.pnlPhp ?? metrics.pnl} currency={metrics.pnlPhp == null ? p.currency : "PHP"} signed tone /> : null,
+      quantity: cash ? null : formatQty(p.quantity),
+      value: () => p.marketValue == null ? dash : <Money value={metrics.valuePhp ?? p.marketValue} currency={metrics.valuePhp == null ? p.currency : "PHP"} />,
+      pnl: estimate ? () => (usdRate == null ? <TokenAmount value={estimate.pnl} currency="USDT" signed tone /> : <Money value={estimate.pnlUsd * usdRate} signed tone />) :
+        !cash && pnl != null ? () => <Money value={pnl} currency={metrics.pnlPhp == null ? p.currency : "PHP"} signed tone /> : null,
       pnlPct: estimate ? estimate.pnlPct : cash ? null : metrics.pnlPct,
       cost,
     };
@@ -114,11 +120,13 @@ export function HoldingsTable({ manual, connections, fx, filter, showSmall, bina
   </span>;
   const lead = (row: Row) => row.cost ? <BinanceCostDetails cost={row.cost}>{summary(row)}</BinanceCostDetails> : summary(row);
   const cells = (row: Row) => <>
-    <TableCell className="text-right font-mono">{row.value}</TableCell>
-    <TableCell className="text-right font-mono">{row.pnl ?? dash}</TableCell>
+    <TableCell className="text-right font-mono">{row.quantity == null ? dash : <span className="group-data-[private=true]/shell:blur-sm">{row.quantity}</span>}</TableCell>
+    <TableCell className="text-right font-mono">{row.value()}</TableCell>
+    <TableCell className="text-right font-mono">{row.pnl ? row.pnl() : dash}</TableCell>
   </>;
+  const description = (row: Row) => <>{row.quantity && <span className="group-data-[private=true]/shell:blur-sm">{row.quantity}</span>}{row.quantity && row.meta && " · "}{row.meta}</>;
   const aside = (row: Row) => <span className="flex flex-col items-end font-mono text-sm">
-    {row.value}
+    {row.value()}
     {row.pnl != null && <span className="text-xs"><Pct value={row.pnlPct} tone /></span>}
   </span>;
 
@@ -130,7 +138,7 @@ export function HoldingsTable({ manual, connections, fx, filter, showSmall, bina
           <EditableRow key={row.key} {...row.actions} media={<ItemMedia><Swatch color={ASSET_CLASS_META[row.assetClass].color} /></ItemMedia>} aside={aside(row)}>
             <ItemContent>
               <ItemTitle>{row.title}</ItemTitle>
-              {row.meta && <ItemDescription>{row.meta}</ItemDescription>}
+              {(row.meta || row.quantity) && <ItemDescription>{description(row)}</ItemDescription>}
             </ItemContent>
           </EditableRow>
         ) : (
@@ -138,7 +146,7 @@ export function HoldingsTable({ manual, connections, fx, filter, showSmall, bina
             <ItemMedia><Swatch color={ASSET_CLASS_META[row.assetClass].color} /></ItemMedia>
             <ItemContent className="min-w-0">
               <ItemTitle>{row.cost ? <BinanceCostDetails cost={row.cost}>{row.title}</BinanceCostDetails> : row.title}</ItemTitle>
-              {row.meta && <ItemDescription>{row.meta}</ItemDescription>}
+              {(row.meta || row.quantity) && <ItemDescription>{description(row)}</ItemDescription>}
             </ItemContent>
             {aside(row)}
           </Item>
@@ -150,6 +158,7 @@ export function HoldingsTable({ manual, connections, fx, filter, showSmall, bina
         <TableHeader>
           <TableRow>
             <TableHead>Asset</TableHead>
+            <TableHead className="text-right">Quantity</TableHead>
             <TableHead className="text-right">Value</TableHead>
             <TableHead className="text-right">P/L</TableHead>
             <TableHead><span className="sr-only">Actions</span></TableHead>
