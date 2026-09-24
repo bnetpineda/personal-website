@@ -12,7 +12,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Category, ImportedEntry } from "@/lib/db/schema";
 import { PROVIDER_META } from "@/lib/finance/connections/types";
-import { canPost, transferEligible } from "@/lib/finance/imports/review";
+import { suggestedReview } from "@/lib/finance/imports/ai-review";
+import { canPost, transferEligible, type TransferCandidate } from "@/lib/finance/imports/review";
 import type { FormState } from "@/lib/finance/schemas";
 import type { WiseBalancePreview } from "@/lib/finance/imports/wise-balances";
 import { importWiseStatement, matchImportedTransfer, previewWiseImport, reopenImportedEntry, reviewImportedEntry,
@@ -96,7 +97,7 @@ function WiseBalanceTarget({ balance, disabled }: { balance: WiseBalancePreview;
 function ReviewForm({ entry, categories }: { entry: ImportedEntry; categories: Category[] }) {
   const { state, pending, onSubmit, formKey } = useFormAction(reviewImportedEntry);
   const postable = canPost(entry);
-  const [decision, setDecision] = useState(postable && entry.kind !== "transfer" ? "post" : "reviewed");
+  const [decision, setDecision] = useState<string>(suggestedReview(entry));
   const options = categories.filter((c) => !c.archived && c.kind === (entry.amount > 0 ? "income" : "expense"));
   return <form key={formKey} onSubmit={onSubmit} className="flex flex-col gap-6">
     <input type="hidden" name="id" value={entry.id} />
@@ -123,7 +124,7 @@ function ReviewForm({ entry, categories }: { entry: ImportedEntry; categories: C
     <FormFooter state={state} pending={pending}>Save review</FormFooter>
   </form>;
 }
-function TransferForm({ entry, candidates, selected }: { entry: ImportedEntry; candidates: ImportedEntry[]; selected?: string }) {
+function TransferForm({ entry, candidates, selected }: { entry: TransferCandidate; candidates: TransferCandidate[]; selected?: string }) {
   const { state, pending, onSubmit, formKey } = useFormAction(matchImportedTransfer);
   const options = candidates.filter((c) => transferEligible(entry, c));
   return <form key={formKey} onSubmit={onSubmit} className="flex flex-col gap-6">
@@ -138,7 +139,7 @@ function TransferForm({ entry, candidates, selected }: { entry: ImportedEntry; c
     <FormFooter state={state} pending={pending}>Confirm transfer</FormFooter>
   </form>;
 }
-export function TransferButton({ entry, candidates, selected }: { entry: ImportedEntry; candidates: ImportedEntry[]; selected?: string }) {
+export function TransferButton({ entry, candidates, selected }: { entry: TransferCandidate; candidates: TransferCandidate[]; selected?: string }) {
   return <FormSheet trigger={<Button variant="outline" size="sm">Link transfer</Button>} title="Link your transfer" description={entry.description}>
     <TransferForm entry={entry} candidates={candidates} selected={selected} /></FormSheet>;
 }

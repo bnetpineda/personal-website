@@ -135,7 +135,7 @@ export interface EntrySuggestion {
 export async function getEntrySuggestions(limit = 150): Promise<EntrySuggestion[]> {
   await requireAdmin();
   const key = sql`lower(${cashFlows.description})`;
-  const rows = await getDb()
+  const distinct = getDb()
     .selectDistinctOn([cashFlows.kind, key], {
       kind: cashFlows.kind,
       description: cashFlows.description,
@@ -146,11 +146,18 @@ export async function getEntrySuggestions(limit = 150): Promise<EntrySuggestion[
     .from(cashFlows)
     .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
     .where(eq(categories.archived, false))
-    .orderBy(cashFlows.kind, key, desc(cashFlows.createdAt));
-  return rows
-    .sort((a, b) => b.lastUsed.getTime() - a.lastUsed.getTime())
-    .slice(0, limit)
-    .map((r) => ({ kind: r.kind, description: r.description, categoryId: r.categoryId, account: r.account }));
+    .orderBy(cashFlows.kind, key, desc(cashFlows.createdAt))
+    .as("distinct_entries");
+  return getDb()
+    .select({
+      kind: distinct.kind,
+      description: distinct.description,
+      categoryId: distinct.categoryId,
+      account: distinct.account,
+    })
+    .from(distinct)
+    .orderBy(desc(distinct.lastUsed))
+    .limit(limit);
 }
 
 export interface LastPayment {

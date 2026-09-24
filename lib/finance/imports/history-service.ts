@@ -11,6 +11,7 @@ import { identifier } from "./provider-parsers";
 import { fetchHistory } from "./providers";
 import { ingestQuery } from "./service";
 import { pairSchema, parseSpotPage } from "./spot";
+import { readSpotFifo } from "./spot-fifo";
 import { ImportError } from "./types";
 import { heldUsdtPairs } from "./holding-costs";
 
@@ -120,6 +121,11 @@ export async function advanceHistory(id: string, io: ProviderIO = defaultIO, loa
         where id = ${id}::uuid and lease = ${lease}::uuid and enabled and exists(select 1 from account_connections where provider = 'binance' and enabled and encrypted_credentials = ${row.encryptedCredentials}) returning id`),
     ]);
     if (!saved.rows[0]?.active || !updated.rows.length) throw new ImportError("The connection or import changed. Retry from the saved cursor.");
+    try {
+      await readSpotFifo(job.accountKey, null);
+    } catch (error) {
+      console.error("[admin] spot fifo refresh failed", error);
+    }
     return { ok: true, message: `Saved ${Number(saved.rows[0].inserted)} new history entries.${complete ? " This stream is caught up to the available data." : " More history is ready to import."}`, more: !complete };
   } catch (error) {
     const message = error instanceof ImportError || error instanceof ConnectionError ? error.message : "History import failed. Check provider access and report data, then retry. Saved progress was kept.";

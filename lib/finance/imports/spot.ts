@@ -30,8 +30,11 @@ export function parseSpotPage(body: unknown, pair: SpotPair, accountKey: string,
   return { entries: uniqueEntries(entries), cursor: rows.length ? String(previous + BigInt(1)) : fromId, complete: rows.length < 1000 };
 }
 
+export type SpotTradeRow = { accountKey: string; externalId: string; status: string; trade: SpotTrade | null };
+export type SpotFifoGroup = ReturnType<typeof spotFifo>[number];
+
 /** Per-pair estimate only. Unknown acquisition costs never become zero-cost lots. */
-export function spotFifo(rows: { accountKey: string; externalId: string; status: string; trade: SpotTrade | null }[]) {
+export function spotFifo(rows: SpotTradeRow[]): { accountKey: string; symbol: string; baseAsset: string; quoteAsset: string; bought: number; sold: number; remaining: number; cost: number; realized: number; unmatched: number; externalFees: number }[] {
   const groups = new Map<string, { accountKey: string; symbol: string; baseAsset: string; quoteAsset: string;
     bought: number; sold: number; remaining: number; cost: number; realized: number; unmatched: number; externalFees: number; lots: { qty: number; cost: number }[] }>();
   for (const e of [...rows].filter((e) => e.trade && e.status !== "ignored").sort((a, b) =>
@@ -61,4 +64,20 @@ export function spotFifo(rows: { accountKey: string; externalId: string; status:
     groups.set(key, g);
   }
   return [...groups.values()].map(({ lots, ...g }) => ({ ...g, remaining: lots.reduce((sum, l) => sum + l.qty, 0), cost: lots.reduce((sum, l) => sum + l.cost, 0) }));
+}
+
+/** FIFO for one window, plus the coins whose ignored or cross-pair activity the estimate must mention. */
+export function summarizeSpotTrades(rows: readonly SpotTradeRow[], asOf: string | null) {
+  const inWindow = rows.filter((entry) => entry.trade && (asOf == null || entry.trade.executedAt <= asOf));
+  const ignoredBases = new Set<string>();
+  const paymentAssets = new Set<string>();
+  for (const entry of inWindow) {
+    const trade = entry.trade!;
+    if (entry.status === "ignored") ignoredBases.add(trade.baseAsset);
+    else {
+      paymentAssets.add(trade.quoteAsset);
+      if (trade.commission > 0 && trade.commissionAsset !== trade.baseAsset && trade.commissionAsset !== trade.quoteAsset) paymentAssets.add(trade.commissionAsset);
+    }
+  }
+  return { fifo: spotFifo(inWindow), ignoredBases: [...ignoredBases].sort(), paymentAssets: [...paymentAssets].sort() };
 }

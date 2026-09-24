@@ -136,13 +136,17 @@ export function AdminHeader({ notifications = 0 }: { notifications?: number }) {
           {ADMIN_NAV.filter((item) => item.tab).map(({ href, label, icon: Icon }) => {
             const active = isActivePath(pathname, href);
             return (
-              <Button key={href} asChild size="sm" variant={active ? "default" : "ghost"}>
-                <Link href={href} aria-current={active ? "page" : undefined} aria-label={label}>
-                  <Icon />
-                  {/* Labels don't fit next to search and Add between lg and xl. */}
-                  <span className="sr-only">{label}</span>
-                </Link>
-              </Button>
+              <Tooltip key={href}>
+                <TooltipTrigger asChild>
+                  <Button asChild size="sm" variant={active ? "default" : "ghost"}>
+                    <Link href={href} aria-current={active ? "page" : undefined} aria-label={label}>
+                      <Icon />
+                      <span className="hidden xl:inline">{label}</span>
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="xl:hidden">{label}</TooltipContent>
+              </Tooltip>
             );
           })}
         </nav>
@@ -179,11 +183,22 @@ export function AdminHeader({ notifications = 0 }: { notifications?: number }) {
             <TooltipContent>Settings</TooltipContent>
           </Tooltip>
           <PrivacyToggle />
-          <Tooltip><TooltipTrigger asChild><Button asChild variant={isActivePath(pathname, "/admin/notifications") ? "default" : "ghost"} size="icon">
-            <Link href="/admin/notifications" aria-label={`Notifications${notifications ? `, ${notifications} active` : ""}`}>
-              <Bell />{notifications > 0 && <span className="sr-only">{notifications} active</span>}
-              {notifications > 0 && <span aria-hidden="true" className="text-xs font-bold">{notifications}</span>}
-            </Link></Button></TooltipTrigger><TooltipContent>Notifications{notifications ? ` (${notifications})` : ""}</TooltipContent></Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant={isActivePath(pathname, "/admin/notifications") ? "default" : "ghost"} size="icon" className="relative">
+                <Link href="/admin/notifications" aria-label={`Notifications${notifications ? `, ${notifications} active` : ""}`}>
+                  <Bell />
+                  {notifications > 0 && <span className="sr-only">{notifications} active</span>}
+                  {notifications > 0 && (
+                    <span aria-hidden="true" className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-white">
+                      {notifications}
+                    </span>
+                  )}
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Notifications{notifications ? ` (${notifications})` : ""}</TooltipContent>
+          </Tooltip>
           {/* On phones these two live in the command menu to keep the header on one line. */}
           <ThemeToggle className="hidden sm:inline-flex" />
           <form action={logout} className="hidden sm:block">

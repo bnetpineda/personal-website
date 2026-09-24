@@ -13,6 +13,18 @@ export function fxToPhp(fx: FxTable, currency: string): number | null {
   return fx[currency] ?? null;
 }
 
+/** PHP sum that skips currencies with no rate, instead of treating them as zero. */
+export function sumInPhp(fx: FxTable, parts: { amount: number; currency: string }[]): { total: number; missing: string[] } {
+  const missing = new Set<string>();
+  let total = 0;
+  for (const part of parts) {
+    const rate = fxToPhp(fx, part.currency);
+    if (rate == null) missing.add(part.currency);
+    else total += part.amount * rate;
+  }
+  return { total, missing: [...missing].sort() };
+}
+
 /** Strips float noise (0.1 + 0.2) while keeping magnitude — safe for tiny token prices. */
 export function clean(n: number): number {
   return Number(n.toPrecision(15));

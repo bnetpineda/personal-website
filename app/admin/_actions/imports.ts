@@ -139,6 +139,6 @@ export async function runAiCategorization(): Promise<FormState> {
     const moved = r.posted + r.transfers + r.investment + r.ignored;
     const linked = r.linked ? ` Linked ${r.linked} matching transfer ${r.linked === 1 ? "pair" : "pairs"}.` : "";
     if (!moved && !r.held && !r.unsure) return { ok: true, message: linked.trim() || "Nothing is waiting for AI review. Entries covered by suggest-only rules stay with you." };
-    return { ok: true, message: `AI reviewed ${moved + r.held + r.unsure} entries: ${r.posted} posted, ${r.transfers} transfers, ${r.investment} investment, ${r.ignored} ignored.${linked}${r.held ? ` ${r.held} possible duplicates or missing exchange rates stay in the inbox.` : ""}${r.unsure ? ` ${r.unsure} left for you.` : ""}` };
+    return { ok: true, message: `AI reviewed ${moved + r.held + r.unsure} entries: ${r.posted} posted, ${r.transfers} transfers, ${r.investment} investment, ${r.ignored} ignored.${linked}${r.held ? ` ${r.held} possible duplicates or missing exchange rates stay in the inbox.` : ""}${r.unsure ? ` ${r.unsure} left in the inbox with a suggestion.` : ""}` };
   } catch (error) { return message(error); }
 }

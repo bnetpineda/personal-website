@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConnectedPosition, ConnectionSnapshot } from "../connections/types";
 import { binanceHoldingRows, heldUsdtPairs, holdingCosts } from "./holding-costs";
+import { summarizeSpotTrades } from "./spot";
 import type { SpotTrade } from "./types";
 
 const position = (symbol = "BTC", quantity = 1, id = `spot:${symbol}`): ConnectedPosition => ({
@@ -16,8 +17,12 @@ describe("holding trade costs", () => {
   test("uses remaining FIFO lots and quote fees, without changing provider balances or claiming USD basis", () => {
     const s = snapshot([position("BTC", 1.5)]);
     const before = JSON.stringify(s);
-    const [cost] = holdingCosts(s, [entry(1), entry(2, { quoteQuantity: 200 }), entry(3, { side: "SELL", quantity: 0.5, quoteQuantity: 75 })], [job]);
+    const rows = [entry(1), entry(2, { quoteQuantity: 200 }), entry(3, { side: "SELL", quantity: 0.5, quoteQuantity: 75 })];
+    const [cost] = holdingCosts(s, rows, [job]);
     expect(cost.status).toBe("estimate");
+    const summary = summarizeSpotTrades(rows, s.asOf);
+    const prepared = holdingCosts(s, [], [job], { fifo: summary.fifo, ignoredBases: new Set(summary.ignoredBases), paymentAssets: new Set(summary.paymentAssets) })[0];
+    expect(prepared).toEqual(cost);
     expect(cost.trackedQuantity).toBe(1.5);
     expect(cost.lines[0]).toMatchObject({ cost: 251.5, currency: "USDT" });
     expect(cost.lines[0].averageCost).toBeCloseTo(251.5 / 1.5);

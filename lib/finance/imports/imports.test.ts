@@ -101,8 +101,9 @@ describe("review and accounting", () => {
     const row = (v: Partial<ImportedEntry>) => imported({ provider: "ibkr", ...v });
     const totals = earningsByCurrency([row({ kind: "transfer", status: "transfer", amount: 100 }), row({ kind: "transfer", amount: 50 }),
       row({ kind: "dividend", amount: 12 }), row({ kind: "fee", amount: -1 }), row({ kind: "trade", amount: 110, realizedPnl: 9 }),
-      row({ kind: "dividend", status: "ignored", amount: 500 })]);
-    expect(totals[0]).toMatchObject({ contributions: 100, dividends: 12, fees: 1, realized: 9 });
-    expect(earningsByCurrency([row({ provider: "binance", currency: "BTC", kind: "reward", amount: 0.001 })])[0].realized).toBeNull();
+      row({ kind: "dividend", status: "ignored", amount: 500 }), row({ kind: "dividend", status: "posted", amount: 40 })]);
+    expect(totals.postedCash).toBe(1);
+    expect(totals.rows[0]).toMatchObject({ contributions: 100, dividends: 12, fees: 1, realized: 9 });
+    expect(earningsByCurrency([row({ provider: "binance", currency: "BTC", kind: "reward", amount: 0.001 })]).rows[0].realized).toBeNull();
   });
 });

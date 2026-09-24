@@ -1,6 +1,6 @@
 import { removeBinanceEarnReceipts } from "../connections/binance-positions";
 import type { ConnectedPosition, ConnectionSnapshot } from "../connections/types";
-import { spotFifo } from "./spot";
+import { spotFifo, type SpotFifoGroup } from "./spot";
 import type { SpotTrade } from "./types";
 
 type CostEntry = { accountKey: string; externalId: string; occurredOn: string; status: string; kind: string; currency: string; trade: SpotTrade | null };
@@ -73,15 +73,21 @@ export function heldUsdtPairs(positions: readonly ConnectedPosition[], symbols: 
   return { pairs, skipped: [...assets.keys()].filter((asset) => !pairs.includes(`${asset}USDT`)) };
 }
 
+export interface PreparedSpotCosts {
+  fifo: SpotFifoGroup[];
+  ignoredBases: ReadonlySet<string>;
+  paymentAssets: ReadonlySet<string>;
+}
+
 /** Trade-only evidence, never a zero basis for rewards, transfers or unrecorded purchases. */
-export function holdingCosts(snapshot: ConnectionSnapshot | null, entries: readonly CostEntry[], jobs: readonly CostJob[]): HoldingCost[] {
+export function holdingCosts(snapshot: ConnectionSnapshot | null, entries: readonly CostEntry[], jobs: readonly CostJob[], prepared?: PreparedSpotCosts): HoldingCost[] {
   if (!snapshot) return [];
   const positions = removeBinanceEarnReceipts(snapshot.positions);
   const assets = [...new Set(positions.filter((p) => p.quantity > 0).map((p) => p.symbol))];
   // Legacy snapshots have no identity. Do not guess which historical account they belong to.
   const rows = snapshot.accountKey ? entries.filter((e) => e.accountKey === snapshot.accountKey &&
     (e.trade ? e.trade.executedAt <= snapshot.asOf : e.occurredOn <= snapshot.asOf.slice(0, 10))) : [];
-  const fifo = spotFifo([...rows]);
+  const fifo = prepared?.fifo ?? spotFifo([...rows]);
   return assets.map((symbol): HoldingCost => {
     const wallets = positions.filter((p) => p.symbol === symbol);
     const heldQuantity = wallets.reduce((sum, p) => sum + p.quantity, 0);
@@ -109,11 +115,12 @@ export function holdingCosts(snapshot: ConnectionSnapshot | null, entries: reado
     if (rows.some((e) => e.status !== "ignored" && !e.trade && e.currency === symbol && (e.kind !== "fee" || !e.externalId.startsWith("spot:")))) {
       reasons.push("Imported rewards or transfers also affect this coin. Their original cost is not established by Spot fills.");
     }
-    if (rows.some((e) => e.status !== "ignored" && e.trade && (e.trade.quoteAsset === symbol ||
-      (e.trade.commission > 0 && e.trade.commissionAsset === symbol && e.trade.baseAsset !== symbol)))) {
-      reasons.push("This coin was also used as payment or fees in another trading pair.");
+    const usedAsPayment = prepared ? prepared.paymentAssets.has(symbol) : rows.some((e) => e.status !== "ignored" && e.trade && (e.trade.quoteAsset === symbol ||
+      (e.trade.commission > 0 && e.trade.commissionAsset === symbol && e.trade.baseAsset !== symbol)));
+    if (usedAsPayment) reasons.push("This coin was also used as payment or fees in another trading pair.");
+    if (prepared ? prepared.ignoredBases.has(symbol) : rows.some((e) => e.status === "ignored" && e.trade?.baseAsset === symbol)) {
+      reasons.push("Ignored trades are excluded from this estimate.");
     }
-    if (rows.some((e) => e.status === "ignored" && e.trade?.baseAsset === symbol)) reasons.push("Ignored trades are excluded from this estimate.");
     return { symbol, heldQuantity, trackedQuantity, positionCount: wallets.length, lines, reasons,
       pnlEstimate: estimatePnl(snapshot, wallets, lines),
       status: !lines.length ? "unavailable" : reasons.length ? "partial" : "estimate" };

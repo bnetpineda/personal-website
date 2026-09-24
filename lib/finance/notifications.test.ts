@@ -11,7 +11,8 @@ test("notifications use stable episode keys and honor thresholds and due dates",
     debts: [{ id: "card", name: "Card", dueDay: 25, lastPaidOn: "2026-09-20" }] };
   const alerts = buildNotifications(input, now);
   expect(alerts.map((a) => a.key)).toEqual(["sync:ibkr:never", "expiry:ibkr:2026-09-30", "budget:2026-09:1:85", "bill:rent:2026-09-27"]);
-  expect(buildNotifications({ ...input, connections: [{ ...connection, lastAttemptAt: new Date() }] }, now)[0].key).toBe(alerts[0].key);
+  const restarted = { ...connection, lastAttemptAt: new Date() };
+  expect(buildNotifications({ ...input, connections: [restarted] }, now)[0].key).toBe(alerts[0].key);
   const exceeded = buildNotifications({ ...input, budgets: [{ id: 1, name: "Food", budget: 100, spent: 100 }] }, now);
   expect(exceeded.some((a) => a.key === "budget:2026-09:1:100")).toBe(true);
 });

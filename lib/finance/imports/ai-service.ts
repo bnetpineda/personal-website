@@ -6,7 +6,7 @@ import { cashFlows, categories, importedEntries, type ImportedEntry } from "@/li
 import { env } from "@/lib/env";
 import { fxToPhp } from "../calc";
 import { ensureFx } from "../service";
-import { AI_BATCH_SIZE, aiOutputSchema, allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, evaluationDecision, ledgerDecision, validateDecisions,
+import { AI_BATCH_SIZE, aiOutputSchema, allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, confidentChoice, deferUnmatchedBrokerTransfers, evaluationDecision, ledgerDecision, validateDecisions,
   type AiDecision, type AiExample } from "./ai-review";
 import { transferSuggestions } from "./review";
 import { ImportError } from "./types";
@@ -69,8 +69,8 @@ export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model
   const batches = Array.from({ length: Math.ceil(pending.length / AI_BATCH_SIZE) }, (_, i) => pending.slice(i * AI_BATCH_SIZE, (i + 1) * AI_BATCH_SIZE));
   const settled = await Promise.allSettled(batches.map(async (batch) => {
     try {
-      const { decisions, rejected } = await decide(classifier, batch, options, examples);
-      return { applied: await applyDecisions(decisions), rejected: rejected.length };
+      const { decisions, suggestions, rejected } = await decide(classifier, batch, options, examples);
+      return { applied: await applyDecisions(decisions), suggested: await suggestDecisions(suggestions), rejected: rejected.length };
     } catch (error) {
       // Release the claim so the next sync or cron retries this batch (and a persistent failure surfaces as a notification).
       await db.update(e).set({ aiAttemptedAt: null }).where(and(inArray(e.id, batch.map((entry) => entry.id)), eq(e.status, "pending")));
@@ -79,10 +79,10 @@ export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model
   }));
   for (const outcome of settled) {
     if (outcome.status !== "fulfilled") continue;
-    const { applied, rejected } = outcome.value;
+    const { applied, suggested, rejected } = outcome.value;
     result.posted += applied.posted; result.held += applied.held;
     result.transfers += applied.transfers; result.investment += applied.investment; result.ignored += applied.ignored;
-    result.unsure += rejected + applied.stale;
+    result.unsure += rejected + applied.stale + suggested.kept + suggested.stale;
   }
   const failed = settled.find((outcome) => outcome.status === "rejected");
   if (failed) throw failed.reason;
@@ -146,11 +146,20 @@ export async function categorizeQuietly(): Promise<AiRunResult | { error: string
 
 async function decide(classifier: Classifier, batch: ImportedEntry[], options: typeof categories.$inferSelect[], examples: AiExample[]) {
   try {
-    if (classifier.kind === "evaluation") return validateDecisions(batch, options, { decisions: await evaluateEach(classifier.model, batch, options, examples) });
+    if (classifier.kind === "evaluation") {
+      const scored = await evaluateEach(classifier.model, batch, options, examples);
+      const validated = validateDecisions(batch, options, { decisions: scored.map((item) => item.output) });
+      const confident = new Map(scored.map((item) => [item.output.ref, item.confident]));
+      const refOf = new Map(batch.map((entry, index) => [entry.id, `e${index + 1}`]));
+      const confidentDecisions = validated.decisions.filter((decision) => confident.get(refOf.get(decision.id)!) !== false);
+      const unsure = validated.decisions.filter((decision) => confident.get(refOf.get(decision.id)!) === false);
+      return { ...deferUnmatchedBrokerTransfers(batch, confidentDecisions, unsure), rejected: validated.rejected };
+    }
     const { instructions, prompt } = buildCategorizePrompt(batch, options, examples);
     const { output } = await generateText({ model: classifier.model, instructions, prompt, temperature: 0, timeout: 60_000, maxRetries: 1,
       output: Output.object({ schema: aiOutputSchema }) });
-    return validateDecisions(batch, options, output);
+    const validated = validateDecisions(batch, options, output);
+    return { ...deferUnmatchedBrokerTransfers(batch, validated.decisions, []), rejected: validated.rejected };
   } catch (error) {
     console.error("AI categorization failed", error);
     throw new ImportError("AI categorization is unavailable right now. Entries were left in the inbox; try again later.");
@@ -215,9 +224,26 @@ async function applyDecisions(decisions: AiDecision[]) {
   return counts;
 }
 
+/** Writes Jev's pick onto a pending row without posting it or moving it out of the inbox. */
+async function suggestDecisions(decisions: AiDecision[]) {
+  if (!decisions.length) return { kept: 0, stale: 0 };
+  const payload = decisions.map((decision) => ({ id: decision.id, decision: decision.decision, category_id: decision.decision === "post" ? decision.categoryId : null, reason: decision.reason }));
+  const result = await getDb().execute(sql`
+    with instructions as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(id uuid, decision text, category_id integer, reason text))
+    update imported_entries e set category_id = case when i.decision = 'post' then i.category_id else null end,
+      categorized_by = 'ai', ai_reason = i.reason, updated_at = now()
+    from instructions i where e.id = i.id and e.status = 'pending'
+      and ((i.decision = 'post' and exists (select 1 from categories c where c.id = i.category_id and not c.archived
+          and c.kind::text = case when e.amount > 0 then 'income' else 'expense' end))
+        or (i.decision = 'transfer' and e.kind in ('payment', 'transfer', 'other'))
+        or i.decision in ('investment', 'ignore'))
+    returning e.id`);
+  return { kept: result.rows.length, stale: decisions.length - result.rows.length };
+}
+
 /** Evaluation models take one state per call: ask every entry its own question, a few at a time. */
 async function evaluateEach(model: Experimental_EvaluationModel, batch: ImportedEntry[], options: typeof categories.$inferSelect[], examples: AiExample[]) {
-  const decisions: ReturnType<typeof evaluationDecision>[] = [];
+  const decisions: { output: ReturnType<typeof evaluationDecision>; confident: boolean }[] = [];
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(8, batch.length) }, async () => {
     while (next < batch.length) {
@@ -226,7 +252,7 @@ async function evaluateEach(model: Experimental_EvaluationModel, batch: Imported
       const { answers } = await experimental_evaluate({ model, state, maxRetries: 1, abortSignal: AbortSignal.timeout(30_000),
         questions: { decision: { type: "choice", instructions, criteria } } });
       const choice = String(answers.decision.choice);
-      decisions.push(evaluationDecision(`e${index + 1}`, choice, criteria, answers.decision.probabilities?.[choice]));
+      decisions.push({ output: evaluationDecision(`e${index + 1}`, choice, criteria, answers.decision.probabilities?.[choice]), confident: confidentChoice(choice, answers.decision.probabilities) });
     }
   }));
   return decisions;

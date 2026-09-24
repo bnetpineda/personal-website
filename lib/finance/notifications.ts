@@ -4,7 +4,7 @@ import { daysBetween, nextDueDate, todayManila } from "./dates";
 
 export interface FinanceNotification { key: string; title: string; detail: string; href: string; severity: "warning" | "destructive" }
 export function buildNotifications(input: {
-  connections: ConnectionView[];
+  connections: { provider: ConnectionView["provider"]; enabled: boolean; error: string | null; lastSyncedAt: Date | null; historyError: string | null; historySyncedAt: Date | null; credentialsExpireOn: string | null; snapshot: { asOf: string } | null }[];
   budgets: { id: number; name: string; budget: number; spent: number }[];
   bills: { id: string; description: string; nextOn: string | null }[];
   debts: { id: string; name: string; dueDay: number | null; lastPaidOn: string | null }[];

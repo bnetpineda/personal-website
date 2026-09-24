@@ -22,7 +22,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   return <>
     <PageHeader eyebrow="Private finance · automation" title="Import inbox"><ImportWiseButton /><ApplyRulesButton /><AiCategorizeButton /></PageHeader>
     <FinanceLinks current="inbox" />
-    <p className="mb-6 text-sm text-muted-foreground">Your category rules run first, then AI categorizes the rest after each sync and import: spending and income go to Transactions, and investment activity and transfers between your own accounts stay out of your budget. Anything it cannot place stays here. Pending entries do not affect budgets. Wise closing balances update Holdings only when selected in the import preview.</p>
+    <p className="mb-6 text-sm text-muted-foreground">Your category rules run first, then AI categorizes the rest after each sync and import: spending and income go to Transactions, and investment activity and transfers between your own accounts stay out of your budget. Anything it cannot place, or is not sure about, stays here with its suggestion filled in. Pending entries do not affect budgets. Wise closing balances update Holdings only when selected in the import preview.</p>
     {data.suggestions.length > 0 && <div className="mb-6"><Panel title="Possible transfers between your accounts">
       <div className="flex flex-col gap-4">{data.suggestions.slice(0, 5).map(([a, b]) => <div key={a.id} className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm">{PROVIDER_META[a.provider].name} → {PROVIDER_META[b.provider].name} · {a.occurredOn} · <NativeAmount value={Math.abs(a.amount)} currency={a.currency} crypto={a.provider === "binance"} /></p>

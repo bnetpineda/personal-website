@@ -2,9 +2,8 @@ import "server-only";
 import { and, eq, gt, gte, isNull, lt, max, min, ne, or, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { cashFlows, categories, importedEntries, liabilities, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
+import { accountConnections, cashFlows, categories, importedEntries, liabilities, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
 import { env } from "@/lib/env";
-import { loadConnectionViews } from "./connections/service";
 import { currentMonth, monthRange } from "./dates";
 import { buildNotifications } from "./notifications";
 
@@ -13,7 +12,12 @@ export async function getNotifications() {
   const db = getDb(), { start, end } = monthRange(currentMonth());
   const e = importedEntries;
   const [connections, budgets, bills, debts, dismissed, aiBacklog] = await Promise.all([
-    loadConnectionViews(),
+    db.select({
+      provider: accountConnections.provider, enabled: accountConnections.enabled, lastSyncedAt: accountConnections.lastSyncedAt,
+      error: accountConnections.error, credentialsExpireOn: accountConnections.credentialsExpireOn,
+      historySyncedAt: accountConnections.historySyncedAt, historyError: accountConnections.historyError,
+      asOf: sql<string | null>`${accountConnections.snapshot}->>'asOf'`,
+    }).from(accountConnections),
     db.select({ id: categories.id, name: categories.name, budget: categories.monthlyBudget,
       spent: sql<number>`coalesce(sum(${cashFlows.amountPhp}), 0)`.mapWith(Number) }).from(categories)
       .leftJoin(cashFlows, and(eq(cashFlows.categoryId, categories.id), eq(cashFlows.kind, "expense"), gte(cashFlows.occurredOn, start), lt(cashFlows.occurredOn, end)))
@@ -30,6 +34,6 @@ export async function getNotifications() {
       : Promise.resolve(null),
   ]);
   const keys = new Set(dismissed.map((d) => d.key));
-  return buildNotifications({ connections, budgets: budgets.map((b) => ({ ...b, budget: b.budget ?? 0 })), bills, debts, aiBacklog })
+  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgets.map((b) => ({ ...b, budget: b.budget ?? 0 })), bills, debts, aiBacklog })
     .map((alert) => ({ ...alert, dismissed: keys.has(alert.key) }));
 }

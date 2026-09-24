@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { getAccounts, getCategories, getFx, getRecurring, type RecurringRow } from "@/lib/dal";
-import { fxToPhp } from "@/lib/finance/calc";
+import { sumInPhp } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addDays, todayManila } from "@/lib/finance/dates";
 import { describeSchedule, dueOccurrences, monthlyEquivalent, upcomingOccurrences } from "@/lib/finance/recurrence";
@@ -15,7 +15,7 @@ import { FormSheet } from "../../_components/form";
 import { DuePanel, OccurrenceList, whenLabel } from "../../_components/recurring";
 import { RecurringForm, type RecurringDTO } from "../../_components/recurring-form";
 import { EditableRow } from "../../_components/row-actions";
-import { EmptyState, Money, PageHeader, Panel, StatCards } from "../../_components/ui";
+import { EmptyState, MissingFxAlert, Money, PageHeader, Panel, StatCards } from "../../_components/ui";
 
 export const metadata: Metadata = {
   title: "Recurring",
@@ -54,11 +54,10 @@ export default async function RecurringPage() {
 
   const live = rows.filter((r) => !r.paused && r.nextOn != null);
   const perMonth = (kind: CashFlowKind) =>
-    live
-      .filter((r) => r.kind === kind)
-      .reduce((sum, r) => sum + monthlyEquivalent(r.amount, r.frequency) * (fxToPhp(fx, r.currency) ?? 0), 0);
+    sumInPhp(fx, live.filter((r) => r.kind === kind).map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency })));
   const income = perMonth("income");
   const expenses = perMonth("expense");
+  const missingFx = [...new Set([...income.missing, ...expenses.missing])];
 
   const due = dueOccurrences(rows, today);
   const upcoming = upcomingOccurrences(rows, today, today, addDays(today, 30));
@@ -147,11 +146,13 @@ export default async function RecurringPage() {
 
       <StatCards
         items={[
-          { label: "Net per month", value: <Money value={income - expenses} signed />, primary: true },
-          { label: "Income per month", value: <Money value={income} />, hint: `${live.filter((r) => r.kind === "income").length} active` },
-          { label: "Fixed costs per month", value: <Money value={expenses} />, hint: `${live.filter((r) => r.kind === "expense").length} active` },
+          { label: "Net per month", value: <Money value={income.total - expenses.total} signed />, primary: true },
+          { label: "Income per month", value: <Money value={income.total} />, hint: `${live.filter((r) => r.kind === "income").length} active` },
+          { label: "Fixed costs per month", value: <Money value={expenses.total} />, hint: `${live.filter((r) => r.kind === "expense").length} active` },
         ]}
       />
+
+      <MissingFxAlert currencies={missingFx} />
 
       {due.length > 0 && (
         <div className="mb-6">

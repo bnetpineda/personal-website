@@ -18,10 +18,10 @@ import {
   getRecurring,
   type CashFlowRow,
 } from "@/lib/dal";
-import { budgetProgress, fxToPhp, monthlySeries, savingsRate } from "@/lib/finance/calc";
+import { budgetProgress, monthlySeries, savingsRate, sumInPhp } from "@/lib/finance/calc";
 import { CASH_FLOW_KINDS, type CashFlowKind } from "@/lib/finance/constants";
 import { addDays, addMonths, currentMonth, dayLabel, isMonth, monthLabel, monthRange, todayManila } from "@/lib/finance/dates";
-import { formatPct } from "@/lib/finance/format";
+
 import { upcomingOccurrences } from "@/lib/finance/recurrence";
 import { deleteCashFlow, restoreCashFlow } from "../../_actions/cash-flows";
 import { BudgetsForm } from "../../_components/budgets-form";
@@ -32,7 +32,7 @@ import { transactionsHref } from "../../_components/nav";
 import { AddEntryButton } from "../../_components/quick-add";
 import { OccurrenceList } from "../../_components/recurring";
 import { EditableRow } from "../../_components/row-actions";
-import { EmptyState, Money, MonthPicker, PageHeader, Panel, StatCards, type BreakdownRow } from "../../_components/ui";
+import { EmptyState, Money, MonthPicker, PageHeader, Panel, Pct, StatCards, type BreakdownRow } from "../../_components/ui";
 
 export const metadata: Metadata = {
   title: "Transactions",
@@ -48,7 +48,10 @@ const KIND_TABS: { kind: CashFlowKind | null; label: string }[] = [
 
 /** Change vs last month as a signed percentage ("—" without a base). */
 const vsLast = (now: number, before: number, month: string) =>
-  before > 0 ? `${formatPct((now - before) / before, { signed: true })} vs ${monthLabel(month, "short")}` : `— vs ${monthLabel(month, "short")}`;
+  before > 0 ? <><Pct value={(now - before) / before} tone />{` vs ${monthLabel(month, "short")}`}</> : `— vs ${monthLabel(month, "short")}`;
+
+const budgetHint = (progress: { over: boolean; remaining: number } | null, empty: string) =>
+  progress == null ? empty : progress.over ? <><Money value={Math.abs(progress.remaining)} /> over</> : <><Money value={progress.remaining} /> left</>;
 
 export default async function TransactionsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
@@ -98,6 +101,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     budgeted.reduce((sum, c) => sum + (expenseTotals.get(c.id) ?? 0), 0),
     budgeted.reduce((sum, c) => sum + c.monthlyBudget!, 0)
   );
+  const categorySpent = category?.kind === "expense" ? (expenseTotals.get(category.id) ?? 0) : 0;
+  const categoryEarned = category?.kind === "income" ? (incomeTotals.get(category.id) ?? 0) : 0;
+  const categoryBudget = category?.kind === "expense" ? budgetProgress(categorySpent, category.monthlyBudget) : null;
   const sumPhp = (list: CashFlowRow[], k: CashFlowKind) => list.filter((e) => e.kind === k).reduce((a, e) => a + e.amountPhp, 0);
 
   const stats = q
@@ -122,20 +128,39 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         {
           label: "Net",
           value: <Money value={thisMonth.income - thisMonth.expense} signed tone />,
-          hint: rate != null ? `Saved ${formatPct(rate)}` : "Savings rate: —",
+          hint: rate != null ? <>Saved <Pct value={rate} /></> : "Savings rate: —",
         },
         {
           label: "Budget used",
-          value: budget ? formatPct(budget.ratio) : "—",
-          hint: budget ? (
-            <>
-              <Money value={budget.remaining} signed /> left
-            </>
-          ) : (
-            "No budgets set"
-          ),
+          value: budget ? <Pct value={budget.ratio} /> : "—",
+          hint: budgetHint(budget, "No budgets set"),
         },
       ];
+  const categoryStats = category ? [
+    {
+      label: `Spent · ${monthLabel(month, "short")}`,
+      value: <Money value={category.kind === "expense" ? categorySpent : 0} />,
+      hint: category.kind === "expense" ? category.name : "—",
+      primary: category.kind !== "income",
+    },
+    {
+      label: `Earned · ${monthLabel(month, "short")}`,
+      value: <Money value={category.kind === "income" ? categoryEarned : 0} />,
+      hint: category.kind === "income" ? category.name : "—",
+      primary: category.kind === "income",
+    },
+    {
+      label: "Net",
+      value: <Money value={categoryEarned - categorySpent} signed tone />,
+      hint: category.name,
+    },
+    {
+      label: "Budget used",
+      value: categoryBudget ? <Pct value={categoryBudget.ratio} /> : "—",
+      hint: category.kind === "expense" ? budgetHint(categoryBudget, "No budget set") : "Income isn't budgeted",
+    },
+  ] : null;
+  const visibleStats = q ? stats : (categoryStats ?? stats);
 
   // ---- breakdowns (month view only) ----
   const breakdown = (k: CashFlowKind): BreakdownRow[] => {
@@ -181,10 +206,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           addDays(end, -1)
         )
       : [];
-  const scheduledNet = scheduled.reduce(
-    (sum, o) => sum + (o.item.kind === "expense" ? -1 : 1) * o.item.amount * (fxToPhp(fx, o.item.currency) ?? 0),
-    0
-  );
+  const scheduledPhp = sumInPhp(fx, scheduled.map((o) => ({
+    amount: (o.item.kind === "expense" ? -1 : 1) * o.item.amount,
+    currency: o.item.currency,
+  })));
 
   // ---- category chips: what's in the current list (before the category filter) ----
   const chipIds = new Set(entries.map((e) => e.categoryId));
@@ -209,7 +234,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         <AddEntryButton kind={kind ?? "expense"} />
       </PageHeader>
 
-      <StatCards items={stats} />
+      <StatCards items={visibleStats} />
 
       <div className="mb-6 flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -267,7 +292,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       </div>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <div className="order-2 flex min-w-0 flex-col gap-6 lg:order-1 lg:col-span-3">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-3">
           <Panel title={listTitle}>
             {visible.length === 0 ? (
               <EmptyState title={q ? "No matches" : "No entries"}>
@@ -347,7 +372,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           </Panel>
         </div>
 
-        <div className="order-1 flex min-w-0 flex-col gap-6 lg:order-2 lg:col-span-2">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           {!q && kind !== "income" && (
             <Panel title="Spending by category" action={budgetsSheet}>
               {breakdown("expense").length === 0 ? (
@@ -371,10 +396,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
               title={`Still to come · ${scheduled.length}`}
               action={
                 <span className="font-mono text-xs text-muted-foreground">
-                  <Money value={scheduledNet} signed />
+                  <Money value={scheduledPhp.total} signed />
                 </span>
               }
             >
+              {scheduledPhp.missing.length > 0 && <p className="mb-3 text-sm text-warning">No rate yet for {scheduledPhp.missing.join(", ")} — those items are left out of this total.</p>}
               <OccurrenceList items={scheduled} today={today} />
             </Panel>
           )}

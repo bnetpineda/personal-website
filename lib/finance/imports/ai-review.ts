@@ -29,6 +29,8 @@ type Entry = Pick<ImportedEntry, "id" | "provider" | "kind" | "occurredOn" | "am
 type CategoryOption = Pick<Category, "id" | "kind" | "name" | "archived">;
 
 const TRANSFER_KINDS: readonly string[] = ["payment", "transfer", "other"];
+/** Kinds that are real cash when the budget can convert them, and ledger-only otherwise. */
+const CASH_ENTRY_KINDS: readonly string[] = ["dividend", "interest", "fee", "tax"];
 const direction = (amount: number): CashFlowKind => amount > 0 ? "income" : "expense";
 
 /**
@@ -40,10 +42,34 @@ export function allowedDecisions(entry: Entry): AiDecisionKind[] {
   const allowed: AiDecisionKind[] = [];
   if (canPost(entry)) allowed.push("post");
   if (TRANSFER_KINDS.includes(entry.kind)) allowed.push("transfer");
-  // The earnings ledger covers investment accounts only; Wise activity is either cash flow or transfer.
-  if (entry.provider !== "wise") allowed.push("investment");
+  // Budget-currency dividends, interest, fees and tax are cash entries. The ledger option is for
+  // crypto and for currencies the budget cannot convert; offering both is what made Jev split.
+  if (entry.provider !== "wise" && !(canPost(entry) && CASH_ENTRY_KINDS.includes(entry.kind))) allowed.push("investment");
   allowed.push("ignore");
   return allowed;
+}
+
+/** Auto-file only a choice this far ahead of the runner-up. Closer calls stay in the inbox. */
+export const AI_CONFIDENCE_MIN = 0.8;
+export const AI_CONFIDENCE_GAP = 0.2;
+
+export function confidentChoice(choice: string, probabilities?: Record<string, number> | null): boolean {
+  const chosen = probabilities?.[choice];
+  if (chosen == null || !Number.isFinite(chosen)) return true;
+  const second = Math.max(0, ...Object.entries(probabilities ?? {}).filter(([key]) => key !== choice).map(([, probability]) => Number.isFinite(probability) ? probability : 0));
+  return chosen >= AI_CONFIDENCE_MIN && chosen - second >= AI_CONFIDENCE_GAP;
+}
+
+/** Review-form default for a suggestion Jev left pending. Confirmed saves become the person's own decision. */
+export function suggestedReview(entry: Pick<ImportedEntry, "provider" | "currency" | "kind" | "amount" | "status" | "categorizedBy" | "categoryId" | "aiReason">): "post" | "reviewed" | "ignored" | "transfer" {
+  if (entry.status === "pending" && entry.categorizedBy === "ai" && entry.aiReason?.startsWith("Jev: ")) {
+    if (entry.categoryId) return "post";
+    const label = entry.aiReason.slice("Jev: ".length).split(" (")[0];
+    if (label === "Transfer") return "transfer";
+    if (label === "Investment") return "reviewed";
+    if (label === "Ignore") return "ignored";
+  }
+  return canPost(entry) && entry.kind !== "transfer" ? "post" : "reviewed";
 }
 
 const LEDGER_REASONS: Partial<Record<string, string>> = {
@@ -80,6 +106,22 @@ export function buildCategorizePrompt(entries: Entry[], categories: CategoryOpti
       amount: e.amount, currency: e.currency, description: e.description, allowed: allowedDecisions(e) })),
   };
   return { instructions: INSTRUCTIONS, prompt: JSON.stringify(payload) };
+}
+
+/**
+ * Binance and IBKR deposits stay pending until a person confirms them.
+ * Exact partner matches are linked before the model runs, so they never reach this list.
+ */
+export function deferUnmatchedBrokerTransfers<T extends { id: string }>(
+  entries: { id: string; provider: string; kind: string }[],
+  decisions: T[],
+  suggestions: T[],
+): { decisions: T[]; suggestions: T[] } {
+  const unmatched = new Set(entries.filter((entry) => (entry.provider === "binance" || entry.provider === "ibkr") && entry.kind === "transfer").map((entry) => entry.id));
+  if (!unmatched.size) return { decisions, suggestions };
+  const deferred = decisions.filter((decision) => unmatched.has(decision.id));
+  if (!deferred.length) return { decisions, suggestions };
+  return { decisions: decisions.filter((decision) => !unmatched.has(decision.id)), suggestions: [...suggestions, ...deferred] };
 }
 
 /** Anything unexpected is dropped; the entry stays in the inbox for a person to review. */

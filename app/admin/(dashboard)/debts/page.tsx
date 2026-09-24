@@ -5,15 +5,15 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getAccounts, getCategories, getFx, getLastPayments, getLiabilities } from "@/lib/dal";
 import type { Liability } from "@/lib/db/schema";
-import { fxToPhp } from "@/lib/finance/calc";
+import { fxToPhp, sumInPhp } from "@/lib/finance/calc";
 import { LIABILITY_KIND_LABELS } from "@/lib/finance/constants";
 import { dayLabel, nextDueDate, todayManila } from "@/lib/finance/dates";
-import { formatPct } from "@/lib/finance/format";
+
 import { deleteLiability, setLiabilityArchived } from "../../_actions/liabilities";
 import { FormSheet } from "../../_components/form";
 import { LiabilityForm, PaymentForm, type LiabilityDTO } from "../../_components/liability-form";
 import { EditableCardHeader } from "../../_components/row-actions";
-import { EmptyState, Money, PageHeader, StatCards } from "../../_components/ui";
+import { EmptyState, MissingFxAlert, Money, PageHeader, Pct, StatCards } from "../../_components/ui";
 
 export const metadata: Metadata = {
   title: "Debts",
@@ -48,12 +48,12 @@ export default async function DebtsPage() {
   const active = rows.filter((l) => !l.archived);
   const archived = rows.filter((l) => l.archived);
 
-  const php = (amount: number, currency: string) => amount * (fxToPhp(fx, currency) ?? 0);
-  const totalOwed = active.reduce((sum, l) => sum + php(l.balance, l.currency), 0);
-  const minDue = active.reduce((sum, l) => sum + php(l.minPayment ?? 0, l.currency), 0);
-  const cards = active.filter((l) => (l.creditLimit ?? 0) > 0);
-  const cardBalance = cards.reduce((sum, l) => sum + php(l.balance, l.currency), 0);
-  const cardLimit = cards.reduce((sum, l) => sum + php(l.creditLimit!, l.currency), 0);
+  const owed = sumInPhp(fx, active.map((l) => ({ amount: l.balance, currency: l.currency })));
+  const minimums = sumInPhp(fx, active.map((l) => ({ amount: l.minPayment ?? 0, currency: l.currency })));
+  const cards = active.filter((l) => (l.creditLimit ?? 0) > 0 && fxToPhp(fx, l.currency) != null);
+  const cardBalance = sumInPhp(fx, cards.map((l) => ({ amount: l.balance, currency: l.currency }))).total;
+  const cardLimit = sumInPhp(fx, cards.map((l) => ({ amount: l.creditLimit ?? 0, currency: l.currency }))).total;
+  const missingFx = [...new Set([...owed.missing, ...minimums.missing])];
 
   const debtCard = (l: Liability) => {
     const utilization = l.creditLimit && l.creditLimit > 0 ? l.balance / l.creditLimit : null;
@@ -91,16 +91,16 @@ export default async function DebtsPage() {
             <p className="font-display text-3xl">
               <Money value={l.balance} currency={l.currency} />
             </p>
-            {l.currency !== "PHP" && (
+            {l.currency !== "PHP" && fxToPhp(fx, l.currency) != null && (
               <p className="font-mono text-xs text-muted-foreground">
-                ≈ <Money value={php(l.balance, l.currency)} />
+                ≈ <Money value={l.balance * fxToPhp(fx, l.currency)!} />
               </p>
             )}
           </div>
           {utilization != null && (
             <div className="flex flex-col gap-2">
               <div className="flex justify-between font-mono text-xs text-muted-foreground">
-                <span>Utilization {formatPct(utilization)}</span>
+                <span>Utilization <Pct value={utilization} /></span>
                 <span>
                   of <Money value={l.creditLimit!} currency={l.currency} />
                 </span>
@@ -150,7 +150,7 @@ export default async function DebtsPage() {
       <PageHeader eyebrow="Liabilities" title="Debts">
         <FormSheet
           title="Add debt"
-          description="Credit cards, loans and buy-now-pay-later. Update the balance whenever you pay."
+          description="Credit cards, loans and buy-now-pay-later. Use Pay to reduce the balance. Edit the balance only to correct it."
           trigger={
             <Button>
               <Plus /> Add debt
@@ -163,15 +163,17 @@ export default async function DebtsPage() {
 
       <StatCards
         items={[
-          { label: "Total owed", value: <Money value={totalOwed} />, primary: true },
-          { label: "Minimum payments", value: <Money value={minDue} />, hint: "per month" },
+          { label: "Total owed", value: <Money value={owed.total} />, primary: true },
+          { label: "Minimum payments", value: <Money value={minimums.total} />, hint: "per month" },
           {
             label: "Card utilization",
-            value: cardLimit > 0 ? formatPct(cardBalance / cardLimit) : "—",
+            value: cardLimit > 0 ? <Pct value={cardBalance / cardLimit} /> : "—",
             hint: cardLimit > 0 ? <Money value={cardLimit} compact /> : undefined,
           },
         ]}
       />
+
+      <MissingFxAlert currencies={missingFx} />
 
       {active.length === 0 ? (
         <EmptyState title="Debt-free">Nothing owed — or add a card or loan to track it against your net worth.</EmptyState>

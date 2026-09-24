@@ -1,8 +1,9 @@
+import type { Experimental_EvaluationModel } from "ai";
 import { describe, expect, mock, test } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
 import { MockLanguageModelV4 } from "ai/test";
 import type { Category, ImportedEntry } from "@/lib/db/schema";
-import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, evaluationDecision, ledgerDecision, validateDecisions, type AiOutput } from "./ai-review";
+import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, confidentChoice, deferUnmatchedBrokerTransfers, evaluationDecision, ledgerDecision, suggestedReview, validateDecisions, type AiOutput } from "./ai-review";
 
 const entry = (overrides: Partial<ImportedEntry> = {}): ImportedEntry => ({ id: crypto.randomUUID(), provider: "wise", accountKey: "personal", externalId: "CARD-1:USD:out",
   occurredOn: "2026-09-20", amount: -15, currency: "USD", kind: "payment", description: "Spotify premium", realizedPnl: null,
@@ -17,7 +18,7 @@ describe("AI decision guardrails", () => {
   test("offers only decisions that review and posting accept", () => {
     expect(allowedDecisions(entry())).toEqual(["post", "transfer", "ignore"]);
     expect(allowedDecisions(entry({ provider: "binance", currency: "BTC", kind: "reward", amount: 0.001 }))).toEqual(["investment", "ignore"]);
-    expect(allowedDecisions(entry({ provider: "ibkr", kind: "dividend", amount: 12 }))).toEqual(["post", "investment", "ignore"]);
+    expect(allowedDecisions(entry({ provider: "ibkr", kind: "dividend", amount: 12 }))).toEqual(["post", "ignore"]);
     expect(allowedDecisions(entry({ provider: "binance", currency: "USDT", kind: "transfer", amount: 100 }))).toEqual(["transfer", "investment", "ignore"]);
   });
 
@@ -25,6 +26,11 @@ describe("AI decision guardrails", () => {
     expect(ledgerDecision(entry({ provider: "binance", currency: "ETH", kind: "reward", amount: 0.000001 }))).toMatchObject({ decision: "investment" });
     expect(ledgerDecision(entry({ provider: "binance", currency: "USDT", kind: "fee", amount: -0.5 }))).toMatchObject({ decision: "investment" });
     expect(ledgerDecision(entry({ provider: "binance", currency: "USDT", kind: "transfer", amount: 100 }))).toBeNull();
+    const broker = entry({ id: "broker", provider: "ibkr", kind: "transfer", amount: 1000 });
+    const wise = entry({ id: "wise", kind: "transfer", amount: 500 });
+    const deferred = deferUnmatchedBrokerTransfers([broker, wise], [{ id: "broker", decision: "transfer" }, { id: "wise", decision: "transfer" }], []);
+    expect(deferred.decisions.map((decision) => decision.id)).toEqual(["wise"]);
+    expect(deferred.suggestions.map((decision) => decision.id)).toEqual(["broker"]);
     expect(ledgerDecision(entry({ provider: "ibkr", kind: "dividend", amount: 12 }))).toBeNull();
     expect(ledgerDecision(entry({ kind: "fee" }))).toBeNull();
   });
@@ -64,6 +70,30 @@ describe("AI decision guardrails", () => {
     expect(decisions).toEqual([]);
     expect(validateDecisions(rows, categories, output({ ref: "e1", decision: "investment", categoryId: null, reason: "  Earn\n reward " })).decisions)
       .toEqual([{ id: rows[0].id, decision: "investment", reason: "Earn reward" }]);
+  });
+
+  test("posts budget-currency dividends, interest, fees and tax, and keeps the ledger for the rest", () => {
+    for (const kind of ["dividend", "interest", "fee", "tax"] as const) {
+      const row = entry({ provider: "ibkr", kind, amount: kind === "fee" || kind === "tax" ? -2 : 12 });
+      expect(allowedDecisions(row)).toEqual(["post", "ignore"]);
+      expect(validateDecisions([row], categories, output({ ref: "e1", decision: "investment", categoryId: null, reason: "ledger" })).decisions).toEqual([]);
+    }
+    expect(allowedDecisions(entry({ provider: "ibkr", currency: "THB", kind: "dividend", amount: 12 }))).toEqual(["investment", "ignore"]);
+    expect(Object.keys(buildEvaluationQuestion(entry({ provider: "ibkr", kind: "dividend", amount: 12 }), categories, []).criteria)).toEqual(["post:2", "ignore"]);
+  });
+
+  test("files a clear Jev choice and leaves a close one for review", () => {
+    expect(confidentChoice("post:1", { "post:1": 0.98, "post:9": 0.02 })).toBe(true);
+    expect(confidentChoice("post:14", { "post:14": 0.86, "post:16": 0.06, transfer: 0.03 })).toBe(true);
+    expect(confidentChoice("post:17", { "post:17": 0.69, investment: 0.31 })).toBe(false);
+    expect(confidentChoice("post:26", { "post:26": 0.54, investment: 0.46 })).toBe(false);
+    expect(confidentChoice("post:1", { "post:1": 0.82, "post:2": 0.7 })).toBe(false);
+    expect(confidentChoice("post:1")).toBe(true);
+    const pending = entry({ categorizedBy: "ai", aiReason: "Jev: Fees & charges (54% likely)", categoryId: 1 });
+    expect(suggestedReview(pending)).toBe("post");
+    expect(suggestedReview(entry({ provider: "ibkr", kind: "transfer", amount: 1000, categorizedBy: "ai", aiReason: "Jev: Transfer (62% likely)" }))).toBe("transfer");
+    expect(suggestedReview(entry({ provider: "binance", currency: "USDT", kind: "transfer", amount: 100, categorizedBy: "ai", aiReason: "Jev: Investment (70% likely)" }))).toBe("reviewed");
+    expect(suggestedReview(entry())).toBe("post");
   });
 
   test("Jev questions offer only this entry's allowed answers and map back to decisions", () => {
@@ -141,6 +171,46 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("AI decisions post, move and h
     await expect(categorizeWithAi({ model: broken, entryIds: ids, retry: true })).rejects.toThrow("AI categorization is unavailable");
     const [after] = await db.select().from(importedEntries).where(eq(importedEntries.id, saved.get("AI-4")!.id));
     expect(after.aiAttemptedAt).toBeNull();
+  } finally {
+    if (ids.length) await db.delete(cashFlows).where(inArray(cashFlows.id, ids));
+    if (ids.length) await db.delete(importedEntries).where(inArray(importedEntries.id, ids));
+    if (categoryId) await db.delete(categoryTable).where(eq(categoryTable.id, categoryId));
+  }
+});
+
+test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("Jev files a clear choice and leaves a close one pending", async () => {
+  mock.module("server-only", () => ({}));
+  const { getDb } = await import("@/lib/db");
+  const { categorizeWithAi } = await import("./ai-service");
+  const { cashFlows, categories: categoryTable, importedEntries } = await import("@/lib/db/schema");
+  const db = getDb(), scope = `qa:${crypto.randomUUID()}`;
+  let categoryId: number | undefined, ids: string[] = [];
+  try {
+    const [created] = await db.insert(categoryTable).values({ name: scope, color: "#112233", kind: "expense" }).returning();
+    categoryId = created.id;
+    const rows = await db.insert(importedEntries).values([
+      { provider: "wise", accountKey: scope, externalId: "SURE", occurredOn: "2001-03-01", kind: "payment", amount: -12, currency: "PHP", description: `${scope} confident` },
+      { provider: "wise", accountKey: scope, externalId: "CLOSE", occurredOn: "2001-03-02", kind: "payment", amount: -8, currency: "PHP", description: `${scope} unsure` },
+    ]).returning();
+    ids = rows.map((row) => row.id);
+    const model = {
+      specificationVersion: "v4" as const, provider: "test", modelId: "jev-test", supportedQuestionTypes: ["choice" as const],
+      async doEvaluate({ state, questions }: { state: { transaction: { description: string } }; questions: { decision: { criteria: Record<string, string> } } }) {
+        const choice = `post:${categoryId}`;
+        const close = state.transaction.description.endsWith("unsure");
+        const probabilities = Object.fromEntries(Object.keys(questions.decision.criteria).map((key) => [key, 0]));
+        probabilities[choice] = close ? 0.54 : 0.96;
+        probabilities.ignore = close ? 0.46 : 0.04;
+        return { answers: { decision: { type: "choice" as const, choice, probabilities } }, warnings: [] };
+      },
+    };
+    const result = await categorizeWithAi({ classifier: { kind: "evaluation", model: model as unknown as Experimental_EvaluationModel }, entryIds: ids });
+    expect(result).toMatchObject({ posted: 1, unsure: 1, held: 0 });
+    const saved = new Map((await db.select().from(importedEntries).where(inArray(importedEntries.id, ids))).map((row) => [row.externalId, row]));
+    expect(saved.get("SURE")).toMatchObject({ status: "posted", categoryId, categorizedBy: "ai" });
+    expect(saved.get("CLOSE")).toMatchObject({ status: "pending", categoryId, categorizedBy: "ai" });
+    expect(saved.get("CLOSE")!.aiReason).toContain("54% likely");
+    expect(await db.select().from(cashFlows).where(eq(cashFlows.id, saved.get("CLOSE")!.id))).toHaveLength(0);
   } finally {
     if (ids.length) await db.delete(cashFlows).where(inArray(cashFlows.id, ids));
     if (ids.length) await db.delete(importedEntries).where(inArray(importedEntries.id, ids));

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,9 +45,20 @@ export function Money({
 export function Pct({ value, tone = false }: { value: number | null; tone?: boolean }) {
   if (value == null) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className={cn("tabular-nums", tone && value > 0 && "text-success", tone && value < 0 && "text-destructive")}>
+    <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm", tone && value > 0 && "text-success", tone && value < 0 && "text-destructive")}>
       {formatPct(value, { signed: tone })}
     </span>
+  );
+}
+
+export function MissingFxAlert({ currencies }: { currencies: string[] }) {
+  if (currencies.length === 0) return null;
+  return (
+    <Alert variant="warning" className="mb-6">
+      <TriangleAlert />
+      <AlertTitle>Missing exchange rates</AlertTitle>
+      <AlertDescription>No rate yet for {currencies.join(", ")} — those amounts are left out of the PHP totals.</AlertDescription>
+    </Alert>
   );
 }
 

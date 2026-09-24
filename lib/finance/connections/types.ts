@@ -109,7 +109,7 @@ export function includedPositions(connections: readonly (Pick<ConnectionView, "i
   });
 }
 
-export function isConnectionStale(connection: Pick<ConnectionView, "provider" | "snapshot" | "lastSyncedAt">, now = new Date()): boolean {
+export function isConnectionStale(connection: { provider: Provider; snapshot: { asOf: string } | null; lastSyncedAt: Date | null }, now = new Date()): boolean {
   if (!connection.snapshot || !connection.lastSyncedAt) return true;
   const day = 86_400_000;
   // Daily jobs have a scheduling window; IBKR statements also span weekends/holidays.

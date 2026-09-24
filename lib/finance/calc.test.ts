@@ -3,6 +3,7 @@ import {
   allocation,
   applyAdjustment,
   budgetProgress,
+  sumInPhp,
   budgetSegments,
   computeNetWorth,
   connectedHoldingMetrics,
@@ -152,6 +153,12 @@ describe("helpers", () => {
     const a = allocation({ cash: 25, crypto: 75, stock: 0 });
     expect(a.map((x) => x.assetClass)).toEqual(["crypto", "cash"]);
     expect(a[0].share).toBe(0.75);
+  });
+
+  test("missing exchange rates are omitted from a PHP sum", () => {
+    expect(sumInPhp({ USD: 50 }, [{ amount: 2, currency: "USD" }, { amount: 10, currency: "PHP" }, { amount: 3, currency: "EUR" }])).toEqual({
+      total: 110, missing: ["EUR"],
+    });
   });
 
   test("budget progress", () => {

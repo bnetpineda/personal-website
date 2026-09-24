@@ -23,7 +23,6 @@ import {
 import { allocation, computeNetWorth, holdingMetrics, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import { ASSET_CLASS_META } from "@/lib/finance/constants";
 import { addDays, currentMonth, dayLabel, monthLabel, timeAgo, todayManila } from "@/lib/finance/dates";
-import { formatPct } from "@/lib/finance/format";
 import { dueOccurrences, upcomingOccurrences } from "@/lib/finance/recurrence";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
 import { includedPositions } from "@/lib/finance/connections/types";
@@ -150,7 +149,7 @@ export default async function OverviewPage() {
           {
             label: `Spent · ${monthLabel(month, "short")}`,
             value: <Money value={thisMonth.expense} />,
-            hint: rate != null ? `Saved ${formatPct(rate)}` : "Savings rate: —",
+            hint: rate != null ? <>Saved <Pct value={rate} /></> : "Savings rate: —",
           },
         ]}
       />
@@ -188,7 +187,7 @@ export default async function OverviewPage() {
                       <span className="font-mono text-xs">
                         <Money value={a.value} />
                       </span>
-                      <span className="w-12 text-right font-mono text-xs text-muted-foreground">{formatPct(a.share)}</span>
+                      <span className="w-12 text-right font-mono text-xs text-muted-foreground"><Pct value={a.share} /></span>
                     </li>
                   ))}
                 </ul>
@@ -256,9 +255,8 @@ export default async function OverviewPage() {
                   <ItemContent>
                     <ItemTitle>{h.name}</ItemTitle>
                     <ItemDescription>
-                      {[ASSET_CLASS_META[h.assetClass].label, h.symbol, nw.assetsPhp > 0 ? formatPct(m.valuePhp! / nw.assetsPhp) : null]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      {[ASSET_CLASS_META[h.assetClass].label, h.symbol].filter(Boolean).join(" · ")}
+                      {nw.assetsPhp > 0 && m.valuePhp != null && <> · <Pct value={m.valuePhp / nw.assetsPhp} /></>}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>

@@ -168,8 +168,11 @@ it on demand, including entries it skipped before. Without the key, only rules r
 
 Set `AI_CATEGORIZE_MODEL=typesafe-ai/jev` to classify with TypeSafe AI's Jev evaluation model instead.
 Jev answers one native choice question per entry, and the options are exactly the decisions that entry
-allows (one per category of the matching direction). Its reason records the chosen option and its
-probability, e.g. `Jev: Subscriptions (98% likely)`. Language models answer batches of 100 in one prompt.
+allows (one per category of the matching direction). Cash dividends, interest, broker fees and
+withholding tax in a budget currency are posted to the matching category; the investment-ledger option
+is not offered for those. A choice under 80% likely, or within 20 points of the next option, stays
+pending with that choice filled in. Its reason records the chosen option and its probability, e.g.
+`Jev: Subscriptions (98% likely)`. Language models answer batches of 100 in one prompt.
 Crypto rewards and fees, whose only sensible answer is the earnings ledger, are decided without a model.
 
 Each entry gets one decision, validated server-side against what review accepts:

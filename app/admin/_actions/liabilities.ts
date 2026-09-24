@@ -157,11 +157,10 @@ export async function undoPayment(undo: { liabilityId: string; reduced: number; 
     return failure("Couldn't undo that payment.");
   }
   const db = getDb();
-  const restore = db
-    .update(liabilities)
-    .set({ balance: sql`${liabilities.balance} + ${undo.reduced}` })
-    .where(eq(liabilities.id, liabilityId.data));
-  if (entryId?.success) await db.batch([restore, db.delete(cashFlows).where(eq(cashFlows.id, entryId.data))]);
-  else await restore;
+  if (entryId?.success) {
+    const removed = await db.delete(cashFlows).where(eq(cashFlows.id, entryId.data)).returning({ id: cashFlows.id });
+    if (removed.length === 0) return done("That payment was already undone.");
+  }
+  await db.update(liabilities).set({ balance: sql`${liabilities.balance} + ${undo.reduced}` }).where(eq(liabilities.id, liabilityId.data));
   return done("Payment undone.");
 }

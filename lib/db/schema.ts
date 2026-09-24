@@ -7,12 +7,14 @@ import {
   boolean,
   check,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   serial,
   smallint,
   text,
@@ -282,6 +284,7 @@ export const importedEntries = pgTable("imported_entries", {
   uniqueIndex("imported_entries_source_unique").on(t.provider, t.accountKey, t.externalId),
   index("imported_entries_status_date_idx").on(t.status, t.occurredOn),
   index("imported_entries_transfer_idx").on(t.transferId),
+  index("imported_entries_binance_trades_idx").on(t.accountKey, t.updatedAt).where(sql`${t.provider} = 'binance' and ${t.trade} is not null`),
   check("imported_entries_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr')`),
   check("imported_entries_kind", sql`${t.kind} in ('payment','transfer','reward','dividend','interest','fee','tax','trade','other')`),
   check("imported_entries_status", sql`${t.status} in ('pending','posted','ignored','transfer','reviewed')`),
@@ -327,6 +330,32 @@ export const categoryRules = pgTable("category_rules", {
   enabled: boolean("enabled").notNull().default(true),
   ...timestamps,
 });
+
+/** Cached per-pair Spot FIFO. `asOf` is "" for all imported fills, or a balance snapshot time. */
+export const spotFifo = pgTable("spot_fifo", {
+  accountKey: text("account_key").notNull(),
+  asOf: text("as_of").notNull(),
+  symbol: text("symbol").notNull(),
+  baseAsset: text("base_asset").notNull(),
+  quoteAsset: text("quote_asset").notNull(),
+  bought: doublePrecision("bought").notNull(),
+  sold: doublePrecision("sold").notNull(),
+  remaining: doublePrecision("remaining").notNull(),
+  cost: doublePrecision("cost").notNull(),
+  realized: doublePrecision("realized").notNull(),
+  unmatched: integer("unmatched").notNull(),
+  externalFees: integer("external_fees").notNull(),
+}, (t) => [primaryKey({ columns: [t.accountKey, t.asOf, t.symbol] })]);
+
+/** Signature of the trade rows a FIFO cache was built from, so a page can tell when to rebuild. */
+export const spotFifoMeta = pgTable("spot_fifo_meta", {
+  accountKey: text("account_key").notNull(),
+  asOf: text("as_of").notNull(),
+  sourceCount: integer("source_count").notNull(),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  ignoredBases: text("ignored_bases").array().notNull(),
+  paymentAssets: text("payment_assets").array().notNull(),
+}, (t) => [primaryKey({ columns: [t.accountKey, t.asOf] })]);
 
 /** Alert content is derived from current data; only dismissals need persistence. */
 export const notificationDismissals = pgTable("notification_dismissals", {
