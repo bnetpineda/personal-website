@@ -8,7 +8,7 @@ import { uniqueEntries, type ImportEntry } from "./types";
 const header = '"TransferWise ID",Date,Amount,Currency,Description,Total fees';
 const imported = (overrides: Partial<ImportedEntry> = {}): ImportedEntry => ({ id: crypto.randomUUID(), provider: "wise", accountKey: "personal", externalId: "CARD-1:USD:out",
   occurredOn: "2026-09-20", amount: -15, currency: "USD", kind: "payment", description: "Spotify premium", realizedPnl: null,
-  status: "pending", categoryId: null, transferId: null, trade: null, categorizedBy: null, aiReason: null, aiAttemptedAt: null, createdAt: new Date(), updatedAt: new Date(), ...overrides });
+  status: "pending", categoryId: null, transferId: null, trade: null, categorizedBy: null, aiReason: null, aiSuggestion: null, aiAttemptedAt: null, createdAt: new Date(), updatedAt: new Date(), ...overrides });
 const rule = (overrides: Partial<CategoryRule> = {}): CategoryRule => ({ id: crypto.randomUUID(), provider: null, contains: "Spotify", categoryId: 1,
   kind: "expense", enabled: true, autoPost: true, createdAt: new Date(), updatedAt: new Date(), ...overrides });
 

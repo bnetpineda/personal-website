@@ -66,7 +66,7 @@ export async function postImportedEntry(id: string, categoryId: number, allowDup
       where ${allowDuplicate} or not exists (select 1 from cash_flows f where f.occurred_on = s.occurred_on
         and f.currency = s.currency and f.amount = round(abs(s.amount), 2) and f.kind = c.kind)
       on conflict do nothing returning id
-    ) update imported_entries set status = 'posted', category_id = ${categoryId}, categorized_by = 'manual', updated_at = now()
+    ) update imported_entries set status = 'posted', category_id = ${categoryId}, categorized_by = 'manual', ai_suggestion = null, updated_at = now()
       where id in (select id from posted) returning id`);
   if (!result.rows.length) throw new ImportError("Already reviewed, category unavailable, or a matching amount is already logged on this date. Check Transactions before allowing a duplicate.");
 }
@@ -119,7 +119,7 @@ export async function applyCategoryRules(entryIds?: string[]) {
           and other.currency = s.currency and round(abs(other.amount), 2) = round(abs(s.amount), 2) and sign(other.amount) = sign(s.amount))
       on conflict do nothing returning id
     ), updated as (
-      update imported_entries e set category_id = s.target_category, categorized_by = 'rule', ai_reason = null,
+      update imported_entries e set category_id = s.target_category, categorized_by = 'rule', ai_reason = null, ai_suggestion = null,
         status = case when exists(select 1 from posted p where p.id = e.id) then 'posted' else 'pending' end, updated_at = now()
       from source s where e.id = s.id returning e.status
     ) select count(*) filter(where status = 'posted')::int as posted, count(*) filter(where status = 'pending')::int as suggested from updated`);

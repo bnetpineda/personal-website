@@ -53,21 +53,21 @@ export function allowedDecisions(entry: Entry): AiDecisionKind[] {
 export const AI_CONFIDENCE_MIN = 0.8;
 export const AI_CONFIDENCE_GAP = 0.2;
 
+/** A choice without a probability has unknown confidence, so it stays in the inbox too. */
 export function confidentChoice(choice: string, probabilities?: Record<string, number> | null): boolean {
   const chosen = probabilities?.[choice];
-  if (chosen == null || !Number.isFinite(chosen)) return true;
+  if (chosen == null || !Number.isFinite(chosen)) return false;
   const second = Math.max(0, ...Object.entries(probabilities ?? {}).filter(([key]) => key !== choice).map(([, probability]) => Number.isFinite(probability) ? probability : 0));
   return chosen >= AI_CONFIDENCE_MIN && chosen - second >= AI_CONFIDENCE_GAP;
 }
 
-/** Review-form default for a suggestion Jev left pending. Confirmed saves become the person's own decision. */
-export function suggestedReview(entry: Pick<ImportedEntry, "provider" | "currency" | "kind" | "amount" | "status" | "categorizedBy" | "categoryId" | "aiReason">): "post" | "reviewed" | "ignored" | "transfer" {
-  if (entry.status === "pending" && entry.categorizedBy === "ai" && entry.aiReason?.startsWith("Jev: ")) {
+const REVIEW_FOR_SUGGESTION = { transfer: "transfer", investment: "reviewed", ignore: "ignored" } as const;
+
+/** Review-form default for a suggestion the AI left pending. Confirmed saves become the person's own decision. */
+export function suggestedReview(entry: Pick<ImportedEntry, "provider" | "currency" | "kind" | "amount" | "status" | "categorizedBy" | "categoryId" | "aiSuggestion">): "post" | "reviewed" | "ignored" | "transfer" {
+  if (entry.status === "pending" && entry.categorizedBy === "ai" && entry.aiSuggestion) {
+    if (entry.aiSuggestion !== "post") return REVIEW_FOR_SUGGESTION[entry.aiSuggestion];
     if (entry.categoryId) return "post";
-    const label = entry.aiReason.slice("Jev: ".length).split(" (")[0];
-    if (label === "Transfer") return "transfer";
-    if (label === "Investment") return "reviewed";
-    if (label === "Ignore") return "ignored";
   }
   return canPost(entry) && entry.kind !== "transfer" ? "post" : "reviewed";
 }

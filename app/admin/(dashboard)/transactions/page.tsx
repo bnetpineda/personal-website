@@ -21,7 +21,6 @@ import {
 import { budgetProgress, monthlySeries, savingsRate, sumInPhp } from "@/lib/finance/calc";
 import { CASH_FLOW_KINDS, type CashFlowKind } from "@/lib/finance/constants";
 import { addDays, addMonths, currentMonth, dayLabel, isMonth, monthLabel, monthRange, todayManila } from "@/lib/finance/dates";
-
 import { upcomingOccurrences } from "@/lib/finance/recurrence";
 import { deleteCashFlow, restoreCashFlow } from "../../_actions/cash-flows";
 import { BudgetsForm } from "../../_components/budgets-form";
@@ -136,30 +135,24 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           hint: budgetHint(budget, "No budgets set"),
         },
       ];
-  const categoryStats = category ? [
+  // One category: only the cards that mean something for its kind.
+  const categoryStats = category == null ? null : category.kind === "expense" ? [
+    { label: `Spent · ${monthLabel(month, "short")}`, value: <Money value={categorySpent} />, hint: category.name, primary: true },
     {
-      label: `Spent · ${monthLabel(month, "short")}`,
-      value: <Money value={category.kind === "expense" ? categorySpent : 0} />,
-      hint: category.kind === "expense" ? category.name : "—",
-      primary: category.kind !== "income",
+      label: "Share of spending",
+      value: <Pct value={thisMonth.expense > 0 ? categorySpent / thisMonth.expense : null} />,
+      hint: <>of <Money value={thisMonth.expense} /></>,
     },
+    { label: "Budget used", value: categoryBudget ? <Pct value={categoryBudget.ratio} /> : "—", hint: budgetHint(categoryBudget, "No budget set") },
+  ] : [
+    { label: `Earned · ${monthLabel(month, "short")}`, value: <Money value={categoryEarned} />, hint: category.name, primary: true },
     {
-      label: `Earned · ${monthLabel(month, "short")}`,
-      value: <Money value={category.kind === "income" ? categoryEarned : 0} />,
-      hint: category.kind === "income" ? category.name : "—",
-      primary: category.kind === "income",
+      label: "Share of income",
+      value: <Pct value={thisMonth.income > 0 ? categoryEarned / thisMonth.income : null} />,
+      hint: <>of <Money value={thisMonth.income} /></>,
     },
-    {
-      label: "Net",
-      value: <Money value={categoryEarned - categorySpent} signed tone />,
-      hint: category.name,
-    },
-    {
-      label: "Budget used",
-      value: categoryBudget ? <Pct value={categoryBudget.ratio} /> : "—",
-      hint: category.kind === "expense" ? budgetHint(categoryBudget, "No budget set") : "Income isn't budgeted",
-    },
-  ] : null;
+    { label: "Entries", value: visible.length, hint: monthLabel(month, "short") },
+  ];
   const visibleStats = q ? stats : (categoryStats ?? stats);
 
   // ---- breakdowns (month view only) ----

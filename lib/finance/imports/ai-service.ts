@@ -121,7 +121,7 @@ async function linkExactTransfers(entryIds?: string[]) {
     locked as materialized (select e.id, e.status, p.transfer_id from imported_entries e join pairs p on p.id = e.id order by e.id for update of e),
     complete as (select transfer_id from locked group by transfer_id having count(*) filter (where status = 'pending') = 2)
     update imported_entries e set status = 'transfer', transfer_id = l.transfer_id, category_id = null, categorized_by = 'ai',
-      ai_reason = 'Matched transfer between your accounts', updated_at = now()
+      ai_reason = 'Matched transfer between your accounts', ai_suggestion = null, updated_at = now()
     from locked l where e.id = l.id and l.transfer_id in (select transfer_id from complete) returning e.id`);
   return result.rows.length / 2;
 }
@@ -200,6 +200,7 @@ async function applyDecisions(decisions: AiDecision[]) {
         on conflict do nothing returning id
       ), updated as (
         update imported_entries e set category_id = s.target_category, categorized_by = 'ai', ai_reason = s.reason,
+          ai_suggestion = case when exists(select 1 from posted p where p.id = e.id) then null else 'post' end,
           status = case when exists(select 1 from posted p where p.id = e.id) then 'posted' else 'pending' end, updated_at = now()
         from source s where e.id = s.id returning e.status
       ) select count(*) filter (where status = 'posted')::int as posted, count(*) filter (where status = 'pending')::int as held from updated`);
@@ -210,7 +211,7 @@ async function applyDecisions(decisions: AiDecision[]) {
   if (moves.length) {
     const result = await db.execute(sql`
       with instructions as (select * from jsonb_to_recordset(${JSON.stringify(moves)}::jsonb) as x(id uuid, status text, reason text))
-      update imported_entries e set status = i.status, category_id = null, categorized_by = 'ai', ai_reason = i.reason, updated_at = now()
+      update imported_entries e set status = i.status, category_id = null, categorized_by = 'ai', ai_reason = i.reason, ai_suggestion = null, updated_at = now()
       from instructions i where e.id = i.id and e.status = 'pending'
         and (i.status <> 'transfer' or e.kind in ('payment', 'transfer', 'other'))
       returning e.status`);
@@ -231,7 +232,7 @@ async function suggestDecisions(decisions: AiDecision[]) {
   const result = await getDb().execute(sql`
     with instructions as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(id uuid, decision text, category_id integer, reason text))
     update imported_entries e set category_id = case when i.decision = 'post' then i.category_id else null end,
-      categorized_by = 'ai', ai_reason = i.reason, updated_at = now()
+      categorized_by = 'ai', ai_reason = i.reason, ai_suggestion = i.decision, updated_at = now()
     from instructions i where e.id = i.id and e.status = 'pending'
       and ((i.decision = 'post' and exists (select 1 from categories c where c.id = i.category_id and not c.archived
           and c.kind::text = case when e.amount > 0 then 'income' else 'expense' end))

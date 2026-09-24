@@ -64,6 +64,20 @@
       "when": 1790241388708,
       "tag": "0008_spot_fifo",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790283165485,
+      "tag": "0009_ai_suggestion",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790283531923,
+      "tag": "0010_spot_fifo_hash",
+      "breakpoints": true
     }
   ]
 }

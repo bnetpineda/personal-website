@@ -64,7 +64,7 @@ export async function reviewImportedEntry(_previous: FormState, data: FormData):
       if (!categoryId) throw new ImportError("Choose a category.");
       await postImportedEntry(id, categoryId, allowDuplicate === "on");
     } else {
-      const changed = await getDb().update(importedEntries).set({ status: decision, categorizedBy: "manual", aiReason: null }).where(and(eq(importedEntries.id, id), eq(importedEntries.status, "pending"),
+      const changed = await getDb().update(importedEntries).set({ status: decision, categorizedBy: "manual", aiReason: null, aiSuggestion: null }).where(and(eq(importedEntries.id, id), eq(importedEntries.status, "pending"),
         decision === "transfer" ? inArray(importedEntries.kind, ["payment", "transfer", "other"]) : undefined)).returning({ id: importedEntries.id });
       if (!changed.length) throw new ImportError("This entry is already reviewed, or cannot be treated as a transfer.");
     }
@@ -79,7 +79,7 @@ export async function reopenImportedEntry(id: string): Promise<FormState> {
   // Posted entries are managed in Transactions. Never recreate a deleted posted entry on re-import.
   const result = await getDb().execute(sql`with selected as materialized (
     select id, transfer_id from imported_entries where id = ${id}::uuid and status in ('ignored','reviewed','transfer') for update
-  ) update imported_entries set status = 'pending', transfer_id = null, categorized_by = null, ai_reason = null, updated_at = now()
+  ) update imported_entries set status = 'pending', transfer_id = null, categorized_by = null, ai_reason = null, ai_suggestion = null, updated_at = now()
     where id in (select id from selected) or transfer_id in (select transfer_id from selected where transfer_id is not null) returning id`);
   revalidatePath("/admin", "layout");
   return { ok: result.rows.length > 0, message: result.rows.length ? "Returned to the inbox. Any linked transfer was also reopened." : "Posted entries are managed in Transactions." };
@@ -96,7 +96,7 @@ export async function matchImportedTransfer(_previous: FormState, data: FormData
   const transferId = crypto.randomUUID();
   const result = await db.execute(sql`with candidates as materialized (
     select id, status from imported_entries where id in (${first}::uuid, ${second}::uuid) order by id for update
-  ) update imported_entries set status = 'transfer', transfer_id = ${transferId}::uuid, category_id = null, categorized_by = 'manual', ai_reason = null, updated_at = now()
+  ) update imported_entries set status = 'transfer', transfer_id = ${transferId}::uuid, category_id = null, categorized_by = 'manual', ai_reason = null, ai_suggestion = null, updated_at = now()
     where id in (select id from candidates) and (select count(*) from candidates where status = 'pending') = 2 returning id`);
   revalidatePath("/admin", "layout");
   return { ok: result.rows.length === 2, message: result.rows.length === 2 ? "Transfer linked. Both principal movements are excluded from income and expenses; fees remain separate." : "An entry changed during review. Refresh and try again." };

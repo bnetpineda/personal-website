@@ -158,8 +158,12 @@ export async function undoPayment(undo: { liabilityId: string; reduced: number; 
   }
   const db = getDb();
   if (entryId?.success) {
-    const removed = await db.delete(cashFlows).where(eq(cashFlows.id, entryId.data)).returning({ id: cashFlows.id });
-    if (removed.length === 0) return done("That payment was already undone.");
+    // One statement: the balance comes back only if this call removed the logged expense, so a double undo is a no-op.
+    const restored = await db.execute(sql`
+      with removed as (delete from ${cashFlows} where ${cashFlows.id} = ${entryId.data} returning id)
+      update ${liabilities} set balance = balance + ${undo.reduced}, updated_at = now()
+      where ${liabilities.id} = ${liabilityId.data} and exists (select 1 from removed) returning id`);
+    return done(restored.rows.length ? "Payment undone." : "That payment was already undone.");
   }
   await db.update(liabilities).set({ balance: sql`${liabilities.balance} + ${undo.reduced}` }).where(eq(liabilities.id, liabilityId.data));
   return done("Payment undone.");

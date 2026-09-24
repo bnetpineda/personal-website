@@ -7,7 +7,7 @@ import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, confi
 
 const entry = (overrides: Partial<ImportedEntry> = {}): ImportedEntry => ({ id: crypto.randomUUID(), provider: "wise", accountKey: "personal", externalId: "CARD-1:USD:out",
   occurredOn: "2026-09-20", amount: -15, currency: "USD", kind: "payment", description: "Spotify premium", realizedPnl: null,
-  status: "pending", categoryId: null, transferId: null, trade: null, categorizedBy: null, aiReason: null, aiAttemptedAt: null,
+  status: "pending", categoryId: null, transferId: null, trade: null, categorizedBy: null, aiReason: null, aiSuggestion: null, aiAttemptedAt: null,
   createdAt: new Date(), updatedAt: new Date(), ...overrides });
 const category = (overrides: Partial<Category> = {}): Category => ({ id: 1, kind: "expense", name: "Subscriptions", color: "#FF4D50", monthlyBudget: null,
   sortOrder: 0, archived: false, createdAt: new Date(), updatedAt: new Date(), ...overrides });
@@ -88,11 +88,15 @@ describe("AI decision guardrails", () => {
     expect(confidentChoice("post:17", { "post:17": 0.69, investment: 0.31 })).toBe(false);
     expect(confidentChoice("post:26", { "post:26": 0.54, investment: 0.46 })).toBe(false);
     expect(confidentChoice("post:1", { "post:1": 0.82, "post:2": 0.7 })).toBe(false);
-    expect(confidentChoice("post:1")).toBe(true);
-    const pending = entry({ categorizedBy: "ai", aiReason: "Jev: Fees & charges (54% likely)", categoryId: 1 });
+    expect(confidentChoice("post:1")).toBe(false);
+    expect(confidentChoice("post:1", {})).toBe(false);
+    const pending = entry({ categorizedBy: "ai", aiReason: "Jev: Fees & charges (54% likely)", aiSuggestion: "post", categoryId: 1 });
     expect(suggestedReview(pending)).toBe("post");
-    expect(suggestedReview(entry({ provider: "ibkr", kind: "transfer", amount: 1000, categorizedBy: "ai", aiReason: "Jev: Transfer (62% likely)" }))).toBe("transfer");
-    expect(suggestedReview(entry({ provider: "binance", currency: "USDT", kind: "transfer", amount: 100, categorizedBy: "ai", aiReason: "Jev: Investment (70% likely)" }))).toBe("reviewed");
+    expect(suggestedReview(entry({ provider: "ibkr", kind: "transfer", amount: 1000, categorizedBy: "ai", aiReason: "Deposit from my bank", aiSuggestion: "transfer" }))).toBe("transfer");
+    expect(suggestedReview(entry({ provider: "binance", currency: "USDT", kind: "transfer", amount: 100, categorizedBy: "ai", aiSuggestion: "investment" }))).toBe("reviewed");
+    expect(suggestedReview(entry({ categorizedBy: "ai", aiSuggestion: "ignore" }))).toBe("ignored");
+    // A stale suggestion is ignored once someone else owns the decision.
+    expect(suggestedReview(entry({ provider: "ibkr", kind: "transfer", amount: 1000, categorizedBy: "rule", aiSuggestion: "transfer" }))).toBe("reviewed");
     expect(suggestedReview(entry())).toBe("post");
   });
 
@@ -210,6 +214,8 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("Jev files a clear choice and 
     expect(saved.get("SURE")).toMatchObject({ status: "posted", categoryId, categorizedBy: "ai" });
     expect(saved.get("CLOSE")).toMatchObject({ status: "pending", categoryId, categorizedBy: "ai" });
     expect(saved.get("CLOSE")!.aiReason).toContain("54% likely");
+    expect(saved.get("CLOSE")!.aiSuggestion).toBe("post");
+    expect(saved.get("SURE")!.aiSuggestion).toBeNull();
     expect(await db.select().from(cashFlows).where(eq(cashFlows.id, saved.get("CLOSE")!.id))).toHaveLength(0);
   } finally {
     if (ids.length) await db.delete(cashFlows).where(inArray(cashFlows.id, ids));

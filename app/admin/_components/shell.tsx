@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, Eye, EyeOff, LogOut, Plus, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Toaster } from "@/components/ui/sonner";
@@ -190,9 +191,9 @@ export function AdminHeader({ notifications = 0 }: { notifications?: number }) {
                   <Bell />
                   {notifications > 0 && <span className="sr-only">{notifications} active</span>}
                   {notifications > 0 && (
-                    <span aria-hidden="true" className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold text-white">
+                    <Badge aria-hidden="true" variant="destructive" className="absolute -top-2 -right-2">
                       {notifications}
-                    </span>
+                    </Badge>
                   )}
                 </Link>
               </Button>

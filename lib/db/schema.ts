@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { ConnectionSnapshot, Provider } from "../finance/connections/types";
-import type { CategorizedBy, EntryKind, EntryStatus, HistoryCoverage, SpotTrade } from "../finance/imports/types";
+import type { AiSuggestion, CategorizedBy, EntryKind, EntryStatus, HistoryCoverage, SpotTrade } from "../finance/imports/types";
 import {
   type AnyPgColumn,
   bigserial,
@@ -277,6 +277,8 @@ export const importedEntries = pgTable("imported_entries", {
   // Who made the review decision; AI decisions keep a one-line reason for the audit trail.
   categorizedBy: text("categorized_by").$type<CategorizedBy>(),
   aiReason: text("ai_reason"),
+  // Only meaningful while the entry is pending and categorized_by = 'ai'; every other writer clears it.
+  aiSuggestion: text("ai_suggestion").$type<AiSuggestion>(),
   // Set once the model has seen the entry, so scheduled runs never pay to re-ask.
   aiAttemptedAt: timestamp("ai_attempted_at", { withTimezone: true }),
   ...timestamps,
@@ -289,6 +291,7 @@ export const importedEntries = pgTable("imported_entries", {
   check("imported_entries_kind", sql`${t.kind} in ('payment','transfer','reward','dividend','interest','fee','tax','trade','other')`),
   check("imported_entries_status", sql`${t.status} in ('pending','posted','ignored','transfer','reviewed')`),
   check("imported_entries_categorized_by", sql`${t.categorizedBy} is null or ${t.categorizedBy} in ('rule','ai','manual')`),
+  check("imported_entries_ai_suggestion", sql`${t.aiSuggestion} is null or ${t.aiSuggestion} in ('post','transfer','investment','ignore')`),
 ]);
 
 /** One durable cursor per Binance account and stream. No credentials are stored here. */
@@ -352,7 +355,7 @@ export const spotFifoMeta = pgTable("spot_fifo_meta", {
   accountKey: text("account_key").notNull(),
   asOf: text("as_of").notNull(),
   sourceCount: integer("source_count").notNull(),
-  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  sourceHash: text("source_hash").notNull().default(""),
   ignoredBases: text("ignored_bases").array().notNull(),
   paymentAssets: text("payment_assets").array().notNull(),
 }, (t) => [primaryKey({ columns: [t.accountKey, t.asOf] })]);
