@@ -121,4 +121,9 @@ describe("account API workflows", () => {
     })).rejects.toThrow("still preparing");
     expect(retrievals).toBe(4);
   });
+  test("an expired IBKR Flex token says so instead of a bare error code", async () => {
+    await expect(fetchAccountSnapshot({ provider: "ibkr", token: "test-token", queryId: "123" }, {
+      ...baseIO, text: async () => '<FlexStatementResponse><Status>Fail</Status><ErrorCode>1012</ErrorCode></FlexStatementResponse>',
+    })).rejects.toThrow("Flex token has expired");
+  });
 });
