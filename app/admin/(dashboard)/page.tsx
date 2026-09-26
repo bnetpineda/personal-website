@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { getAccounts, getCategories, getConnections, getFx, getMonthlyTotals, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
+import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getMonthlyTotals, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
 import { computeNetWorth, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, includedPositions, isConnectionStale } from "@/lib/finance/connections/types";
 import { addDays, currentMonth, dayLabel, monthLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { getNotifications } from "@/lib/finance/notifications-dal";
 import { dueOccurrences } from "@/lib/finance/recurrence";
+import { importedIncomeSince, monthlyIncome, repeatPayers } from "@/lib/finance/repeat-income";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
 import { deleteCashFlow, restoreCashFlow } from "../_actions/cash-flows";
 import { CashFlowForm, type FormCategory } from "../_components/cash-flow-form";
@@ -32,7 +33,7 @@ export default async function HomePage() {
   const today = todayManila(now);
   const month = currentMonth(now);
 
-  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts] = await Promise.all([
+  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts, received] = await Promise.all([
     getConnections(),
     getFx(),
     getSnapshots(),
@@ -42,6 +43,7 @@ export default async function HomePage() {
     getCategories(),
     getAccounts(),
     getNotifications(),
+    getImportedIncome(importedIncomeSince(today)),
   ]);
   const formCategories: Record<CashFlowKind, FormCategory[]> = { expense: [], income: [] };
   for (const c of allCategories) formCategories[c.kind].push({ id: c.id, name: c.name, color: c.color, archived: c.archived });
@@ -61,6 +63,10 @@ export default async function HomePage() {
   const monthAgo = [...snapshots].reverse().find((s) => s.snapshotDate <= addDays(today, -30));
   const change = monthAgo ? nw.netWorthPhp - monthAgo.netWorthPhp : null;
 
+  // What you earn per month now, read from imported statements and income schedules.
+  const payers = repeatPayers(received);
+  const income = monthlyIncome(fx, recurring, payers);
+
   const due = dueOccurrences(recurring, today);
   const needsYou = alerts.filter((a) => !a.dismissed);
 
@@ -70,7 +76,7 @@ export default async function HomePage() {
         <SyncConnectionsButton disabled={!connections.some((c) => c.enabled)} />
       </PageHeader>
 
-      <MissingFxAlert currencies={nw.missingFx} />
+      <MissingFxAlert currencies={[...new Set([...nw.missingFx, ...income.missing])]} />
 
       <StatCards
         items={[
@@ -79,6 +85,11 @@ export default async function HomePage() {
             value: <Money value={nw.netWorthPhp} />,
             hint: change != null ? <><Money value={change} signed /> vs 30 days ago</> : "vs 30 days ago: —",
             primary: true,
+          },
+          {
+            label: "Monthly income",
+            value: <Money value={income.total} />,
+            hint: payers.length ? `${payers.map((p) => p.name).join(", ")} · last paid ${dayLabel(payers.map((p) => p.lastOn).sort().at(-1)!)}` : "Import a statement to see it",
           },
           { label: `In · ${monthLabel(month, "short")}`, value: <Money value={thisMonth.income} /> },
           {

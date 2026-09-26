@@ -7,9 +7,9 @@ import { Swatch } from "@/components/ui/swatch";
 import { getAccounts, getCategories, getFx, getImportedIncome, getRecurring, type RecurringRow } from "@/lib/dal";
 import { sumInPhp } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { addDays, addMonths, dayLabel, todayManila } from "@/lib/finance/dates";
+import { addDays, dayLabel, todayManila } from "@/lib/finance/dates";
 import { describeSchedule, dueOccurrences, monthlyEquivalent, upcomingOccurrences } from "@/lib/finance/recurrence";
-import { repeatPayers } from "@/lib/finance/repeat-income";
+import { importedIncomeSince, monthlyIncome, repeatPayers } from "@/lib/finance/repeat-income";
 import { deleteRecurring, setRecurringPaused } from "../../_actions/recurring";
 import type { FormCategory } from "../../_components/cash-flow-form";
 import { FormSheet } from "../../_components/form";
@@ -41,14 +41,13 @@ function toDTO(r: RecurringRow): RecurringDTO {
 
 export default async function RecurringPage() {
   const today = todayManila();
-  // Six months of imported income: long enough to see a monthly payer repeat, recent enough to still be paying.
   const [rows, incomeCategories, expenseCategories, accounts, fx, received] = await Promise.all([
     getRecurring(),
     getCategories("income"),
     getCategories("expense"),
     getAccounts(),
     getFx(),
-    getImportedIncome(`${addMonths(today.slice(0, 7), -5)}-01`),
+    getImportedIncome(importedIncomeSince(today)),
   ]);
 
   const toForm = (list: typeof incomeCategories): FormCategory[] => list.map(({ id, name, color, archived }) => ({ id, name, color, archived }));
@@ -59,9 +58,7 @@ export default async function RecurringPage() {
   const perMonth = (kind: CashFlowKind) =>
     sumInPhp(fx, live.filter((r) => r.kind === kind).map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency })));
   const payers = repeatPayers(received);
-  const scheduledIncome = perMonth("income");
-  const importedIncome = sumInPhp(fx, payers.map((p) => ({ amount: p.monthly, currency: p.currency })));
-  const income = { total: scheduledIncome.total + importedIncome.total, missing: [...scheduledIncome.missing, ...importedIncome.missing] };
+  const income = monthlyIncome(fx, rows, payers);
   const expenses = perMonth("expense");
   const missingFx = [...new Set([...income.missing, ...expenses.missing])];
 
@@ -157,7 +154,9 @@ export default async function RecurringPage() {
             <ItemActions>
               <span className="flex flex-col items-end font-mono text-sm">
                 <Money value={p.monthly} currency={p.currency} />
-                <span className="text-xs text-muted-foreground">avg/mo</span>
+                <span className="text-xs text-muted-foreground">
+                  /mo · avg <Money value={p.average} currency={p.currency} />
+                </span>
               </span>
             </ItemActions>
           </Item>
