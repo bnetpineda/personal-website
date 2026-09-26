@@ -196,7 +196,7 @@ export function ConnectionSettings({ provider, enabled, included, hasSnapshot }:
             onCheckedChange={(checked) => run(() => updateConnection(provider, "includeInNetWorth", checked === true))} />
           <FieldLabel htmlFor={`${provider}-included`}>Include in net worth</FieldLabel>
         </Field>
-        <FieldDescription>Archive matching manual holdings first so these balances are counted once. Pausing sync keeps saved balances in your totals.</FieldDescription>
+        <FieldDescription>Pausing sync keeps saved balances in your totals.</FieldDescription>
       </Field>
       <div className="flex flex-wrap items-start gap-2">
         <ConnectAccountButton provider={provider} connected />

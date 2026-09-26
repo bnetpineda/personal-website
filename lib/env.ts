@@ -22,7 +22,6 @@ export const env = {
   adminPasswordHash: () => required("ADMIN_PASSWORD_HASH", (v) => v.startsWith("scrypt:")),
   sessionSecret: () => required("ADMIN_SESSION_SECRET", (v) => v.length >= 32),
   cronSecret: () => optional("CRON_SECRET"),
-  finnhubApiKey: () => optional("FINNHUB_API_KEY"),
   coingeckoApiKey: () => optional("COINGECKO_API_KEY"),
   aiGatewayApiKey: () => optional("AI_GATEWAY_API_KEY"),
   aiCategorizeModel: () => optional("AI_CATEGORIZE_MODEL") ?? "anthropic/claude-haiku-4.5",

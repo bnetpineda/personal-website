@@ -8,7 +8,6 @@ import { removeBinanceEarnReceipts } from "@/lib/finance/connections/binance-pos
 import { CURRENCIES } from "@/lib/finance/constants";
 import { currentMonth, isMonth } from "@/lib/finance/dates";
 import { getEarnings } from "@/lib/finance/imports/dal";
-import { FinanceLinks } from "../../_components/finance-links";
 import { NativeAmount } from "../../_components/import-controls";
 import { EmptyState, Money, MonthPicker, PageHeader } from "../../_components/ui";
 
@@ -23,13 +22,12 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   const unknown = positions.filter((p) => p.costBasis == null || p.marketValue == null);
   const binanceMissing = unknown.filter((p) => p.provider === "binance").length;
   return <>
-    <PageHeader eyebrow="Private finance · investments" title="Earnings"><MonthPicker month={month} current={current} href={(m) => `/admin/earnings?month=${m}`} /></PageHeader>
-    <FinanceLinks current="earnings" />
+    <PageHeader eyebrow="Investments" title="Earnings" back={{ href: "/admin/holdings", label: "Holdings" }}><MonthPicker month={month} current={current} href={(m) => `/admin/earnings?month=${m}`} /></PageHeader>
     <div className="mb-4 flex gap-2"><Button asChild size="sm" variant={allTime ? "default" : "outline"}><Link href="/admin/earnings?period=all">All time</Link></Button><Button asChild size="sm" variant={allTime ? "outline" : "default"}><Link href={`/admin/earnings?month=${month}`}>Selected month</Link></Button></div>
     <Alert className="mb-6"><AlertTitle>Imported activity, in its original currency</AlertTitle><AlertDescription>
       Totals cover imported Binance and IBKR records {allTime ? "across all imported dates" : "for this month"}, including activity AI has not filed yet. Ignored entries are excluded. Contributions count deposits and withdrawals filed as transfers; linked transfers between investment accounts are excluded. This is not a total-return calculation.
     </AlertDescription></Alert>
-    {data.postedCash > 0 && <p className="mb-4 text-sm text-muted-foreground">Cash dividends, interest, fees and taxes you posted are on Transactions, not in these columns.</p>}
+    {data.postedCash > 0 && <p className="mb-4 text-sm text-muted-foreground">Cash dividends, interest, fees and taxes you posted are on Activity, not in these columns.</p>}
     {!data.rows.length ? <EmptyState title="No imported earnings yet">Connect Binance or configure an IBKR history Flex Query to start collecting rewards, dividends and trade results.</EmptyState> : <Card className="mb-6 gap-0 overflow-hidden py-0"><Table>
       <TableHeader><TableRow>{["Currency / asset", "Net contributions", "Earn rewards", "Dividends", "Interest", "Realized P/L", "Fees", "Taxes"].map((t) => <TableHead key={t}>{t}</TableHead>)}</TableRow></TableHeader>
       <TableBody>{data.rows.map((r) => <TableRow key={r.currency}><TableCell>{r.currency}</TableCell>{[r.contributions, r.rewards, r.dividends, r.interest, r.realized, r.fees, r.taxes].map((v, i) => <TableCell key={i} className="text-right font-mono">{v == null ? "Unavailable" : <NativeAmount value={v} currency={r.currency} crypto={!(CURRENCIES as readonly string[]).includes(r.currency)} />}</TableCell>)}</TableRow>)}</TableBody>

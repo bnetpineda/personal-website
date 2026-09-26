@@ -4,8 +4,7 @@ import { env } from "@/lib/env";
 /*
  * External quote/FX providers. Every call has a timeout and is never cached; callers treat
  * failures as non-fatal (keep the old price, report the reason).
- *  - CoinGecko  /simple/price  — crypto, priced directly in the holding's currency
- *  - Finnhub    /quote         — US stocks & ETFs (USD)
+ *  - CoinGecko  /simple/price  — crypto prices for synced Binance balances
  *  - Frankfurter v2 /rate      — ECB reference FX rates → PHP
  */
 
@@ -61,23 +60,6 @@ export async function fetchCoinGeckoPrices(
   return result;
 }
 
-/** US stock/ETF quote in USD. Returns null for unknown tickers (Finnhub answers 200 with zeros). */
-export async function fetchFinnhubQuote(symbol: string): Promise<Quote | null> {
-  const key = env.finnhubApiKey();
-  if (!key) throw new PriceError("FINNHUB_API_KEY is not set");
-  const { status, body } = await getJson(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}`, {
-    "X-Finnhub-Token": key,
-  });
-  if (status === 401) throw new PriceError("Finnhub rejected the API key");
-  if (status === 403) throw new PriceError("Not on Finnhub's free plan (US listings only)");
-  if (status === 429) throw new PriceError("Finnhub rate limit hit");
-  if (status !== 200) throw new PriceError(`Finnhub returned HTTP ${status}`);
-
-  const q = body as { c?: number; t?: number } | null;
-  if (!q?.c && !q?.t) return null;
-  return { price: q.c ?? 0, asOf: q.t ? new Date(q.t * 1000) : new Date() };
-}
-
 /** PHP per 1 unit of `currency`, from ECB reference rates. */
 export async function fetchFxRate(currency: string): Promise<{ rate: number; asOf: string }> {
   const { status, body } = await getJson(`https://api.frankfurter.dev/v2/rate/${encodeURIComponent(currency)}/PHP`);
@@ -86,12 +68,4 @@ export async function fetchFxRate(currency: string): Promise<{ rate: number; asO
     throw new PriceError(`No FX rate for ${currency} (HTTP ${status})`);
   }
   return { rate: r.rate, asOf: r.date };
-}
-
-/** One quote for a single auto-priced holding — used to validate ids/tickers on save. */
-export async function fetchQuote(source: "coingecko" | "finnhub", ref: string, currency: string): Promise<Quote | null> {
-  if (source === "finnhub") return fetchFinnhubQuote(ref);
-  const hit = (await fetchCoinGeckoPrices([ref], [currency])).get(ref);
-  const price = hit?.prices[currency.toLowerCase()];
-  return hit && price != null ? { price, asOf: hit.asOf } : null;
 }

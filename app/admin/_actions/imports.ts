@@ -2,18 +2,15 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { categories, categoryRules } from "@/lib/db/schema";
 import { providerSchema } from "@/lib/finance/connections/types";
-import { applyCategoryRules } from "@/lib/finance/imports/service";
+import { applyCategoryRules, ingestEntries } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { ImportError } from "@/lib/finance/imports/types";
 import { detectFeeMode, mergeWiseStatements, parseWiseStatement } from "@/lib/finance/imports/wise-csv";
-import { autoBalanceTargets, saveWiseImport } from "@/lib/finance/imports/wise-balances";
-import { snapshotQuietly } from "@/lib/finance/service";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
 
 function message(error: unknown): FormState {
@@ -33,26 +30,20 @@ async function csvEntries(data: FormData) {
   return { ...mergeWiseStatements(statements), files: files.length };
 }
 /**
- * Every Wise CSV at once, in one step: the fee format is detected per file, closing balances are
- * applied where the target holding is certain, and rules then AI file the entries before answering.
+ * Every Wise CSV at once, in one step: the fee format is detected per file, then rules and AI file
+ * the entries before answering. Balances come from the Wise connection, not the statements.
  * Re-importing is safe; entries already imported are skipped.
  */
 export async function importWiseStatements(data: FormData): Promise<FormState> {
   await requireAdmin();
   try {
-    const { entries, balances, files } = await csvEntries(data);
-    if (!entries.length && !balances.length) throw new ImportError("These statements have no transactions or closing balances.");
-    const targets = await autoBalanceTargets(balances);
-    const result = await saveWiseImport(entries, targets.balances, targets.data);
+    const { entries, files } = await csvEntries(data);
+    if (!entries.length) throw new ImportError("These statements have no transactions.");
+    const result = await ingestEntries(entries);
     await applyCategoryRules();
     const ai = await categorizeQuietly();
-    if (result.balances) after(snapshotQuietly);
     revalidatePath("/admin", "layout");
-    const updated = result.balances ? ` Updated ${result.balances} Wise ${result.balances === 1 ? "balance" : "balances"}.`
-      : targets.apiCounted ? " Balances stay with your Wise connection." : "";
-    const older = result.older ? ` Kept ${result.older} newer saved ${result.older === 1 ? "balance" : "balances"}.` : "";
-    const skipped = targets.skipped.length ? ` Left the ${targets.skipped.join(", ")} holding unchanged: several Wise holdings match, or a different balance is saved for that date.` : "";
-    return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${updated}${older}${skipped}${describeAiRun(ai)}` };
+    return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
 }
 

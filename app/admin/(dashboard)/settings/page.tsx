@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Plus, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, Download, Link2, Plus, Repeat, SlidersHorizontal, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getCategories, getCategoryTotals, getCategoryUsage, getFxRows } from "@/lib/dal";
+import { getCategories, getCategoryTotals, getCategoryUsage, getConnections, getRecurring } from "@/lib/dal";
 import { PROVIDER_META } from "@/lib/finance/connections/types";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { currentMonth, dayLabel } from "@/lib/finance/dates";
+import { currentMonth } from "@/lib/finance/dates";
 import { getCategoryRules } from "@/lib/finance/imports/dal";
 import { deleteCategory, setCategoryArchived } from "../../_actions/categories";
 import { BudgetsForm } from "../../_components/budgets-form";
@@ -24,13 +23,38 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  const [categories, usage, fxRows, spent, rules] = await Promise.all([
+  const [categories, usage, spent, rules, connections, recurring] = await Promise.all([
     getCategories(),
     getCategoryUsage(),
-    getFxRows(),
     getCategoryTotals("expense", currentMonth()),
     getCategoryRules(),
+    getConnections(),
+    getRecurring(),
   ]);
+  const activeRecurring = recurring.filter((r) => !r.paused && r.nextOn != null).length;
+
+  const sections = [
+    {
+      href: "/admin/connections",
+      icon: <Link2 />,
+      title: "Connected accounts",
+      description: connections.length
+        ? `${connections.map((c) => PROVIDER_META[c.provider].name).join(", ")} · sync daily, import Wise CSVs`
+        : "Connect Wise, Binance or IBKR to track balances automatically",
+    },
+    {
+      href: "/admin/recurring",
+      icon: <Repeat />,
+      title: "Recurring",
+      description: activeRecurring ? `${activeRecurring} active · salary, rent and bills log themselves` : "Salary, rent and bills that log themselves",
+    },
+    {
+      href: "/admin/holdings",
+      icon: <Wallet />,
+      title: "Holdings & investments",
+      description: "Positions, P/L, allocation, earnings and history",
+    },
+  ];
 
   const categoryList = (kind: CashFlowKind) => (
     <ItemGroup>
@@ -91,9 +115,23 @@ export default async function SettingsPage() {
       <PageHeader eyebrow="Setup" title="Settings" />
 
       <div className="mb-6">
-        <Panel title="Account connections" action={<Button asChild variant="outline"><Link href="/admin/connections">Manage connections</Link></Button>}>
-          <p className="text-sm text-muted-foreground">Sync Binance Spot and Simple Earn, IBKR investments and cash, and eligible Wise balances automatically.</p>
-          <div className="mt-4 flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link href="/admin/earnings">Earnings</Link></Button><Button asChild variant="outline" size="sm"><Link href="/admin/notifications">Notifications</Link></Button></div>
+        <Panel title="Automation">
+          <ItemGroup>
+            {sections.map((section) => (
+              <Item key={section.href} size="sm" asChild>
+                <Link href={section.href}>
+                  <ItemMedia variant="icon">{section.icon}</ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>{section.title}</ItemTitle>
+                    <ItemDescription>{section.description}</ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <ChevronRight />
+                  </ItemActions>
+                </Link>
+              </Item>
+            ))}
+          </ItemGroup>
         </Panel>
       </div>
 
@@ -155,12 +193,12 @@ export default async function SettingsPage() {
         </Panel>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="mt-6">
         <Panel title="Backup">
           <div className="flex flex-col items-start gap-4">
             <p className="text-sm text-muted-foreground">
-              Download everything — holdings, entries, debts, categories and history — as JSON. Neon&apos;s free plan only keeps a
-              few hours of restore history, so grab a copy now and then.
+              Download everything as JSON. Neon&apos;s free plan only keeps a few hours of restore history, so grab a copy now
+              and then.
             </p>
             <Button asChild variant="outline">
               <a href="/admin/export" download>
@@ -168,32 +206,6 @@ export default async function SettingsPage() {
               </a>
             </Button>
           </div>
-        </Panel>
-        <Panel title="FX rates → PHP">
-          {fxRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Fetched automatically for every non-PHP currency you use.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Currency</TableHead>
-                  <TableHead>ECB date</TableHead>
-                  <TableHead className="text-right">PHP</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {fxRows.map((r) => (
-                  <TableRow key={r.currency}>
-                    <TableCell className="font-mono font-bold">{r.currency}</TableCell>
-                    <TableCell>
-                      <span className="text-muted-foreground">{dayLabel(r.asOf)}</span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">₱{r.rateToPhp.toFixed(4)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
         </Panel>
       </div>
     </>

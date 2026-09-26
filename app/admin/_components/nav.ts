@@ -1,27 +1,28 @@
-import { ArrowLeftRight, Bell, CreditCard, LayoutDashboard, Link2, Repeat, Settings, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeftRight, House, Settings } from "lucide-react";
 
-/** `tab: false` keeps an item out of the phone tab bar (it's reachable from the header instead). */
+/** The three tabs. Everything else (holdings, recurring, connections…) hangs off Home or Settings. */
 export const ADMIN_NAV = [
-  { href: "/admin", label: "Overview", short: "Home", icon: LayoutDashboard, tab: true },
-  { href: "/admin/holdings", label: "Holdings", short: "Holdings", icon: Wallet, tab: true },
-  { href: "/admin/transactions", label: "Transactions", short: "Money", icon: ArrowLeftRight, tab: true },
-  { href: "/admin/recurring", label: "Recurring", short: "Repeat", icon: Repeat, tab: true },
-  { href: "/admin/debts", label: "Debts", short: "Debts", icon: CreditCard, tab: true },
-  { href: "/admin/settings", label: "Settings", short: "Settings", icon: Settings, tab: false },
-  { href: "/admin/connections", label: "Connections", short: "Connect", icon: Link2, tab: false },
-  { href: "/admin/earnings", label: "Investment earnings", short: "Earnings", icon: TrendingUp, tab: false },
-  { href: "/admin/history", label: "Investment history", short: "History", icon: ArrowLeftRight, tab: false },
-  { href: "/admin/notifications", label: "Notifications", short: "Alerts", icon: Bell, tab: false },
+  { href: "/admin", label: "Home", icon: House },
+  { href: "/admin/transactions", label: "Activity", icon: ArrowLeftRight },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;
 
+/** Pages that aren't tabs light up the tab they're opened from. */
+const TAB_CHILDREN: Record<string, string[]> = {
+  "/admin": ["/admin/holdings", "/admin/earnings", "/admin/history"],
+  "/admin/settings": ["/admin/connections", "/admin/recurring"],
+};
+
 export function isActivePath(pathname: string, href: string): boolean {
-  return href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`);
+  const under = (p: string) => pathname === p || pathname.startsWith(`${p}/`);
+  if (TAB_CHILDREN[href]?.some(under)) return true;
+  return href === "/admin" ? pathname === "/admin" : under(href);
 }
 
 /** Cookie holding the privacy-blur preference; read on the server so there's no flash of numbers. */
 export const PRIVACY_COOKIE = "adm_private";
 
-/** Transactions page URL for a filter (blank values are left out). */
+/** Activity page URL for a filter (blank values are left out). */
 export function transactionsHref(params: { kind?: string | null; month?: string | null; category?: number | string | null; q?: string | null }) {
   const q = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value != null && value !== "") q.set(key, String(value));

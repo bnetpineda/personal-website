@@ -1,13 +1,5 @@
 import { z } from "zod";
-import {
-  ASSET_CLASSES,
-  CASH_FLOW_KINDS,
-  COINGECKO_PRESETS,
-  CURRENCIES,
-  LIABILITY_KINDS,
-  PRICE_SOURCES,
-  RECURRENCE_FREQUENCIES,
-} from "./constants";
+import { CASH_FLOW_KINDS, CURRENCIES, RECURRENCE_FREQUENCIES } from "./constants";
 import { defaultSecondDay } from "./recurrence";
 
 /*
@@ -30,72 +22,9 @@ const amount = (required: string) =>
   z.preprocess(toNumber, z.number({ error: required }).min(0, "Can't be negative").max(MAX_MONEY, "Too large"));
 const optionalAmount = () =>
   z.preprocess(toNumber, z.number({ error: "Enter a number" }).min(0, "Can't be negative").max(MAX_MONEY, "Too large").optional());
-const decimal = (required: string) =>
-  z.preprocess(toNumber, z.number({ error: required }).min(0, "Can't be negative"));
-const optionalDecimal = () => z.preprocess(toNumber, z.number({ error: "Enter a number" }).min(0, "Can't be negative").optional());
-const positive = (required: string) => z.preprocess(toNumber, z.number({ error: required }).positive("Must be more than 0"));
 const currency = z.enum(CURRENCIES, { error: "Pick a currency" });
 
 export const idSchema = z.uuid();
-
-export const holdingSchema = z
-  .object({
-    assetClass: z.enum(ASSET_CLASSES, { error: "Pick an asset class" }),
-    name: text(120, "Name is required"),
-    symbol: optionalText(20),
-    platform: optionalText(60),
-    currency,
-    priceSource: z.enum(PRICE_SOURCES, { error: "Pick a price source" }),
-    priceRef: optionalText(80),
-    quantity: decimal("Enter a quantity"),
-    avgCost: optionalDecimal(),
-    lastPrice: optionalDecimal(),
-    notes: optionalText(500),
-  })
-  .superRefine((v, ctx) => {
-    if (v.assetClass === "cash") return;
-    if (v.avgCost == null) ctx.addIssue({ code: "custom", path: ["avgCost"], message: "Enter the average cost" });
-    if (v.priceSource === "finnhub") {
-      if (v.currency !== "USD") ctx.addIssue({ code: "custom", path: ["currency"], message: "Finnhub quotes are in USD" });
-      if (!v.priceRef && !v.symbol) ctx.addIssue({ code: "custom", path: ["priceRef"], message: "Enter the ticker" });
-    }
-    if (v.priceSource === "coingecko") {
-      const ref = v.priceRef ?? COINGECKO_PRESETS[v.symbol?.toUpperCase() ?? ""];
-      if (!ref) ctx.addIssue({ code: "custom", path: ["priceRef"], message: "Enter the CoinGecko API id (e.g. bitcoin)" });
-      else if (!/^[a-z0-9-]+$/i.test(ref)) ctx.addIssue({ code: "custom", path: ["priceRef"], message: "Letters, digits and dashes only" });
-    }
-  })
-  .transform((v) => {
-    const symbol = v.symbol?.toUpperCase();
-    if (v.assetClass === "cash") {
-      // Cash is valued at face value: quantity = balance, 1 unit costs 1.
-      return { ...v, symbol, avgCost: 1, lastPrice: null, priceSource: "manual" as const, priceRef: null };
-    }
-    const priceRef =
-      v.priceSource === "finnhub"
-        ? (v.priceRef ?? symbol ?? "").toUpperCase()
-        : v.priceSource === "coingecko"
-          ? (v.priceRef ?? COINGECKO_PRESETS[symbol ?? ""] ?? "").toLowerCase()
-          : null;
-    return {
-      ...v,
-      symbol,
-      avgCost: v.avgCost ?? 0,
-      lastPrice: v.priceSource === "manual" ? (v.lastPrice ?? null) : null,
-      priceRef,
-    };
-  });
-export type HoldingInput = z.output<typeof holdingSchema>;
-
-export const adjustSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("buy"),
-    quantity: positive("Enter the quantity bought"),
-    price: decimal("Enter the price per unit"),
-    fee: optionalDecimal(),
-  }),
-  z.object({ type: z.literal("sell"), quantity: positive("Enter the quantity sold") }),
-]);
 
 export const cashFlowSchema = z.object({
   kind: z.enum(CASH_FLOW_KINDS),
@@ -145,40 +74,6 @@ export const recurringSchema = z
     endOn: v.endOn ?? null,
   }));
 export type RecurringInput = z.output<typeof recurringSchema>;
-
-export const liabilitySchema = z.object({
-  kind: z.enum(LIABILITY_KINDS, { error: "Pick a type" }),
-  name: text(120, "Name is required"),
-  lender: optionalText(80),
-  balance: amount("Enter the current balance"),
-  currency,
-  creditLimit: optionalAmount(),
-  interestRate: z.preprocess(
-    toNumber,
-    z.number({ error: "Enter a number" }).min(0, "Can't be negative").max(1000, "Too large").optional()
-  ),
-  dueDay: z.preprocess(
-    toNumber,
-    z.number({ error: "Enter a day" }).int("Whole day only").min(1, "Use a day from 1 to 31").max(31, "Use a day from 1 to 31").optional()
-  ),
-  minPayment: optionalAmount(),
-  notes: optionalText(500),
-});
-export type LiabilityInput = z.output<typeof liabilitySchema>;
-
-/** "Pay" on a debt: lowers the balance and, optionally, logs the payment as an expense. */
-export const paymentSchema = z
-  .object({
-    amount: amount("Enter the amount paid").refine((n) => n > 0, "Must be more than 0"),
-    occurredOn: z.iso.date({ error: "Pick a date" }),
-    logExpense: z.preprocess((v) => v === "on" || v === "true", z.boolean()),
-    categoryId: z.preprocess(blank, z.coerce.number().int().positive().optional()),
-    account: optionalText(60),
-  })
-  .superRefine((v, ctx) => {
-    if (v.logExpense && v.categoryId == null) ctx.addIssue({ code: "custom", path: ["categoryId"], message: "Pick a category" });
-  });
-export type PaymentInput = z.output<typeof paymentSchema>;
 
 /** A deleted entry sent back by "Undo" — re-inserted as it was. */
 export const restoreCashFlowSchema = z.object({

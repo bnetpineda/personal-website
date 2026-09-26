@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   allocation,
-  applyAdjustment,
   budgetProgress,
   sumInPhp,
   budgetSegments,
@@ -90,39 +89,6 @@ describe("minimum holding value", () => {
     expect(isSmallHolding(0.01, "JPY", fx)).toBe(false);
     expect(isSmallHolding(10, "PHP", {})).toBe(false);
     expect(isSmallHolding(0, "JPY", {})).toBe(true);
-  });
-});
-
-describe("applyAdjustment", () => {
-  test("buying more recomputes the weighted average including the fee", () => {
-    const r = applyAdjustment({ quantity: 10, avgCost: 100 }, { type: "buy", quantity: 10, price: 200, fee: 20 });
-    expect(r).toEqual({ ok: true, quantity: 20, avgCost: 151 });
-  });
-
-  test("buying into an empty position uses the buy price", () => {
-    const r = applyAdjustment({ quantity: 0, avgCost: 0 }, { type: "buy", quantity: 0.1, price: 3_000_000 });
-    expect(r).toEqual({ ok: true, quantity: 0.1, avgCost: 3_000_000 });
-  });
-
-  test("strips float noise", () => {
-    const r = applyAdjustment({ quantity: 0.1, avgCost: 1 }, { type: "buy", quantity: 0.2, price: 1 });
-    expect(r).toEqual({ ok: true, quantity: 0.3, avgCost: 1 });
-  });
-
-  test("selling lowers quantity and keeps the average cost", () => {
-    const r = applyAdjustment({ quantity: 10, avgCost: 151 }, { type: "sell", quantity: 4 });
-    expect(r).toEqual({ ok: true, quantity: 6, avgCost: 151 });
-  });
-
-  test("selling everything lands exactly on zero", () => {
-    const r = applyAdjustment({ quantity: 0.3, avgCost: 5 }, { type: "sell", quantity: 0.1 + 0.2 });
-    expect(r).toEqual({ ok: true, quantity: 0, avgCost: 5 });
-  });
-
-  test("rejects overselling and non-positive quantities", () => {
-    expect(applyAdjustment({ quantity: 1, avgCost: 5 }, { type: "sell", quantity: 2 }).ok).toBe(false);
-    expect(applyAdjustment({ quantity: 1, avgCost: 5 }, { type: "sell", quantity: 0 }).ok).toBe(false);
-    expect(applyAdjustment({ quantity: 1, avgCost: 5 }, { type: "buy", quantity: 1, price: -1 }).ok).toBe(false);
   });
 });
 

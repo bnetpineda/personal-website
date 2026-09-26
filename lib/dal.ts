@@ -37,34 +37,6 @@ export async function getConnections() {
   return loadConnectionViews();
 }
 
-export async function getFxRows() {
-  await requireAdmin();
-  return getDb().select().from(fxRates).orderBy(asc(fxRates.currency));
-}
-
-export async function getHoldings({ archived = false }: { archived?: boolean } = {}) {
-  await requireAdmin();
-  return getDb()
-    .select()
-    .from(holdings)
-    .where(eq(holdings.archived, archived))
-    .orderBy(asc(holdings.assetClass), asc(holdings.name));
-}
-
-export async function countArchivedHoldings(): Promise<number> {
-  await requireAdmin();
-  const [row] = await getDb().select({ n: count() }).from(holdings).where(eq(holdings.archived, true));
-  return row.n;
-}
-
-export async function getLiabilities() {
-  await requireAdmin();
-  return getDb()
-    .select()
-    .from(liabilities)
-    .orderBy(asc(liabilities.archived), desc(liabilities.balance), asc(liabilities.name));
-}
-
 export async function getCategories(kind?: CashFlowKind) {
   await requireAdmin();
   return getDb()
@@ -99,7 +71,7 @@ export const SEARCH_LIMIT = 200;
 const MONTH_LIMIT = 5000;
 
 /**
- * Entries for the Transactions page: one month, or — with a search term — all time
+ * Entries for the Activity page: one month, or — with a search term — all time
  * (newest first, capped at SEARCH_LIMIT), optionally of one kind.
  */
 export async function getCashFlows({ kind, month, q }: { kind?: CashFlowKind; month?: string; q?: string }) {
@@ -130,7 +102,7 @@ export interface EntrySuggestion {
 
 /**
  * Descriptions used before (latest spelling, category and account of each), most recent
- * first — the quick-add form suggests them and fills in the rest when one is picked.
+ * first — the add form suggests them and fills in the rest when one is picked.
  */
 export async function getEntrySuggestions(limit = 150): Promise<EntrySuggestion[]> {
   await requireAdmin();
@@ -158,32 +130,6 @@ export async function getEntrySuggestions(limit = 150): Promise<EntrySuggestion[
     .from(distinct)
     .orderBy(desc(distinct.lastUsed))
     .limit(limit);
-}
-
-export interface LastPayment {
-  occurredOn: string;
-  amount: number;
-  currency: string;
-  categoryId: number;
-  account: string | null;
-}
-
-/** Latest payment logged against each debt (from "Pay"), keyed by liability id. */
-export async function getLastPayments(): Promise<Map<string, LastPayment>> {
-  await requireAdmin();
-  const rows = await getDb()
-    .selectDistinctOn([cashFlows.liabilityId], {
-      liabilityId: cashFlows.liabilityId,
-      occurredOn: cashFlows.occurredOn,
-      amount: cashFlows.amount,
-      currency: cashFlows.currency,
-      categoryId: cashFlows.categoryId,
-      account: cashFlows.account,
-    })
-    .from(cashFlows)
-    .where(isNotNull(cashFlows.liabilityId))
-    .orderBy(cashFlows.liabilityId, desc(cashFlows.occurredOn), desc(cashFlows.createdAt));
-  return new Map(rows.map(({ liabilityId, ...r }) => [liabilityId!, r]));
 }
 
 export async function getRecentCashFlows(limit = 8) {
@@ -235,7 +181,7 @@ export async function getAccounts(limit = 25): Promise<string[]> {
   return rows.map((r) => r.account!).filter(Boolean);
 }
 
-/** Category/account/currency of the latest entry, used to prefill quick-add. */
+/** Category/account/currency of the latest entry, used to prefill the add form. */
 export async function getLastEntryDefaults(kind: CashFlowKind) {
   await requireAdmin();
   const [row] = await getDb()

@@ -48,7 +48,7 @@ export interface CashFlowFormProps {
     account: string | null;
     notes: string | null;
   };
-  /** Focus the amount on open (quick add). */
+  /** Focus the amount on open (the add sheet). */
   autoFocus?: boolean;
 }
 

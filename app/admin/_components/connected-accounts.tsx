@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Link2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { computeNetWorth, fxToPhp, type FxTable } from "@/lib/finance/calc";
@@ -13,14 +11,10 @@ import { ConnectAccountButton, ConnectionSettings, CredentialExpiryButton, SyncC
 import { ImportWiseButton } from "./import-controls";
 import { Money } from "./ui";
 
-export function ConnectedAccounts({ connections, fx, detailed = false }: { connections: ConnectionView[]; fx: FxTable; detailed?: boolean }) {
+export function ConnectedAccounts({ connections, fx }: { connections: ConnectionView[]; fx: FxTable }) {
   const now = new Date();
   return (
     <section aria-label="Connected accounts" className="mb-6 flex flex-col gap-4">
-      {!detailed && <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-lg uppercase">Connected accounts</h2>
-        <Button asChild variant="ghost" size="sm"><Link href="/admin/connections">Manage connections <ArrowRight /></Link></Button>
-      </div>}
       <div className="grid gap-4 md:grid-cols-3">
         {PROVIDERS.map((provider) => {
           const meta = PROVIDER_META[provider];
@@ -58,25 +52,23 @@ export function ConnectedAccounts({ connections, fx, detailed = false }: { conne
                 {stale && snapshot && <p className="text-sm text-warning">Showing older saved balances.</p>}
                 {connection?.error && <p role="status" className="text-sm text-destructive">{connection.error}</p>}
                 {connection?.historyError && <p role="status" className="text-sm text-warning">History: {connection.historyError}</p>}
-                {detailed && connection?.historyCoverage && <p className="text-xs text-muted-foreground">Last history window: {connection.historyCoverage.from} – {connection.historyCoverage.to}. <Link href="/admin/earnings" className="underline">Coverage details</Link></p>}
-                {detailed ? <>
-                  {connection ? <>
-                    <SyncConnectionsButton provider={provider} disabled={!connection.enabled || connection.syncing} />
-                    <ConnectionSettings provider={provider} enabled={connection.enabled} included={connection.includeInNetWorth} hasSnapshot={Boolean(snapshot)} />
-                    <p className="text-xs text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ?? "No reminder set"}</p>
-                    <CredentialExpiryButton provider={provider} expiresOn={connection.credentialsExpireOn} />
-                  </> : <ConnectAccountButton provider={provider} />}
-                  {provider === "wise" && <>
-                    <ImportWiseButton />
-                    <p className="text-xs text-muted-foreground">Select or drag all your Wise statement CSVs at once, one per currency. They import and categorize in one step.</p>
-                  </>}
-                </> : !connection && <Button asChild variant="outline" size="sm"><Link href="/admin/connections"><Link2 />Connect {meta.name}</Link></Button>}
+                {connection?.historyCoverage && <p className="text-xs text-muted-foreground">Last history window: {connection.historyCoverage.from} – {connection.historyCoverage.to}. <Link href="/admin/earnings" className="underline">Coverage details</Link></p>}
+                {connection ? <>
+                  <SyncConnectionsButton provider={provider} disabled={!connection.enabled || connection.syncing} />
+                  <ConnectionSettings provider={provider} enabled={connection.enabled} included={connection.includeInNetWorth} hasSnapshot={Boolean(snapshot)} />
+                  <p className="text-xs text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ?? "No reminder set"}</p>
+                  <CredentialExpiryButton provider={provider} expiresOn={connection.credentialsExpireOn} />
+                </> : <ConnectAccountButton provider={provider} />}
+                {provider === "wise" && <>
+                  <ImportWiseButton />
+                  <p className="text-xs text-muted-foreground">Select or drag all your Wise statement CSVs at once, one per currency. They import and categorize in one step.</p>
+                </>}
               </CardContent>
             </Card>
           );
         })}
       </div>
-      {detailed && connections.filter((c) => c.snapshot).map((connection) => (
+      {connections.filter((c) => c.snapshot).map((connection) => (
         <Card key={connection.provider}>
           <CardHeader>
             <CardTitle>{PROVIDER_META[connection.provider].name} balances</CardTitle>

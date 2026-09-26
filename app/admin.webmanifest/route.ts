@@ -26,12 +26,10 @@ const manifest: MetadataRoute.Manifest = {
     { src: "/admin-icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
     { src: "/admin-icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ],
-  // Long-press the home-screen icon. `?add=` opens quick add straight away (see QuickAdd).
+  // Long-press the home-screen icon.
   shortcuts: [
-    { name: "Add expense", short_name: "Expense", url: "/admin?add=expense" },
-    { name: "Add income", short_name: "Income", url: "/admin?add=income" },
-    { name: "Transactions", url: "/admin/transactions" },
-    { name: "Recurring", url: "/admin/recurring" },
+    { name: "Activity", url: "/admin/transactions" },
+    { name: "Holdings", url: "/admin/holdings" },
   ],
 };
 

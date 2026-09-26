@@ -13,7 +13,9 @@ import {
   getCashFlows,
   getCategories,
   getCategoryTotals,
+  getEntrySuggestions,
   getFx,
+  getLastEntryDefaults,
   getMonthlyTotals,
   getRecurring,
   type CashFlowRow,
@@ -25,16 +27,16 @@ import { upcomingOccurrences } from "@/lib/finance/recurrence";
 import { deleteCashFlow, restoreCashFlow } from "../../_actions/cash-flows";
 import { BudgetsForm } from "../../_components/budgets-form";
 import { CashFlowForm, type FormCategory } from "../../_components/cash-flow-form";
-import { BreakdownChart } from "../../_components/charts";
+import { AddEntry } from "../../_components/add-entry";
+import { BreakdownChart, CashFlowChart } from "../../_components/charts";
 import { FormSheet } from "../../_components/form";
 import { transactionsHref } from "../../_components/nav";
-import { AddEntryButton } from "../../_components/quick-add";
 import { OccurrenceList } from "../../_components/recurring";
 import { EditableRow } from "../../_components/row-actions";
 import { EmptyState, Money, MonthPicker, PageHeader, Panel, Pct, StatCards, type BreakdownRow } from "../../_components/ui";
 
 export const metadata: Metadata = {
-  title: "Transactions",
+  title: "Activity",
 };
 
 type Params = { kind?: string; month?: string; q?: string; category?: string };
@@ -52,7 +54,7 @@ const vsLast = (now: number, before: number, month: string) =>
 const budgetHint = (progress: { over: boolean; remaining: number } | null, empty: string) =>
   progress == null ? empty : progress.over ? <><Money value={Math.abs(progress.remaining)} /> over</> : <><Money value={progress.remaining} /> left</>;
 
-export default async function TransactionsPage({ searchParams }: { searchParams: Promise<Params> }) {
+export default async function ActivityPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const now = new Date();
   const today = todayManila(now);
@@ -62,15 +64,18 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const kindParam = CASH_FLOW_KINDS.includes(params.kind as CashFlowKind) ? (params.kind as CashFlowKind) : null;
   const categoryParam = Number(params.category);
 
-  const [allCategories, entries, monthly, expenseTotals, incomeTotals, accounts, recurring, fx] = await Promise.all([
+  const [allCategories, entries, monthly, expenseTotals, incomeTotals, accounts, recurring, fx, suggestions, lastExpense, lastIncome] = await Promise.all([
     getCategories(),
     getCashFlows({ kind: kindParam ?? undefined, month, q: q || undefined }),
-    getMonthlyTotals(month, 2),
+    getMonthlyTotals(month, 12),
     getCategoryTotals("expense", month),
     getCategoryTotals("income", month),
     getAccounts(),
     getRecurring(),
     getFx(),
+    getEntrySuggestions(),
+    getLastEntryDefaults("expense"),
+    getLastEntryDefaults("income"),
   ]);
 
   // A category filter implies its kind.
@@ -90,16 +95,18 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     income: [],
   };
   for (const c of allCategories) formCategories[c.kind].push({ id: c.id, name: c.name, color: c.color, archived: c.archived });
+  const entryDefaults = (last: typeof lastExpense) => ({
+    occurredOn: today,
+    categoryId: last?.categoryId,
+    account: last?.account,
+    currency: last?.currency,
+  });
 
   // ---- month summary ----
-  const [prev, thisMonth] = monthlySeries(month, 2, monthly);
+  const series = monthlySeries(month, 12, monthly);
+  const [prev, thisMonth] = series.slice(-2);
   const rate = savingsRate(thisMonth.income, thisMonth.expense);
   const expenseCategories = allCategories.filter((c) => c.kind === "expense");
-  const budgeted = expenseCategories.filter((c) => !c.archived && (c.monthlyBudget ?? 0) > 0);
-  const budget = budgetProgress(
-    budgeted.reduce((sum, c) => sum + (expenseTotals.get(c.id) ?? 0), 0),
-    budgeted.reduce((sum, c) => sum + c.monthlyBudget!, 0)
-  );
   const categorySpent = category?.kind === "expense" ? (expenseTotals.get(category.id) ?? 0) : 0;
   const categoryEarned = category?.kind === "income" ? (incomeTotals.get(category.id) ?? 0) : 0;
   const categoryBudget = category?.kind === "expense" ? budgetProgress(categorySpent, category.monthlyBudget) : null;
@@ -128,11 +135,6 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           label: "Net",
           value: <Money value={thisMonth.income - thisMonth.expense} signed tone />,
           hint: rate != null ? <>Saved <Pct value={rate} /></> : "Savings rate: —",
-        },
-        {
-          label: "Budget used",
-          value: budget ? <Pct value={budget.ratio} /> : "—",
-          hint: budgetHint(budget, "No budgets set"),
         },
       ];
   // One category: only the cards that mean something for its kind.
@@ -221,10 +223,15 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   return (
     <>
-      <PageHeader eyebrow="Money in & out" title="Transactions">
-        <Button asChild variant="outline"><Link href="/admin/connections">Import & sync</Link></Button>
+      <PageHeader eyebrow="Money in & out" title="Activity">
         {!q && <MonthPicker month={month} current={current} href={(m) => href({ month: m })} />}
-        <AddEntryButton kind={kind ?? "expense"} />
+        <AddEntry
+          kind={kind ?? "expense"}
+          categories={formCategories}
+          accounts={accounts}
+          suggestions={suggestions}
+          defaults={{ expense: entryDefaults(lastExpense), income: entryDefaults(lastIncome) }}
+        />
       </PageHeader>
 
       <StatCards items={visibleStats} />
@@ -289,7 +296,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           <Panel title={listTitle}>
             {visible.length === 0 ? (
               <EmptyState title={q ? "No matches" : "No entries"}>
-                {q ? "Try another word — search covers descriptions, notes, accounts and categories." : "Use Add to log an expense or income."}
+                {q ? "Try another word — search covers descriptions, notes, accounts and categories." : "Synced and imported transactions show up here once they're filed."}
               </EmptyState>
             ) : (
               <div className="flex flex-col gap-6">
@@ -395,6 +402,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             >
               {scheduledPhp.missing.length > 0 && <p className="mb-3 text-sm text-warning">No rate yet for {scheduledPhp.missing.join(", ")} — those items are left out of this total.</p>}
               <OccurrenceList items={scheduled} today={today} />
+            </Panel>
+          )}
+          {!q && !category && (
+            <Panel title="Last 12 months">
+              <CashFlowChart points={series.map((p) => ({ label: monthLabel(p.month, "short").split(" ")[0], income: p.income, expense: p.expense }))} />
             </Panel>
           )}
         </div>

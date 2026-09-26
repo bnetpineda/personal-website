@@ -5,24 +5,15 @@ import { Card } from "@/components/ui/card";
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { Holding } from "@/lib/db/schema";
-import { connectedHoldingMetrics, fxToPhp, isSmallHolding, type FxTable, type HoldingMetrics } from "@/lib/finance/calc";
+import { connectedHoldingMetrics, fxToPhp, isSmallHolding, type FxTable } from "@/lib/finance/calc";
 import { ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
 import { isConnectionStale, PROVIDER_META, type ConnectionView } from "@/lib/finance/connections/types";
 import { formatQty } from "@/lib/finance/format";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { BinanceCostDetails } from "./holding-cost-details";
-import { EditableRow, EditableTableRow, type RowActionsProps } from "./row-actions";
 import { Money, Pct, TokenAmount } from "./ui";
 
-export interface ManualHoldingItem {
-  h: Holding;
-  m: HoldingMetrics;
-  stale: boolean;
-  actions: RowActionsProps;
-}
-
-/** One row of the combined table, whether entered by hand or synced from an account. */
+/** One row of the table: a synced balance or position. */
 interface Row {
   key: string;
   assetClass: AssetClass;
@@ -36,29 +27,11 @@ interface Row {
   /** null for cash and positions without a cost. */
   pnl: (() => ReactNode) | null;
   pnlPct: number | null;
-  /** Manual holdings only: tapping the row opens Buy / sell. */
-  actions?: RowActionsProps;
   /** Binance coins: tapping the row opens their cost and P/L details. */
   cost?: HoldingCost;
 }
 
 const dash = <span className="text-muted-foreground">—</span>;
-
-function manualRow({ h, m, stale, actions }: ManualHoldingItem): Row {
-  const cash = h.assetClass === "cash";
-  return {
-    key: `manual:${h.id}`,
-    assetClass: h.assetClass,
-    valuePhp: m.valuePhp,
-    title: <>{h.name}{stale && <Badge variant="warning">Stale</Badge>}</>,
-    meta: h.platform,
-    quantity: cash ? null : formatQty(h.quantity),
-    value: () => <Money value={m.valuePhp ?? m.value} currency={m.valuePhp == null ? h.currency : "PHP"} />,
-    pnl: cash ? null : () => <Money value={m.pnlPhp ?? m.pnl} currency={m.pnlPhp != null ? "PHP" : h.currency} signed tone />,
-    pnlPct: cash ? null : m.pnlPct,
-    actions,
-  };
-}
 
 function syncedRows(connection: ConnectionView, fx: FxTable, costs: Map<string, HoldingCost>, keep: (p: { assetClass: AssetClass; marketValue: number | null; currency: string }) => boolean): Row[] {
   const { provider, snapshot } = connection;
@@ -100,15 +73,14 @@ export function ConnectionStatus({ connections, now }: { connections: Connection
   </div>;
 }
 
-/** Manual and synced holdings in one table, largest first. */
-export function HoldingsTable({ manual, connections, fx, filter, showSmall, binanceCosts }: {
-  manual: ManualHoldingItem[]; connections: ConnectionView[]; fx: FxTable; filter: AssetClass | null; showSmall: boolean;
-  binanceCosts: HoldingCost[];
+/** Every synced holding in one table, largest first. */
+export function HoldingsTable({ connections, fx, filter, showSmall, binanceCosts }: {
+  connections: ConnectionView[]; fx: FxTable; filter: AssetClass | null; showSmall: boolean; binanceCosts: HoldingCost[];
 }) {
   const costs = new Map(binanceCosts.map((cost) => [cost.symbol, cost]));
   const keep = (p: { assetClass: AssetClass; marketValue: number | null; currency: string }) =>
     (!filter || p.assetClass === filter) && (showSmall || !isSmallHolding(p.marketValue, p.currency, fx));
-  const rows = [...manual.map(manualRow), ...connections.flatMap((connection) => syncedRows(connection, fx, costs, keep))]
+  const rows = connections.flatMap((connection) => syncedRows(connection, fx, costs, keep))
     .sort((a, b) => (b.valuePhp ?? -Infinity) - (a.valuePhp ?? -Infinity));
   if (!rows.length) return null;
   const summary = (row: Row) => <span className="flex items-center gap-3">
@@ -134,14 +106,7 @@ export function HoldingsTable({ manual, connections, fx, filter, showSmall, bina
     {/* Phones: one row per holding. */}
     <Card className="gap-0 py-2 md:hidden">
       <ItemGroup>
-        {rows.map((row) => row.actions ? (
-          <EditableRow key={row.key} {...row.actions} media={<ItemMedia><Swatch color={ASSET_CLASS_META[row.assetClass].color} /></ItemMedia>} aside={aside(row)}>
-            <ItemContent>
-              <ItemTitle>{row.title}</ItemTitle>
-              {(row.meta || row.quantity) && <ItemDescription>{description(row)}</ItemDescription>}
-            </ItemContent>
-          </EditableRow>
-        ) : (
+        {rows.map((row) => (
           <Item key={row.key} size="sm" variant={row.cost ? "interactive" : "default"} data-synced-position={row.key}>
             <ItemMedia><Swatch color={ASSET_CLASS_META[row.assetClass].color} /></ItemMedia>
             <ItemContent className="min-w-0">
@@ -161,17 +126,13 @@ export function HoldingsTable({ manual, connections, fx, filter, showSmall, bina
             <TableHead className="text-right">Quantity</TableHead>
             <TableHead className="text-right">Value</TableHead>
             <TableHead className="text-right">P/L</TableHead>
-            <TableHead><span className="sr-only">Actions</span></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => row.actions ? (
-            <EditableTableRow key={row.key} {...row.actions} lead={lead(row)}>{cells(row)}</EditableTableRow>
-          ) : (
+          {rows.map((row) => (
             <TableRow key={row.key} className={row.cost ? "relative" : undefined} data-synced-position={row.key}>
               <TableCell>{lead(row)}</TableCell>
               {cells(row)}
-              <TableCell />
             </TableRow>
           ))}
         </TableBody>

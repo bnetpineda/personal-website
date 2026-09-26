@@ -1,6 +1,5 @@
 import { BASE_CURRENCY, type AssetClass, type CashFlowKind } from "./constants";
 import { addMonths } from "./dates";
-import { formatQty } from "./format";
 import type { ConnectedPosition } from "./connections/types";
 
 /* Pure portfolio math. No I/O, no server-only imports — unit-tested with `bun test`. */
@@ -98,39 +97,6 @@ export function isSmallHolding(value: number | null, currency: string, fx: FxTab
   const usdRate = fxToPhp(fx, "USD");
   if (rate == null || usdRate == null || rate <= 0 || usdRate <= 0) return false;
   return clean(Math.abs(value) * rate / usdRate) < 1;
-}
-
-export type Adjustment =
-  | { type: "buy"; quantity: number; price: number; fee?: number }
-  | { type: "sell"; quantity: number };
-
-export type AdjustmentResult = { ok: true; quantity: number; avgCost: number } | { ok: false; error: string };
-
-/**
- * Simple-position bookkeeping.
- * Buy: weighted-average cost, fee folded into the cost basis.
- * Sell: quantity goes down, average cost is unchanged; can't sell more than held.
- */
-export function applyAdjustment(position: { quantity: number; avgCost: number }, adj: Adjustment): AdjustmentResult {
-  if (!Number.isFinite(adj.quantity) || adj.quantity <= 0) {
-    return { ok: false, error: "Quantity must be greater than 0." };
-  }
-
-  if (adj.type === "buy") {
-    const fee = adj.fee ?? 0;
-    if (!Number.isFinite(adj.price) || adj.price < 0) return { ok: false, error: "Price can't be negative." };
-    if (!Number.isFinite(fee) || fee < 0) return { ok: false, error: "Fee can't be negative." };
-    const quantity = position.quantity + adj.quantity;
-    const avgCost = (position.quantity * position.avgCost + adj.quantity * adj.price + fee) / quantity;
-    return { ok: true, quantity: clean(quantity), avgCost: clean(avgCost) };
-  }
-
-  const tolerance = Math.max(1e-12, position.quantity * 1e-9);
-  if (adj.quantity > position.quantity + tolerance) {
-    return { ok: false, error: `You only hold ${formatQty(position.quantity)}.` };
-  }
-  const remaining = position.quantity - adj.quantity;
-  return { ok: true, quantity: remaining <= tolerance ? 0 : clean(remaining), avgCost: position.avgCost };
 }
 
 export interface NetWorth {

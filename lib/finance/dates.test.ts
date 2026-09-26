@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addMonths, currentMonth, isMonth, monthRange, nextDueDate, timeAgo, todayManila } from "./dates";
+import { addMonths, currentMonth, isMonth, monthRange, timeAgo, todayManila } from "./dates";
 
 describe("Manila calendar", () => {
   test("todayManila uses UTC+8, not the server's UTC date", () => {
@@ -21,13 +21,6 @@ describe("Manila calendar", () => {
     expect(isMonth("2026-13")).toBe(false);
     expect(isMonth("2026-9")).toBe(false);
     expect(isMonth(undefined)).toBe(false);
-  });
-
-  test("nextDueDate clamps to short months and rolls to next month", () => {
-    expect(nextDueDate(15, "2026-09-10")).toEqual({ date: "2026-09-15", inDays: 5 });
-    expect(nextDueDate(15, "2026-09-15")).toEqual({ date: "2026-09-15", inDays: 0 });
-    expect(nextDueDate(5, "2026-09-20")).toEqual({ date: "2026-10-05", inDays: 15 });
-    expect(nextDueDate(31, "2026-02-10")).toEqual({ date: "2026-02-28", inDays: 18 });
   });
 
   test("timeAgo", () => {

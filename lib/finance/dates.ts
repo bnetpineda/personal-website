@@ -62,19 +62,6 @@ export function addDays(day: string, delta: number): string {
   return new Date((toUtcDays(day) + delta) * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** Next occurrence of a monthly due day (clamped to short months), counted from `today`. */
-export function nextDueDate(dueDay: number, today: string): { date: string; inDays: number } {
-  const month = today.slice(0, 7);
-  const candidate = (m: string) => {
-    const [y, mo] = m.split("-").map(Number);
-    const lastDay = new Date(Date.UTC(y, mo, 0)).getUTCDate();
-    return `${m}-${String(Math.min(dueDay, lastDay)).padStart(2, "0")}`;
-  };
-  let date = candidate(month);
-  if (date < today) date = candidate(addMonths(month, 1));
-  return { date, inDays: daysBetween(today, date) };
-}
-
 /** "just now", "5 min ago", "3 h ago", "2 d ago". */
 export function timeAgo(then: Date, now: Date): string {
   const minutes = Math.round((now.getTime() - then.getTime()) / 60_000);

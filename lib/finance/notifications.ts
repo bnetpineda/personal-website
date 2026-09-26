@@ -1,13 +1,12 @@
 import type { ConnectionView } from "./connections/types";
 import { isConnectionStale, PROVIDER_META } from "./connections/types";
-import { daysBetween, nextDueDate, todayManila } from "./dates";
+import { daysBetween, todayManila } from "./dates";
 
 export interface FinanceNotification { key: string; title: string; detail: string; href: string; severity: "warning" | "destructive" }
 export function buildNotifications(input: {
   connections: { provider: ConnectionView["provider"]; enabled: boolean; error: string | null; lastSyncedAt: Date | null; historyError: string | null; historySyncedAt: Date | null; credentialsExpireOn: string | null; snapshot: { asOf: string } | null }[];
   budgets: { id: number; name: string; budget: number; spent: number }[];
   bills: { id: string; description: string; nextOn: string | null }[];
-  debts: { id: string; name: string; dueDay: number | null; lastPaidOn: string | null }[];
   /** Imported entries still uncategorized after a day, while AI is configured. Background runs fail quietly. */
   aiBacklog?: { waiting: number; oldest: string } | null;
 }, now = new Date()): FinanceNotification[] {
@@ -31,12 +30,6 @@ export function buildNotifications(input: {
   }
   for (const b of input.bills) if (b.nextOn && daysBetween(today, b.nextOn) <= 3) alerts.push({ key: `bill:${b.id}:${b.nextOn}`,
     title: `${b.description} ${b.nextOn < today ? "is overdue" : "is coming up"}`, detail: `Scheduled for ${b.nextOn}.`, href: "/admin/recurring", severity: "warning" });
-  for (const d of input.debts) {
-    if (!d.dueDay) continue;
-    const due = nextDueDate(d.dueDay, today);
-    if (due.inDays <= 3 && (!d.lastPaidOn || d.lastPaidOn.slice(0, 7) !== due.date.slice(0, 7))) alerts.push({ key: `debt:${d.id}:${due.date}`,
-      title: `${d.name} payment is coming up`, detail: `The saved due day falls on ${due.date}. Check the lender's statement for the amount due.`, href: "/admin/debts", severity: "warning" });
-  }
   if (input.aiBacklog && input.aiBacklog.waiting > 0) alerts.push({ key: `ai:${input.aiBacklog.oldest}`, title: "AI categorization is not keeping up",
     detail: `${input.aiBacklog.waiting} imported ${input.aiBacklog.waiting === 1 ? "entry has" : "entries have"} waited over a day. Check the AI Gateway key and credits, then sync again.`,
     href: "/admin/connections", severity: "warning" });

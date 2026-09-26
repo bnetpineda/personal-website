@@ -1,16 +1,16 @@
 import "server-only";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accountConnections, cashFlows, fxRates, holdings, liabilities, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
+import { accountConnections, cashFlows, fxRates, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
 import { includedPositions } from "./connections/types";
 import { computeNetWorth, fxToPhp, round2, type FxTable, type NetWorth } from "./calc";
 import { BASE_CURRENCY } from "./constants";
 import { addDays, todayManila } from "./dates";
 import { nextOccurrence, occurrencesBetween, scheduleOf } from "./recurrence";
-import { fetchCoinGeckoPrices, fetchFinnhubQuote, fetchFxRate, type Quote } from "./prices";
+import { fetchFxRate } from "./prices";
 
 /*
- * Price/FX/snapshot operations. No auth check here: this is shared by the cron route
+ * FX/snapshot operations. No auth check here: this is shared by the cron route
  * (CRON_SECRET) and by Server Actions (which call requireAdmin() before using it).
  */
 
@@ -20,21 +20,12 @@ export interface RefreshFailure {
 }
 
 export interface RefreshSummary {
-  updated: number;
   fxUpdated: number;
   failed: RefreshFailure[];
   at: string;
 }
 
 const reason = (e: unknown) => (e instanceof Error ? e.message : "Unknown error");
-
-async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
-  const queue = [...items];
-  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
-    for (let item = queue.shift(); item !== undefined; item = queue.shift()) await fn(item);
-  });
-  await Promise.all(workers);
-}
 
 export async function loadFxTable(): Promise<FxTable> {
   const rows = await getDb().select().from(fxRates);
@@ -77,78 +68,31 @@ export async function ensureFx(currencies: string[]): Promise<FxTable> {
   return loadFxTable();
 }
 
-export async function refreshAllPrices(): Promise<RefreshSummary> {
+/** Refreshes FX for every currency the synced accounts and recurring items use, then records today's net worth. */
+export async function refreshRates(): Promise<RefreshSummary> {
   const db = getDb();
-  const [rows, debts, connections] = await Promise.all([
-    db.select().from(holdings).where(eq(holdings.archived, false)),
-    db.select({ currency: liabilities.currency }).from(liabilities).where(eq(liabilities.archived, false)),
+  const [connections, recurring] = await Promise.all([
     db.select({ snapshot: accountConnections.snapshot }).from(accountConnections),
+    db.selectDistinct({ currency: recurringCashFlows.currency }).from(recurringCashFlows),
   ]);
-
-  const failed: RefreshFailure[] = [];
-  const fx = await refreshFxRates([...rows.map((r) => r.currency), ...debts.map((d) => d.currency),
-    ...connections.flatMap((c) => c.snapshot?.positions.map((p) => p.currency) ?? [])]);
-  failed.push(...fx.failed);
-
-  const updates: { id: string; price: number; asOf: Date }[] = [];
-
-  const crypto = rows.filter((r) => r.priceSource === "coingecko" && r.priceRef);
-  if (crypto.length > 0) {
-    try {
-      const data = await fetchCoinGeckoPrices(
-        [...new Set(crypto.map((r) => r.priceRef!))],
-        crypto.map((r) => r.currency)
-      );
-      for (const r of crypto) {
-        const hit = data.get(r.priceRef!);
-        const price = hit?.prices[r.currency.toLowerCase()];
-        if (hit && price != null) updates.push({ id: r.id, price, asOf: hit.asOf });
-        else failed.push({ name: r.name, reason: `CoinGecko has no ${r.currency} price for "${r.priceRef}"` });
-      }
-    } catch (e) {
-      for (const r of crypto) failed.push({ name: r.name, reason: reason(e) });
-    }
-  }
-
-  const stocks = rows.filter((r) => r.priceSource === "finnhub" && r.priceRef);
-  const quotes = new Map<string, Quote | null | Error>();
-  await mapLimit([...new Set(stocks.map((r) => r.priceRef!))], 5, async (ticker) => {
-    try {
-      quotes.set(ticker, await fetchFinnhubQuote(ticker));
-    } catch (e) {
-      quotes.set(ticker, e instanceof Error ? e : new Error(reason(e)));
-    }
-  });
-  for (const r of stocks) {
-    const q = quotes.get(r.priceRef!);
-    if (q instanceof Error) failed.push({ name: r.name, reason: q.message });
-    else if (!q) failed.push({ name: r.name, reason: `Unknown ticker "${r.priceRef}"` });
-    else updates.push({ id: r.id, price: q.price, asOf: q.asOf });
-  }
-
-  const statements = updates.map((u) =>
-    db.update(holdings).set({ lastPrice: u.price, priceUpdatedAt: u.asOf }).where(eq(holdings.id, u.id))
-  );
-  if (statements.length > 0) {
-    const [first, ...rest] = statements;
-    await db.batch([first, ...rest]);
-  }
-
+  const fx = await refreshFxRates([
+    ...connections.flatMap((c) => c.snapshot?.positions.map((p) => p.currency) ?? []),
+    ...recurring.map((r) => r.currency),
+  ]);
   await upsertTodaySnapshot();
-  return { updated: updates.length, fxUpdated: fx.updated.length, failed, at: new Date().toISOString() };
+  return { fxUpdated: fx.updated.length, failed: fx.failed, at: new Date().toISOString() };
 }
 
+/** Net worth is what the synced accounts hold (those included in net worth). */
 export async function currentNetWorth(): Promise<NetWorth & { empty: boolean }> {
   const db = getDb();
-  const [holdingRows, liabilityRows, fx, connections] = await Promise.all([
-    db.select().from(holdings),
-    db.select().from(liabilities),
+  const [fx, connections] = await Promise.all([
     loadFxTable(),
     db.select({ provider: accountConnections.provider, includeInNetWorth: accountConnections.includeInNetWorth, snapshot: accountConnections.snapshot }).from(accountConnections),
   ]);
   return {
-    ...computeNetWorth(holdingRows, liabilityRows, fx, includedPositions(connections)),
-    empty: holdingRows.length === 0 && liabilityRows.length === 0 && !connections.some((c) => c.includeInNetWorth && c.snapshot),
+    ...computeNetWorth([], [], fx, includedPositions(connections)),
+    empty: !connections.some((c) => c.includeInNetWorth && c.snapshot),
   };
 }
 

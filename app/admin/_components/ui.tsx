@@ -72,10 +72,28 @@ export function TokenAmount({ value, currency, signed = false, tone = false }: {
   </span>;
 }
 
-export function PageHeader({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+/** `back` links pages that aren't tabs (reached from Home or Settings) to where they came from. */
+export function PageHeader({
+  eyebrow,
+  title,
+  back,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  back?: { href: string; label: string };
+  children?: ReactNode;
+}) {
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div className="flex flex-col items-start gap-3">
+        {back && (
+          <Button asChild variant="ghost" size="sm">
+            <Link href={back.href}>
+              <ChevronLeft /> {back.label}
+            </Link>
+          </Button>
+        )}
         <p className="font-mono text-xs font-bold tracking-widest text-muted-foreground uppercase">{eyebrow}</p>
         <h1 className="-rotate-1 rounded-lg border-2 border-border bg-primary px-4 py-2 font-display text-3xl text-primary-foreground uppercase shadow-md">
           {title}

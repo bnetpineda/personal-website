@@ -65,7 +65,6 @@ Use the component that fits; don't rebuild it from `div`s.
 | Tables | `Table` inside `Card` (`className="gap-0 overflow-hidden py-0"`) |
 | Row actions | `DropdownMenu` → edit in `Sheet` (+ extra `sheets`/`actions`), destructive confirm in `AlertDialog` or delete-with-Undo (see `RowActions`) |
 | Feedback after an action | Toast — `notify(state, undo?)` from `app/admin/_components/form.tsx` (sonner `Toaster`, mounted once in `Shell`) |
-| Command palette | `CommandDialog` (cmdk) — `CommandMenu`, opened with ⌘K / Ctrl+K or `/` |
 | Keyboard hint | `Kbd` |
 | Checkbox | `Checkbox` inside `Field orientation="horizontal"` |
 | Create / edit forms | `Sheet` (right side) — `FormSheet` in admin |
@@ -77,7 +76,7 @@ Use the component that fits; don't rebuild it from `div`s.
 
 Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`,
 `Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`, the recurring
-`OccurrenceList` / `DuePanel` / `DueActions`, `EditableRow`, `QuickAdd`, `BudgetsForm`, and the charts `NetWorthChart`, `CashFlowChart`,
+`OccurrenceList` / `DuePanel` / `DueActions`, `EditableRow`, `AddEntry`, `BudgetsForm`, and the charts `NetWorthChart`, `CashFlowChart`,
 `AllocationChart`, `BreakdownChart`) — reuse them before writing new ones.
 
 ## 3. Rules (enforced — `design-system.lint.json`)
@@ -115,14 +114,17 @@ components without re-applying these (`--overwrite` replaces the house style).
   privacy mode (`group-data-[private=true]/shell:blur-sm`).
 - **Forms**: Server Action + `useFormAction` (admin) → errors from the returned `FormState`,
   `aria-invalid` on the control, message in `FieldError`. Success closes the sheet, resets, and
-  toasts the message; pass `undo` to add an "Undo" button (e.g. a new entry, a debt payment).
+  toasts the message; pass `undo` to add an "Undo" button (e.g. a new entry).
 - **Destructive actions**: confirm in `AlertDialog`; never `window.confirm`. Exception: cheap,
   fully reversible deletes (single cash-flow entries) run straight away with an "Undo" toast
   (`RowActions onRestore`).
 - **Toasts never show amounts** that weren't typed by the user — they aren't blurred by privacy mode.
-- **Adding entries**: one quick-add sheet for the whole dashboard (`QuickAdd`, opened via
-  `useAdminUi().setAdding(kind)`, the E / I keys, the command menu or `/admin?add=expense`) —
-  don't build per-page add forms for cash flows.
+- **Keep it simple**: three tabs (Home, Activity, Settings). Synced accounts, recurring items and
+  AI filing do the data entry, so a new screen or panel has to earn its place; secondary pages
+  (Connections, Recurring, Holdings, Earnings, History) hang off Home or Settings with a
+  `PageHeader back` link instead of joining the tab bar.
+- **Adding entries**: manual entry is the exception. One `AddEntry` sheet on Activity —
+  don't build other add forms for cash flows.
 - **Accessibility**: every control has a label (`FieldLabel htmlFor` or `aria-label` on icon
   buttons); status text uses `role="status"`; don't remove focus rings.
 - **Dark mode**: never hard-code light/dark values in app code — tokens flip automatically.
