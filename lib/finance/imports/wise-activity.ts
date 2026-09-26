@@ -17,11 +17,38 @@ export function wiseKind(id: string, amount: number, detailsType = "", descripti
   return /^(?:BALANCE|CONVERSION|TRANSFER)[-_]/i.test(id) ? "transfer" : "payment";
 }
 
+const FEE_SOURCE: Record<string, string> = { TRANSFER: "transfer", CARD: "card", BALANCE: "conversion" };
+
+/**
+ * Wise's wording, minus the boilerplate: fees already have their own rows, and a card merchant is
+ * easier to read (and to categorize) without its city and terminal numbers.
+ */
+export function tidyWiseDescription(raw: string, currency: string): string {
+  const text = raw.replace(/\s+/g, " ").trim();
+  const card = /^Card transaction of ([\d,.]+) ([A-Z]{3}) issued by (.+?)(?: \(fee: [^)]*\))?$/i.exec(text);
+  if (card) {
+    const words = card[3].split(" ").filter((w) => !/\d{5,}/.test(w));
+    // Trailing all-caps words are the city or card-terminal domain ("Ovhcloud SINGAPORE", "Anomaly ANOMA.LY").
+    while (words.length > 1 && /^[A-Z][A-Z.]+$/.test(words.at(-1)!)) words.pop();
+    const foreign = card[2].toUpperCase() !== currency ? ` (${card[1]} ${card[2].toUpperCase()})` : "";
+    return `Card payment: ${words.join(" ") || card[3]}${foreign}`;
+  }
+  const received = /^Received money from (.+?)(?: with reference\b.*)?$/i.exec(text);
+  if (received) return `Received from ${received[1]}`;
+  const sent = /^Sent money to (.+?)(?: \(fee: [^)]*\))?$/i.exec(text);
+  if (sent) return `Sent to ${sent[1]}`;
+  const converted = /^(Converted .+?)(?: \(fee: [^)]*\))?$/i.exec(text);
+  if (converted) return converted[1];
+  const charge = /^Wise Charges for: ([A-Z]+)-\d+$/i.exec(text);
+  if (charge) return `Wise ${FEE_SOURCE[charge[1].toUpperCase()] ?? charge[1].toLowerCase()} fee`;
+  return text;
+}
+
 /** Splits fees out of an amount that includes them ("included" fee convention). */
 export function wiseRows(base: { id: string; currency: string; occurredOn: string; amount: number; fee: number; kind: EntryKind; description: string }): ImportEntry[] {
   const { id, currency, occurredOn, amount, fee, kind } = base;
   if (amount === 0) return [];
-  const description = base.description.replace(/\s+/g, " ").trim().slice(0, 200) || "Wise transaction";
+  const description = tidyWiseDescription(base.description, currency).slice(0, 200) || "Wise transaction";
   // Currency + direction distinguishes both sides of a conversion without relying on row order.
   const externalId = `${id}:${currency}:${amount < 0 ? "out" : "in"}`;
   const row = { provider: "wise" as const, accountKey: "personal", externalId, currency, occurredOn, description, realizedPnl: null };

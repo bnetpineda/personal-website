@@ -1,6 +1,7 @@
 import { sumInPhp, type FxTable } from "./calc";
 import type { CashFlowKind, RecurrenceFrequency } from "./constants";
 import { addMonths } from "./dates";
+import { payeeOf } from "./payee";
 import { monthlyEquivalent } from "./recurrence";
 
 /*
@@ -32,11 +33,8 @@ export interface RepeatPayer {
   categoryColor: string;
 }
 
-/** "Received money from Centauri Media Ltd with reference INV-12" (Wise) or "Received from Paypal Pte Ltd" (MariBank) → the sender. */
-export function payerName(description: string): string {
-  const sender = /^received(?: money)? from (.+?)(?: with reference\b.*)?$/i.exec(description.trim());
-  return (sender?.[1] ?? description).replace(/\s+/g, " ").trim();
-}
+/** "Received from Centauri Media Ltd", or Wise's older "Received money from … with reference …" → the sender. */
+export const payerName = payeeOf;
 
 const monthIndex = (day: string) => Number(day.slice(0, 4)) * 12 + Number(day.slice(5, 7));
 

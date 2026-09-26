@@ -21,6 +21,7 @@ import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
 import { statementCoverage } from "@/lib/finance/imports/coverage";
+import { teachGroups } from "@/lib/finance/imports/teach";
 import { loadFxTable } from "@/lib/finance/service";
 import { loadConnectionViews } from "@/lib/finance/connections/service";
 
@@ -37,6 +38,18 @@ export async function getFx(): Promise<FxTable> {
 export async function getConnections() {
   await requireAdmin();
   return loadConnectionViews();
+}
+
+/** Payees the model filed under Other (it was not sure), grouped so each is taught once. */
+export async function getTeachGroups() {
+  await requireAdmin();
+  const e = importedEntries;
+  const rows = await getDb()
+    .select({ description: e.description, kind: cashFlows.kind, amountPhp: cashFlows.amountPhp, occurredOn: cashFlows.occurredOn, aiReason: e.aiReason })
+    .from(e).innerJoin(cashFlows, eq(cashFlows.id, e.id)).innerJoin(categories, eq(categories.id, cashFlows.categoryId))
+    .where(and(eq(e.status, "posted"), eq(e.categorizedBy, "ai"), eq(categories.name, "Other"), eq(e.categoryId, cashFlows.categoryId)))
+    .limit(2000);
+  return teachGroups(rows);
 }
 
 /** Closing balances from uploaded bank statements, by bank and currency. */

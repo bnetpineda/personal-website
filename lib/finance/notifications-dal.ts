@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq, gt, gte, lt, min, sql } from "drizzle-orm";
+import { and, count, eq, gt, gte, inArray, lt, max, min, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { accountConnections, cashFlows, categories, importedEntries, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
+import { statementCoverage } from "./imports/coverage";
 import { env } from "@/lib/env";
 import { currentMonth, monthRange } from "./dates";
 import { buildNotifications } from "./notifications";
@@ -11,7 +12,7 @@ export async function getNotifications() {
   await requireAdmin();
   const db = getDb(), { start, end } = monthRange(currentMonth());
   const e = importedEntries;
-  const [connections, budgets, bills, dismissed, aiBacklog] = await Promise.all([
+  const [connections, budgets, bills, dismissed, aiBacklog, months] = await Promise.all([
     db.select({
       provider: accountConnections.provider, enabled: accountConnections.enabled, lastSyncedAt: accountConnections.lastSyncedAt,
       error: accountConnections.error, credentialsExpireOn: accountConnections.credentialsExpireOn,
@@ -29,8 +30,10 @@ export async function getNotifications() {
     env.aiGatewayApiKey() ? db.select({ waiting: sql<number>`count(*)`.mapWith(Number), oldest: min(e.occurredOn) }).from(e)
       .where(and(eq(e.status, "pending"), lt(e.createdAt, sql`now() - interval '1 day'`))).then(([row]) => row?.oldest ? { waiting: row.waiting, oldest: row.oldest } : null)
       : Promise.resolve(null),
+    db.select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
+      .from(e).where(inArray(e.provider, ["wise", "maribank"])).groupBy(e.provider, sql`2`),
   ]);
   const keys = new Set(dismissed.map((d) => d.key));
-  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgets.map((b) => ({ ...b, budget: b.budget ?? 0 })), bills, aiBacklog })
+  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgets.map((b) => ({ ...b, budget: b.budget ?? 0 })), bills, aiBacklog, statements: statementCoverage(months) })
     .map((alert) => ({ ...alert, dismissed: keys.has(alert.key) }));
 }

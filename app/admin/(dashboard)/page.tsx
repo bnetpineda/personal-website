@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getMonthlyTotals, getStatementBalances, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
+import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getMonthlyTotals, getStatementBalances, getTeachGroups, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
 import { computeNetWorth, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, includedPositions, isConnectionStale } from "@/lib/finance/connections/types";
@@ -21,6 +21,7 @@ import { CashFlowForm, type FormCategory } from "../_components/cash-flow-form";
 import { SyncConnectionsButton } from "../_components/connection-controls";
 import { DismissNotificationButton } from "../_components/notification-controls";
 import { DuePanel } from "../_components/recurring";
+import { TeachJev } from "../_components/teach-jev";
 import { EditableRow } from "../_components/row-actions";
 import { EmptyState, MissingFxAlert, Money, PageHeader, Panel, Pct, StatCards } from "../_components/ui";
 
@@ -34,7 +35,7 @@ export default async function HomePage() {
   const today = todayManila(now);
   const month = currentMonth(now);
 
-  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts, received, balances] = await Promise.all([
+  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts, received, balances, teach] = await Promise.all([
     getConnections(),
     getFx(),
     getSnapshots(),
@@ -46,6 +47,7 @@ export default async function HomePage() {
     getNotifications(),
     getImportedIncome(importedIncomeSince(today)),
     getStatementBalances(),
+    getTeachGroups(),
   ]);
   const formCategories: Record<CashFlowKind, FormCategory[]> = { expense: [], income: [] };
   for (const c of allCategories) formCategories[c.kind].push({ id: c.id, name: c.name, color: c.color, archived: c.archived });
@@ -132,6 +134,8 @@ export default async function HomePage() {
           </Panel>
         </div>
       )}
+
+      <TeachJev groups={teach} categories={formCategories} />
 
       {due.length > 0 && (
         <div className="mb-6">

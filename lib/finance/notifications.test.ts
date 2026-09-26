@@ -27,3 +27,17 @@ test("a stalled AI backlog alerts once per episode", () => {
   expect(alert).toMatchObject({ key: "ai:2026-09-20", href: "/admin/connections", severity: "warning" });
   expect(alert.detail).toStartWith("3 imported entries have");
 });
+
+test("statement banks remind about a closed month, gaps, and a later start than the other bank", () => {
+  const now = new Date("2026-10-03T04:00:00Z");
+  const at = new Date("2026-09-27T00:00:00Z");
+  const alerts = buildNotifications({ connections: [], budgets: [], bills: [], statements: {
+    maribank: { from: "2026-02", to: "2026-08", entries: 260, importedAt: at, missing: [] },
+    wise: { from: "2026-06", to: "2026-09", entries: 45, importedAt: at, missing: ["2026-07"] },
+  } }, now);
+  expect(alerts.map((a) => a.key)).toEqual(["statement:maribank:2026-09", "statement-gap:wise:2026-07", "statement-start:wise:2026-02"]);
+  expect(alerts[0].title).toBe("MariBank: September 2026 statement not uploaded");
+  // Up to date and complete: nothing to say.
+  expect(buildNotifications({ connections: [], budgets: [], bills: [], statements: {
+    wise: { from: "2026-06", to: "2026-09", entries: 45, importedAt: at, missing: [] } } }, now)).toEqual([]);
+});

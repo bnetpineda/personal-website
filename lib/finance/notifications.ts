@@ -1,6 +1,7 @@
 import type { ConnectionView } from "./connections/types";
 import { isConnectionStale, PROVIDER_META } from "./connections/types";
-import { daysBetween, todayManila } from "./dates";
+import { addMonths, daysBetween, monthLabel, todayManila } from "./dates";
+import type { StatementCoverage } from "./imports/coverage";
 
 export interface FinanceNotification { key: string; title: string; detail: string; href: string; severity: "warning" | "destructive" }
 export function buildNotifications(input: {
@@ -9,6 +10,8 @@ export function buildNotifications(input: {
   bills: { id: string; description: string; nextOn: string | null }[];
   /** Imported entries still uncategorized after a day, while AI is configured. Background runs fail quietly. */
   aiBacklog?: { waiting: number; oldest: string } | null;
+  /** What each statement-only bank (Wise, MariBank) has imported: they update only when the person uploads. */
+  statements?: Partial<Record<"wise" | "maribank", StatementCoverage>>;
 }, now = new Date()): FinanceNotification[] {
   const today = todayManila(now), month = today.slice(0, 7);
   const alerts: FinanceNotification[] = [];
@@ -30,6 +33,19 @@ export function buildNotifications(input: {
   }
   for (const b of input.bills) if (b.nextOn && daysBetween(today, b.nextOn) <= 3) alerts.push({ key: `bill:${b.id}:${b.nextOn}`,
     title: `${b.description} ${b.nextOn < today ? "is overdue" : "is coming up"}`, detail: `Scheduled for ${b.nextOn}.`, href: "/admin/recurring", severity: "warning" });
+  const lastMonth = addMonths(month, -1);
+  const banks = Object.entries(input.statements ?? {}) as ["wise" | "maribank", StatementCoverage][];
+  const earliest = banks.map(([, c]) => c.from).sort()[0];
+  for (const [provider, c] of banks) {
+    const name = PROVIDER_META[provider].name, file = provider === "wise" ? "CSVs" : "PDF";
+    // A month's statement is ready once the month has closed.
+    if (c.to < lastMonth) alerts.push({ key: `statement:${provider}:${lastMonth}`, title: `${name}: ${monthLabel(lastMonth, "long")} statement not uploaded`,
+      detail: `Imports run through ${monthLabel(c.to, "long")}. Upload the newer statement ${file} to keep spending and balances current.`, href: "/admin/connections", severity: "warning" });
+    if (c.missing.length) alerts.push({ key: `statement-gap:${provider}:${c.missing.join(",")}`, title: `${name}: ${c.missing.length === 1 ? "a month is" : "months are"} missing`,
+      detail: `No activity for ${c.missing.map((m) => monthLabel(m, "short")).join(", ")}. Upload ${c.missing.length === 1 ? "that statement" : "those statements"} if you have them.`, href: "/admin/connections", severity: "warning" });
+    if (earliest && c.from > earliest) alerts.push({ key: `statement-start:${provider}:${earliest}`, title: `${name}: older statements not uploaded`,
+      detail: `${name} starts in ${monthLabel(c.from, "long")}, but your other bank goes back to ${monthLabel(earliest, "long")}. Upload the earlier ${name} statements so income and spending add up.`, href: "/admin/connections", severity: "warning" });
+  }
   if (input.aiBacklog && input.aiBacklog.waiting > 0) alerts.push({ key: `ai:${input.aiBacklog.oldest}`, title: "AI categorization is not keeping up",
     detail: `${input.aiBacklog.waiting} imported ${input.aiBacklog.waiting === 1 ? "entry has" : "entries have"} waited over a day. Check the AI Gateway key and credits, then sync again.`,
     href: "/admin/connections", severity: "warning" });

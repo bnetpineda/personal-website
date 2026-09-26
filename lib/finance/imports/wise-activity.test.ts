@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseWiseCsv } from "./wise-csv";
-import { wiseKind } from "./wise-activity";
+import { wiseKind, tidyWiseDescription } from "./wise-activity";
 
 describe("Wise activity classification", () => {
   test("money received from someone else is a payment, so it can be categorized as income", () => {
@@ -22,5 +22,22 @@ describe("Wise CSV classification", () => {
   test("CSV exports with a details type column use it to separate income from own-money moves", () => {
     const csv = '"TransferWise ID",Date,Amount,Currency,Description,"Transaction Details Type"\nTRANSFER-5,20-09-2026,300,USD,"Received money from Test Client LLC",DEPOSIT\nBALANCE-6,20-09-2026,-50,USD,"Converted USD to PHP",CONVERSION';
     expect(parseWiseCsv(csv, "separate").map((e) => e.kind)).toEqual(["payment", "transfer"]);
+  });
+});
+
+describe("Wise wording", () => {
+  test("drops fee notes, references, card terminals and cities", () => {
+    const cases: [string, string, string][] = [
+      ["Card transaction of 11.19 USD issued by Upwork -938290560membersh Dublin (fee: 2.33 PHP)", "PHP", "Card payment: Upwork Dublin (11.19 USD)"],
+      ["Card transaction of 54.48 USD issued by Ovhcloud SINGAPORE (fee: 11.23 PHP)", "PHP", "Card payment: Ovhcloud (54.48 USD)"],
+      ["Card transaction of 649.00 PHP issued by Opencode ANOMA.LY", "PHP", "Card payment: Opencode"],
+      ["Received money from Romer Martin LLC with reference 806096", "PHP", "Received from Romer Martin LLC"],
+      ["Sent money to Interactive Brokers LLC (fee: 1.27 USD)", "USD", "Sent to Interactive Brokers LLC"],
+      ["Converted 260.00 USD to 15,662.31 PHP (fee: 1.65 USD)", "USD", "Converted 260.00 USD to 15,662.31 PHP"],
+      ["Wise Charges for: TRANSFER-2386852673", "PHP", "Wise transfer fee"],
+      ["Wise Charges for: BALANCE-6127889969", "USD", "Wise conversion fee"],
+      ["Balance cashback", "PHP", "Balance cashback"],
+    ];
+    for (const [raw, currency, tidy] of cases) expect(tidyWiseDescription(raw, currency)).toBe(tidy);
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { and, eq, inArray } from "drizzle-orm";
 import { MockLanguageModelV4 } from "ai/test";
 import type { Category, ImportedEntry } from "@/lib/db/schema";
-import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, evaluationDecision, ledgerDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions, type AiOutput } from "./ai-review";
+import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, evaluationDecision, learnedPayees, ledgerDecision, relevantExamples, rememberedDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions, type AiOutput } from "./ai-review";
 
 const entry = (overrides: Partial<ImportedEntry> = {}): ImportedEntry => ({ id: crypto.randomUUID(), provider: "wise", accountKey: "personal", externalId: "CARD-1:USD:out",
   occurredOn: "2026-09-20", amount: -15, currency: "USD", kind: "payment", description: "Spotify premium", realizedPnl: null,
@@ -13,6 +13,37 @@ const category = (overrides: Partial<Category> = {}): Category => ({ id: 1, kind
   sortOrder: 0, archived: false, createdAt: new Date(), updatedAt: new Date(), ...overrides });
 const categories = [category(), category({ id: 2, kind: "income", name: "Salary" }), category({ id: 3, name: "Old", archived: true })];
 const output = (...decisions: AiOutput["decisions"]): AiOutput => ({ decisions });
+
+describe("learning from the person's choices", () => {
+  const book = [...categories, category({ id: 8, kind: "expense", name: "Shopping" }), category({ id: 9, kind: "income", name: "Freelance" })];
+  const examples = [
+    { description: "Card Payment: Grok Xai", provider: "maribank", decision: "post: expense / Subscriptions" },
+    { description: "Received from Romer Martin LLC", provider: "wise", decision: "post: income / Freelance" },
+    { description: "Payment: Shopee", provider: "maribank", decision: "post: expense / Shopping" },
+    { description: "Payment: Shopee", provider: "maribank", decision: "post: expense / Subscriptions" },
+  ];
+
+  test("a payee decided the same way every time is filed without the model", () => {
+    expect(rememberedDecision(entry({ description: "Card payment: Grok Xai (38.00 USD)", amount: -2000, currency: "PHP" }), examples, book))
+      .toMatchObject({ decision: "post", categoryId: 1, reason: "Same as your earlier choice for Grok Xai" });
+    // Wise's older wording and an invoice number still match the same payee.
+    expect(rememberedDecision(entry({ description: "Received money from Romer Martin LLC with reference 806096", amount: 1000, currency: "PHP" }), examples, book))
+      .toMatchObject({ decision: "post", categoryId: 9 });
+  });
+
+  test("mixed past choices, the wrong direction and unknown payees go to the model", () => {
+    expect(rememberedDecision(entry({ description: "Payment: Shopee", currency: "PHP" }), examples, book)).toBeNull();
+    expect(rememberedDecision(entry({ description: "Card Payment: Grok Xai", amount: 50, currency: "PHP" }), examples, book)).toBeNull();
+    expect(rememberedDecision(entry({ description: "Card Payment: Brand New Shop", currency: "PHP" }), examples, book)).toBeNull();
+  });
+
+  test("the model sees the same payee first and each category with the person's own merchants", () => {
+    expect(relevantExamples(entry({ description: "Card payment: Grok Xai" }), examples, 2)[0].description).toBe("Card Payment: Grok Xai");
+    expect(learnedPayees(examples, book).get("post:expense:Subscriptions")).toEqual(["Grok Xai", "Shopee"]);
+    const question = buildEvaluationQuestion(entry({ currency: "PHP" }), book, examples);
+    expect(question.criteria["post:expense:Subscriptions"]).toContain("This person's own examples: Grok Xai, Shopee.");
+  });
+});
 
 describe("AI decision guardrails", () => {
   test("offers only decisions that review and posting accept", () => {

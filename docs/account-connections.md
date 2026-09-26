@@ -173,6 +173,22 @@ Wise CSV import and IBKR report import, before the action returns, so the result
 refreshed pages already show where each entry went. The daily cron runs it too. There is no review
 queue: the model's answer is final. Without the key, only rules run and new activity stays uncategorized.
 
+**Learning from the person.** A payee is read from each description ("Received from X", "Sent to X",
+"Card payment: X", "Payment: X"; `lib/finance/payee.ts`). Examples fed to the model are the person's
+rules, rule and manual posts, and AI posts they re-categorized, one per payee and decision (up to 150).
+A payee the person always decided the same way is filed without the model ("Same as your earlier
+choice for X"). Otherwise the model sees the examples for the same or similar payees first, and every
+category's description carries the person's own merchants ("This person's own examples: …").
+
+**Teach Jev (Home).** Payees the model filed under Other, grouped by payee and direction, biggest
+money first, with the model's closest guess preselected. Choosing a category once saves a rule
+(`contains` = payee, any provider) and re-files that payee's past AI-filed entries; manual and rule
+decisions are never changed.
+
+**Statement reminders.** Wise and MariBank update only on upload, so "Needs you" says when last
+month's statement is not in yet, when months between uploads have no activity, and when one bank's
+statements start later than the other's.
+
 Set `AI_CATEGORIZE_MODEL=typesafe-ai/jev` to classify with TypeSafe AI's Jev evaluation model instead.
 Jev answers one native choice question per entry. The options are exactly the decisions that entry
 allows, named in words (`post:expense:Subscriptions`), each with a one-line description of what belongs

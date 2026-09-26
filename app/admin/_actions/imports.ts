@@ -1,11 +1,12 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { categories, categoryRules } from "@/lib/db/schema";
+import { cashFlows, categories, categoryRules, importedEntries } from "@/lib/db/schema";
+import { payeeKey } from "@/lib/finance/payee";
 import { providerSchema } from "@/lib/finance/connections/types";
 import { applyCategoryRules, ingestEntries, saveStatementBalances } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
@@ -95,6 +96,38 @@ export async function saveCategoryRule(_previous: FormState, data: FormData): Pr
   revalidatePath("/admin", "layout");
   return { ok: true, message: "Rule saved. It runs before AI on the next import or sync." };
 }
+/**
+ * Teach once: the category for every payment from or to this payee. Saves a rule for future imports
+ * and re-files the payee's past AI-filed entries; manual and rule decisions are left alone. Both
+ * become examples the model learns from.
+ */
+export async function teachPayee(payee: string, kind: "income" | "expense", categoryId: number): Promise<FormState> {
+  await requireAdmin();
+  const parsed = z.object({ payee: z.string().trim().min(2).max(120), kind: z.enum(["income", "expense"]), categoryId: z.number().int().positive() })
+    .safeParse({ payee, kind, categoryId });
+  if (!parsed.success) return { ok: false, message: "Choose a category for this payee." };
+  const db = getDb(), value = parsed.data;
+  const [category] = await db.select().from(categories).where(eq(categories.id, value.categoryId));
+  if (!category || category.archived || category.kind !== value.kind) return { ok: false, message: "Choose an active category matching income or expense." };
+  const key = payeeKey(value.payee);
+  const e = importedEntries;
+  const candidates = await db.select({ id: e.id, description: e.description }).from(e).innerJoin(cashFlows, eq(cashFlows.id, e.id))
+    .where(and(eq(e.status, "posted"), eq(e.categorizedBy, "ai"), eq(cashFlows.kind, value.kind))).limit(5000);
+  const ids = candidates.filter((c) => payeeKey(c.description) === key).map((c) => c.id);
+  const [existing] = await db.select({ id: categoryRules.id }).from(categoryRules)
+    .where(and(sql`lower(${categoryRules.contains}) = lower(${value.payee})`, eq(categoryRules.kind, value.kind)));
+  // One batch is one transaction: the rule and the re-filed entries land together.
+  const rule = existing
+    ? db.update(categoryRules).set({ categoryId: category.id, enabled: true, autoPost: true, updatedAt: new Date() }).where(eq(categoryRules.id, existing.id))
+    : db.insert(categoryRules).values({ contains: value.payee, provider: null, kind: value.kind, categoryId: category.id, autoPost: true });
+  if (ids.length) await db.batch([rule,
+    db.update(cashFlows).set({ categoryId: category.id, notes: `Taught once: ${value.payee} is ${category.name}.`, updatedAt: new Date() }).where(inArray(cashFlows.id, ids)),
+    db.update(e).set({ categoryId: category.id, categorizedBy: "rule", aiReason: null, updatedAt: new Date() }).where(inArray(e.id, ids))]);
+  else await rule;
+  revalidatePath("/admin", "layout");
+  return { ok: true, message: `${value.payee} is ${category.name} from now on. Moved ${ids.length} past ${ids.length === 1 ? "entry" : "entries"}.` };
+}
+
 export async function setRuleEnabled(id: string, enabled: boolean): Promise<FormState> {
   await requireAdmin();
   if (!idSchema.safeParse(id).success || typeof enabled !== "boolean") return { ok: false, message: "Invalid rule." };

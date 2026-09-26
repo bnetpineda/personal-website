@@ -2,13 +2,14 @@ import "server-only";
 import { createGateway, experimental_evaluate, generateText, Output, type Experimental_EvaluationModel, type LanguageModel } from "ai";
 import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { cashFlows, categories, importedEntries, type ImportedEntry } from "@/lib/db/schema";
+import { cashFlows, categories, categoryRules, importedEntries, type ImportedEntry } from "@/lib/db/schema";
 import { SITE } from "@/lib/constants";
 import { env } from "@/lib/env";
 import { fxToPhp } from "../calc";
 import { ensureFx } from "../service";
-import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
+import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, rememberedDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
   type AiDecision, type AiExample } from "./ai-review";
+import { payeeKey } from "../payee";
 import { transferSuggestions } from "./review";
 import { ImportError } from "./types";
 
@@ -57,7 +58,8 @@ export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model
     loadExamples(),
   ]);
   result.claimed = claimed.length;
-  const local = (entry: ImportedEntry) => unconvertibleDecision(entry) ?? (ledgerShortcut ? ledgerDecision(entry) : null) ?? routineDecision(entry, options, SITE.name);
+  const local = (entry: ImportedEntry) => unconvertibleDecision(entry) ?? (ledgerShortcut ? ledgerDecision(entry) : null) ?? routineDecision(entry, options, SITE.name)
+    ?? rememberedDecision(entry, examples, options);
   const decided = claimed.flatMap((entry) => local(entry) ?? []);
   const pending = claimed.filter((entry) => !local(entry))
     .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn) || a.id.localeCompare(b.id));
@@ -89,22 +91,38 @@ function addApplied(result: AiRunResult, applied: Awaited<ReturnType<typeof appl
   result.unsure += applied.stale;
 }
 
-/** The person's own decisions teach the model their habits. Unedited AI answers are never fed back. */
+/**
+ * The person's own decisions teach the model their habits: their rules, manual and rule posts, and
+ * AI posts they re-categorized. Unedited AI answers are never fed back. One example per payee and
+ * decision, so a hundred Shopee orders do not crowd out the payees the model has not seen.
+ */
 async function loadExamples(): Promise<AiExample[]> {
   const db = getDb(), e = importedEntries;
-  const [posted, moved] = await Promise.all([
-    // Rule and manual posts, plus AI posts the person re-categorized in Transactions.
+  const [rules, posted, moved] = await Promise.all([
+    db.select({ contains: categoryRules.contains, provider: categoryRules.provider, kind: categories.kind, category: categories.name })
+      .from(categoryRules).innerJoin(categories, eq(categories.id, categoryRules.categoryId))
+      .where(and(eq(categoryRules.enabled, true), eq(categories.archived, false))),
     db.select({ description: e.description, provider: e.provider, kind: categories.kind, category: categories.name })
       .from(e).innerJoin(cashFlows, eq(cashFlows.id, e.id)).innerJoin(categories, eq(categories.id, cashFlows.categoryId))
       .where(and(eq(e.status, "posted"), or(isNull(e.categorizedBy), ne(e.categorizedBy, "ai"), ne(cashFlows.categoryId, e.categoryId))))
-      .orderBy(desc(cashFlows.updatedAt)).limit(60),
+      .orderBy(desc(cashFlows.updatedAt)).limit(400),
     db.select({ description: e.description, provider: e.provider, status: e.status }).from(e)
       .where(and(eq(e.categorizedBy, "manual"), inArray(e.status, ["transfer", "reviewed", "ignored"])))
-      .orderBy(desc(e.updatedAt)).limit(20),
+      .orderBy(desc(e.updatedAt)).limit(100),
   ]);
   const decisionFor = { transfer: "transfer", reviewed: "investment", ignored: "ignore" } as const;
-  return [...posted.map((p) => ({ description: p.description, provider: p.provider, decision: `post: ${p.kind} / ${p.category}` })),
-    ...moved.map((m) => ({ description: m.description, provider: m.provider, decision: decisionFor[m.status as keyof typeof decisionFor] }))];
+  const all: AiExample[] = [
+    ...rules.map((r) => ({ description: r.contains, provider: r.provider ?? "any", decision: `post: ${r.kind} / ${r.category}` })),
+    ...posted.map((p) => ({ description: p.description, provider: p.provider, decision: `post: ${p.kind} / ${p.category}` })),
+    ...moved.map((m) => ({ description: m.description, provider: m.provider, decision: decisionFor[m.status as keyof typeof decisionFor] })),
+  ];
+  const seen = new Set<string>();
+  return all.filter((example) => {
+    const key = `${payeeKey(example.description)}|${example.decision}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 150);
 }
 
 /** Links unambiguous transfer pairs between your accounts (same currency, exact opposite amounts, 7 days). */
