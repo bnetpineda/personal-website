@@ -180,14 +180,16 @@ refreshed pages already show where each entry went. The daily cron runs it too. 
 queue: the model's answer is final. Without the key, only rules run and new activity stays uncategorized.
 
 Set `AI_CATEGORIZE_MODEL=typesafe-ai/jev` to classify with TypeSafe AI's Jev evaluation model instead.
-Jev answers one native choice question per entry, and the options are exactly the decisions that entry
-allows (one per category of the matching direction). Cash dividends, interest, broker fees and
-withholding tax in a budget currency are posted to the matching category; the investment-ledger option
-is not offered for those. Jev's top choice is applied whatever its probability; the reason records the
-choice and its probability, e.g. `Jev: Subscriptions (98% likely)`. Language models answer batches of 100
-in one prompt. Crypto rewards and fees, whose only sensible answer is the earnings ledger, are decided
-without a model. So is Wise activity in a currency the budget cannot convert: own-account movements
-become transfers and everything else is ignored.
+Jev answers one native choice question per entry. The options are exactly the decisions that entry
+allows, named in words (`post:expense:Subscriptions`), each with a one-line description of what belongs
+there. The question also names the account holder, so a payment to that person is a transfer between
+their own accounts. Jev files a category on its own when that choice is at least 80% likely and at least
+20 points ahead of the next option. A closer category pick is posted to Other, and the reason keeps the
+guess, e.g. `Jev: Other, closest Business (62% likely)`. Language models answer batches of 100 in one
+prompt. Some lines are decided without a model: crypto rewards and fees, Wise activity in a currency the
+budget cannot convert, Wise card checks of 1.00, payments to the account holder, Binance and IBKR
+deposits and withdrawals, and budget-currency dividends, interest, fees and tax (Investment income, Fees
+& charges, and Taxes).
 
 Each entry gets one decision, validated server-side against what posting and the ledger accept:
 
@@ -199,16 +201,16 @@ Each entry gets one decision, validated server-side against what posting and the
 - **ignore**: noise such as holds or reversals.
 
 Before the model runs, unambiguous transfer pairs (same currency, exact opposite amounts, within
-seven days, different accounts) are linked. Binance and IBKR deposits without a partner are filed by
-the model like everything else.
+seven days, different accounts) are linked. Binance and IBKR deposits and withdrawals are filed as
+transfers even when no partner entry is in the import.
 
 Each entry is claimed before the model call (`ai_attempted_at`), so overlapping sync/import/cron runs
 never pay twice for the same row. A failed call releases its claim for the next run. Invalid answers and
 posts without a PHP exchange rate stay pending and are asked again on the first run an hour or more later.
 One sync or import categorizes up to 1,200 entries within about 2.5 minutes; the rest continue on the next
 sync or the daily cron. If entries wait more than a day while a key is set, a notification points at the
-key or credits. The model receives only the provider, type, date, signed amount,
-currency and description of each entry, the active category list, and up to 80 of your own
+key or credits. The model receives the account holder's name, the provider, type, date, signed amount,
+currency and description of each entry, the active categories with a one-line description of each, and up to 80 of your own
 past decisions (posts, transfers, ignores) as examples. Descriptions are treated as data, never as instructions. Account IDs, source IDs, credentials and balances are never sent.
 Posted rows carry the reason in their notes (`Categorized by AI: …`). To correct one, edit its category
 in Transactions; that correction teaches later runs.

@@ -1,9 +1,9 @@
 import type { Experimental_EvaluationModel } from "ai";
 import { describe, expect, mock, test } from "bun:test";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { MockLanguageModelV4 } from "ai/test";
 import type { Category, ImportedEntry } from "@/lib/db/schema";
-import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, evaluationDecision, ledgerDecision, unconvertibleDecision, validateDecisions, type AiOutput } from "./ai-review";
+import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, evaluationDecision, ledgerDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions, type AiOutput } from "./ai-review";
 
 const entry = (overrides: Partial<ImportedEntry> = {}): ImportedEntry => ({ id: crypto.randomUUID(), provider: "wise", accountKey: "personal", externalId: "CARD-1:USD:out",
   occurredOn: "2026-09-20", amount: -15, currency: "USD", kind: "payment", description: "Spotify premium", realizedPnl: null,
@@ -78,17 +78,49 @@ describe("AI decision guardrails", () => {
       expect(validateDecisions([row], categories, output({ ref: "e1", decision: "investment", categoryId: null, reason: "ledger" })).decisions).toEqual([]);
     }
     expect(allowedDecisions(entry({ provider: "ibkr", currency: "THB", kind: "dividend", amount: 12 }))).toEqual(["investment", "ignore"]);
-    expect(Object.keys(buildEvaluationQuestion(entry({ provider: "ibkr", kind: "dividend", amount: 12 }), categories, []).criteria)).toEqual(["post:2", "ignore"]);
+    expect(Object.keys(buildEvaluationQuestion(entry({ provider: "ibkr", kind: "dividend", amount: 12 }), categories, []).criteria)).toEqual(["post:income:Salary", "ignore"]);
   });
 
-  test("Jev questions offer only this entry's allowed answers and map back to decisions", () => {
-    const expense = buildEvaluationQuestion(entry({ accountKey: "U1234567" }), categories, []);
-    expect(Object.keys(expense.criteria)).toEqual(["post:1", "transfer", "ignore"]);
+  test("decides card checks, self transfers, broker cash and exchange deposits without the model", () => {
+    const holder = "Mark Bennett Pineda";
+    const book = [...categories, category({ id: 4, kind: "expense", name: "Fees & charges" }), category({ id: 5, kind: "expense", name: "Taxes" }),
+      category({ id: 6, kind: "income", name: "Investment income" }), category({ id: 7, kind: "expense", name: "Other" })];
+    expect(routineDecision(entry({ description: "Card transaction of 1.00 PHP issued by Shopee Ph" }), book, holder)).toMatchObject({ decision: "ignore" });
+    expect(routineDecision(entry({ description: "Card transaction of 33,641.00 PHP issued by Shopee Ph" }), book, holder)).toBeNull();
+    expect(routineDecision(entry({ kind: "transfer", amount: -49960, description: "Sent money to Mark Bennett Naval Pineda" }), book, holder)).toMatchObject({ decision: "transfer" });
+    expect(routineDecision(entry({ amount: 56028, description: "Received money from Centauri Media Ltd with reference" }), book, holder)).toBeNull();
+    expect(routineDecision(entry({ provider: "wise", kind: "fee", amount: -39.2, description: "Wise Charges for: TRANSFER-1" }), book, holder)).toMatchObject({ decision: "post", categoryId: 4 });
+    expect(routineDecision(entry({ provider: "ibkr", kind: "dividend", amount: 12, description: "AAPL dividend" }), book, holder)).toMatchObject({ decision: "post", categoryId: 6 });
+    expect(routineDecision(entry({ provider: "ibkr", kind: "tax", amount: -2, description: "Withholding" }), book, holder)).toMatchObject({ decision: "post", categoryId: 5 });
+    expect(routineDecision(entry({ provider: "binance", currency: "SOL", kind: "transfer", amount: -1.6, description: "Binance withdraw · SOL" }), book, holder)).toMatchObject({ decision: "transfer" });
+    expect(routineDecision(entry({ provider: "ibkr", currency: "THB", kind: "dividend", amount: 12 }), book, holder)).toBeNull();
+  });
+
+  test("Jev questions name options in words and keep past decisions on those same options", () => {
+    const expense = buildEvaluationQuestion(entry({ accountKey: "U1234567" }), categories, [
+      { description: "Spotify", provider: "wise", decision: "post: expense / Subscriptions" },
+      { description: "Payroll", provider: "wise", decision: "post: income / Salary" },
+    ], "Mark Bennett Pineda");
+    expect(Object.keys(expense.criteria)).toEqual(["post:expense:Subscriptions", "transfer", "ignore"]);
+    expect(expense.criteria["post:expense:Subscriptions"]).toContain("hosting");
+    expect(expense.state.accountHolder).toBe("Mark Bennett Pineda");
     expect(JSON.stringify(expense.state)).not.toContain("U1234567");
-    expect(Object.keys(buildEvaluationQuestion(entry({ amount: 5000 }), categories, []).criteria)).toEqual(["post:2", "transfer", "ignore"]);
+    expect(expense.state.pastDecisionsByThisPerson).toEqual([{ description: "Spotify", provider: "wise", decision: "post:expense:Subscriptions" }]);
+    expect(Object.keys(buildEvaluationQuestion(entry({ amount: 5000 }), categories, []).criteria)).toEqual(["post:income:Salary", "transfer", "ignore"]);
     expect(Object.keys(buildEvaluationQuestion(entry({ provider: "binance", currency: "BTC", kind: "reward", amount: 0.1 }), categories, []).criteria)).toEqual(["investment", "ignore"]);
-    expect(evaluationDecision("e1", "post:1", expense.criteria, 0.68)).toEqual({ ref: "e1", decision: "post", categoryId: 1, reason: "Jev: Subscriptions (68% likely)" });
-    expect(evaluationDecision("e2", "transfer", expense.criteria)).toEqual({ ref: "e2", decision: "transfer", categoryId: null, reason: "Jev: Transfer" });
+    expect(evaluationDecision("e1", "post:expense:Subscriptions", categories, 0.68)).toEqual({ ref: "e1", decision: "post", categoryId: 1, reason: "Jev: Subscriptions (68% likely)" });
+    expect(evaluationDecision("e2", "transfer", categories)).toEqual({ ref: "e2", decision: "transfer", categoryId: null, reason: "Jev: Transfer" });
+  });
+
+  test("a close Jev category lands on Other and a clear one is filed", () => {
+    const book = [...categories, category({ id: 7, kind: "expense", name: "Other" })];
+    const unsure = settleEvaluation("e1", "post:expense:Subscriptions", book, -15, { "post:expense:Subscriptions": 0.54, ignore: 0.46 });
+    expect(unsure).toEqual({ ref: "e1", decision: "post", categoryId: 7, reason: "Jev: Other, closest Subscriptions (54% likely)" });
+    const split = settleEvaluation("e2", "post:expense:Subscriptions", book, -15, { "post:expense:Subscriptions": 0.85, "post:expense:Other": 0.7 });
+    expect(split.categoryId).toBe(7);
+    const sure = settleEvaluation("e3", "post:expense:Subscriptions", book, -15, { "post:expense:Subscriptions": 0.96, ignore: 0.04 });
+    expect(sure).toMatchObject({ decision: "post", categoryId: 1 });
+    expect(settleEvaluation("e4", "transfer", book, -15, { transfer: 0.44, "post:expense:Subscriptions": 0.4 }).decision).toBe("transfer");
   });
 
   test("prompt carries no account keys, source IDs or archived categories", () => {
@@ -163,7 +195,7 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("AI decisions post, move and h
   }
 });
 
-test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("Jev's choice is final, even a close one, and a same-day twin is not posted twice", async () => {
+test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("a clear Jev choice is filed, a close one goes to Other, and a same-day twin is not posted twice", async () => {
   mock.module("server-only", () => ({}));
   const { getDb } = await import("@/lib/db");
   const { categorizeWithAi } = await import("./ai-service");
@@ -183,7 +215,7 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("Jev's choice is final, even a
     const model = {
       specificationVersion: "v4" as const, provider: "test", modelId: "jev-test", supportedQuestionTypes: ["choice" as const],
       async doEvaluate({ state, questions }: { state: { transaction: { description: string } }; questions: { decision: { criteria: Record<string, string> } } }) {
-        const choice = `post:${categoryId}`;
+        const choice = `post:expense:${scope}`;
         const close = state.transaction.description.endsWith("unsure");
         const probabilities = Object.fromEntries(Object.keys(questions.decision.criteria).map((key) => [key, 0]));
         probabilities[choice] = close ? 0.54 : 0.96;
@@ -192,10 +224,12 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("Jev's choice is final, even a
       },
     };
     const result = await categorizeWithAi({ classifier: { kind: "evaluation", model: model as unknown as Experimental_EvaluationModel }, entryIds: ids });
+    const [other] = await db.select().from(categoryTable).where(and(eq(categoryTable.kind, "expense"), eq(categoryTable.name, "Other"), eq(categoryTable.archived, false)));
     expect(result).toMatchObject({ posted: 2, duplicates: 1, unsure: 0, held: 0 });
     const saved = new Map((await db.select().from(importedEntries).where(inArray(importedEntries.id, ids))).map((row) => [row.externalId, row]));
     expect(saved.get("SURE")).toMatchObject({ status: "posted", categoryId, categorizedBy: "ai" });
-    expect(saved.get("CLOSE")).toMatchObject({ status: "posted", categoryId, categorizedBy: "ai", aiSuggestion: null });
+    expect(saved.get("CLOSE")).toMatchObject({ status: "posted", categoryId: other.id, categorizedBy: "ai", aiSuggestion: null });
+    expect(saved.get("CLOSE")!.aiReason).toContain("Other");
     expect(saved.get("CLOSE")!.aiReason).toContain("54% likely");
     expect(saved.get("TWIN")).toMatchObject({ status: "ignored", categoryId: null, categorizedBy: "ai" });
     expect(saved.get("TWIN")!.aiReason).toStartWith("Already in Transactions");

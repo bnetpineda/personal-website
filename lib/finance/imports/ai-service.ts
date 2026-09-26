@@ -3,10 +3,11 @@ import { createGateway, experimental_evaluate, generateText, Output, type Experi
 import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { cashFlows, categories, importedEntries, type ImportedEntry } from "@/lib/db/schema";
+import { SITE } from "@/lib/constants";
 import { env } from "@/lib/env";
 import { fxToPhp } from "../calc";
 import { ensureFx } from "../service";
-import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, evaluationDecision, ledgerDecision, unconvertibleDecision, validateDecisions,
+import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
   type AiDecision, type AiExample } from "./ai-review";
 import { transferSuggestions } from "./review";
 import { ImportError } from "./types";
@@ -55,7 +56,7 @@ export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model
     loadExamples(),
   ]);
   result.claimed = claimed.length;
-  const local = (entry: ImportedEntry) => unconvertibleDecision(entry) ?? (ledgerShortcut ? ledgerDecision(entry) : null);
+  const local = (entry: ImportedEntry) => unconvertibleDecision(entry) ?? (ledgerShortcut ? ledgerDecision(entry) : null) ?? routineDecision(entry, options, SITE.name);
   const decided = claimed.flatMap((entry) => local(entry) ?? []);
   const pending = claimed.filter((entry) => !local(entry))
     .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn) || a.id.localeCompare(b.id));
@@ -232,7 +233,7 @@ async function applyDecisions(decisions: AiDecision[]) {
 
 /** Evaluation models take one state per call: ask every entry its own question, a few at a time. */
 async function evaluateEach(model: Experimental_EvaluationModel, batch: ImportedEntry[], options: typeof categories.$inferSelect[], examples: AiExample[]) {
-  const decisions: ReturnType<typeof evaluationDecision>[] = [];
+  const decisions: ReturnType<typeof settleEvaluation>[] = [];
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(8, batch.length) }, async () => {
     while (next < batch.length) {
@@ -241,7 +242,7 @@ async function evaluateEach(model: Experimental_EvaluationModel, batch: Imported
       const { answers } = await experimental_evaluate({ model, state, maxRetries: 1, abortSignal: AbortSignal.timeout(30_000),
         questions: { decision: { type: "choice", instructions, criteria } } });
       const choice = String(answers.decision.choice);
-      decisions.push(evaluationDecision(`e${index + 1}`, choice, criteria, answers.decision.probabilities?.[choice]));
+      decisions.push(settleEvaluation(`e${index + 1}`, choice, options, batch[index].amount, answers.decision.probabilities));
     }
   }));
   return decisions;
