@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getMonthlyTotals, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
+import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getMonthlyTotals, getStatementBalances, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
 import { computeNetWorth, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, includedPositions, isConnectionStale } from "@/lib/finance/connections/types";
@@ -14,6 +14,7 @@ import { addDays, currentMonth, dayLabel, monthLabel, timeAgo, todayManila } fro
 import { getNotifications } from "@/lib/finance/notifications-dal";
 import { dueOccurrences } from "@/lib/finance/recurrence";
 import { importedIncomeSince, monthlyIncome, repeatPayers } from "@/lib/finance/repeat-income";
+import { statementPositions } from "@/lib/finance/statement-balances";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
 import { deleteCashFlow, restoreCashFlow } from "../_actions/cash-flows";
 import { CashFlowForm, type FormCategory } from "../_components/cash-flow-form";
@@ -33,7 +34,7 @@ export default async function HomePage() {
   const today = todayManila(now);
   const month = currentMonth(now);
 
-  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts, received] = await Promise.all([
+  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts, received, balances] = await Promise.all([
     getConnections(),
     getFx(),
     getSnapshots(),
@@ -44,6 +45,7 @@ export default async function HomePage() {
     getAccounts(),
     getNotifications(),
     getImportedIncome(importedIncomeSince(today)),
+    getStatementBalances(),
   ]);
   const formCategories: Record<CashFlowKind, FormCategory[]> = { expense: [], income: [] };
   for (const c of allCategories) formCategories[c.kind].push({ id: c.id, name: c.name, color: c.color, archived: c.archived });
@@ -57,7 +59,12 @@ export default async function HomePage() {
     }
   });
 
-  const nw = computeNetWorth([], [], fx, includedPositions(connections));
+  const nw = computeNetWorth([], [], fx, [...includedPositions(connections), ...statementPositions(balances)]);
+  // Banks without an API: their latest statement's closing balances, one row per bank.
+  const banks = [...new Set(balances.map((b) => b.provider))].map((provider) => {
+    const mine = balances.filter((b) => b.provider === provider);
+    return { provider, total: computeNetWorth([], [], fx, statementPositions(mine)), asOf: mine.map((b) => b.asOf).sort().at(-1)!, currencies: mine.map((b) => b.currency) };
+  });
   const [thisMonth] = monthlySeries(month, 1, monthly);
   const rate = savingsRate(thisMonth.income, thisMonth.expense);
   const monthAgo = [...snapshots].reverse().find((s) => s.snapshotDate <= addDays(today, -30));
@@ -136,7 +143,7 @@ export default async function HomePage() {
         <Panel
           title="Accounts"
           action={
-            connections.length > 0 ? (
+            connections.length + banks.length > 0 ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/admin/holdings">
                   Holdings <ArrowRight />
@@ -151,7 +158,7 @@ export default async function HomePage() {
             )
           }
         >
-          {connections.length === 0 ? (
+          {connections.length + banks.length === 0 ? (
             <EmptyState title="No accounts connected">Connect Binance or IBKR once and balances update by themselves every day. Wise comes in as statement CSVs.</EmptyState>
           ) : (
             <ItemGroup>
@@ -183,6 +190,19 @@ export default async function HomePage() {
                   </Item>
                 );
               })}
+              {banks.map((b) => (
+                <Item key={b.provider} size="sm" asChild>
+                  <Link href="/admin/connections">
+                    <ItemContent>
+                      <ItemTitle>{PROVIDER_META[b.provider].name}</ItemTitle>
+                      <ItemDescription>Statement balance · {dayLabel(b.asOf)} · {b.currencies.join(", ")}</ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <span className="font-mono text-sm"><Money value={b.total.netWorthPhp} /></span>
+                    </ItemActions>
+                  </Link>
+                </Item>
+              ))}
             </ItemGroup>
           )}
         </Panel>

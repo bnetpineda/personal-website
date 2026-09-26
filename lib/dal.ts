@@ -15,6 +15,7 @@ import {
   notificationDismissals,
   investmentReports,
   investmentSyncs,
+  statementBalances,
 } from "@/lib/db/schema";
 import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
@@ -36,6 +37,12 @@ export async function getFx(): Promise<FxTable> {
 export async function getConnections() {
   await requireAdmin();
   return loadConnectionViews();
+}
+
+/** Closing balances from uploaded bank statements, by bank and currency. */
+export async function getStatementBalances() {
+  await requireAdmin();
+  return getDb().select().from(statementBalances).orderBy(statementBalances.provider, statementBalances.currency);
 }
 
 /** What uploaded statements have brought in so far, per bank: the months with activity and when the last upload was. */

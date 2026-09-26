@@ -92,6 +92,13 @@
       "when": 1790449461715,
       "tag": "0012_maribank_provider",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790451883884,
+      "tag": "0013_statement_balances",
+      "breakpoints": true
     }
   ]
 }

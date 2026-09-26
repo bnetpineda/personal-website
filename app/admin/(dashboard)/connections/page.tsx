@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getConnections, getFx, getStatementImports } from "@/lib/dal";
+import { getConnections, getFx, getStatementBalances, getStatementImports } from "@/lib/dal";
 import { env } from "@/lib/env";
 import { ConnectedAccounts } from "../../_components/connected-accounts";
 import { SyncConnectionsButton } from "../../_components/connection-controls";
@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Account connections" };
 export const maxDuration = 120;
 
 export default async function ConnectionsPage() {
-  const [connections, fx, statements] = await Promise.all([getConnections(), getFx(), getStatementImports()]);
+  const [connections, fx, statements, balances] = await Promise.all([getConnections(), getFx(), getStatementImports(), getStatementBalances()]);
   return <>
     <PageHeader eyebrow="Automatic tracking" title="Connections" back={{ href: "/admin/settings", label: "Settings" }}>
       <SyncConnectionsButton disabled={!connections.some((c) => c.enabled)} />
@@ -21,6 +21,6 @@ export default async function ConnectionsPage() {
     </p>
     {!env.cronSecret() && <Alert variant="warning" className="mb-6"><AlertTitle>Daily sync needs setup</AlertTitle>
       <AlertDescription>Set CRON_SECRET in the hosting environment to enable the daily job. Manual sync is available after connecting.</AlertDescription></Alert>}
-    <ConnectedAccounts connections={connections} fx={fx} statements={statements} />
+    <ConnectedAccounts connections={connections} fx={fx} statements={statements} balances={balances} />
   </>;
 }

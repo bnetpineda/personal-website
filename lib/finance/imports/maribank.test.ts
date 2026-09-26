@@ -31,9 +31,10 @@ const defaultRows = [
 
 describe("MariBank statement PDFs", () => {
   test("reads each row's direction from its column and dates it in the statement period", () => {
-    const { entries, period, accounts } = parseMariBankStatement(statement());
+    const { entries, period, accounts, balances } = parseMariBankStatement(statement());
     expect(period).toEqual({ from: "2025-12-01", to: "2025-12-31" });
     expect(accounts).toEqual(["SAVINGS"]);
+    expect(balances).toEqual([{ provider: "maribank", account: "savings", currency: "PHP", amount: 1260.12, asOf: "2025-12-31" }]);
     expect(entries.map(({ occurredOn, kind, amount, description, accountKey, currency }) => ({ occurredOn, kind, amount, description, accountKey, currency }))).toEqual([
       { occurredOn: "2025-12-31", kind: "interest", amount: 0.12, description: "MariBank net interest", accountKey: "savings", currency: "PHP" },
       { occurredOn: "2025-12-05", kind: "payment", amount: 1500, description: "Received from Acme Studio Ltd", accountKey: "savings", currency: "PHP" },

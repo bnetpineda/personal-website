@@ -1,8 +1,9 @@
 import "server-only";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accountConnections, cashFlows, fxRates, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
+import { accountConnections, cashFlows, fxRates, netWorthSnapshots, recurringCashFlows, statementBalances } from "@/lib/db/schema";
 import { includedPositions } from "./connections/types";
+import { statementPositions } from "./statement-balances";
 import { computeNetWorth, fxToPhp, round2, type FxTable, type NetWorth } from "./calc";
 import { BASE_CURRENCY } from "./constants";
 import { addDays, todayManila } from "./dates";
@@ -71,28 +72,31 @@ export async function ensureFx(currencies: string[]): Promise<FxTable> {
 /** Refreshes FX for every currency the synced accounts and recurring items use, then records today's net worth. */
 export async function refreshRates(): Promise<RefreshSummary> {
   const db = getDb();
-  const [connections, recurring] = await Promise.all([
+  const [connections, recurring, balances] = await Promise.all([
     db.select({ snapshot: accountConnections.snapshot }).from(accountConnections),
     db.selectDistinct({ currency: recurringCashFlows.currency }).from(recurringCashFlows),
+    db.selectDistinct({ currency: statementBalances.currency }).from(statementBalances),
   ]);
   const fx = await refreshFxRates([
     ...connections.flatMap((c) => c.snapshot?.positions.map((p) => p.currency) ?? []),
     ...recurring.map((r) => r.currency),
+    ...balances.map((b) => b.currency),
   ]);
   await upsertTodaySnapshot();
   return { fxUpdated: fx.updated.length, failed: fx.failed, at: new Date().toISOString() };
 }
 
-/** Net worth is what the synced accounts hold (those included in net worth). */
+/** Net worth is what the synced accounts hold (those included in net worth) plus bank statement balances. */
 export async function currentNetWorth(): Promise<NetWorth & { empty: boolean }> {
   const db = getDb();
-  const [fx, connections] = await Promise.all([
+  const [fx, connections, balances] = await Promise.all([
     loadFxTable(),
     db.select({ provider: accountConnections.provider, includeInNetWorth: accountConnections.includeInNetWorth, snapshot: accountConnections.snapshot }).from(accountConnections),
+    db.select().from(statementBalances),
   ]);
   return {
-    ...computeNetWorth([], [], fx, includedPositions(connections)),
-    empty: !connections.some((c) => c.includeInNetWorth && c.snapshot),
+    ...computeNetWorth([], [], fx, [...includedPositions(connections), ...statementPositions(balances)]),
+    empty: !connections.some((c) => c.includeInNetWorth && c.snapshot) && !balances.length,
   };
 }
 

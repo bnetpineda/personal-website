@@ -45,6 +45,7 @@ export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model
   const classifier: Classifier = given ?? (model ? { kind: "language", model } : configuredClassifier(apiKey!));
   const db = getDb();
   result.linked = await linkExactTransfers(entryIds);
+  await pairFiledTransfers();
   const e = importedEntries;
   const claimable = db.select({ id: e.id }).from(e).where(and(eq(e.status, "pending"),
     retry ? undefined : or(isNull(e.aiAttemptedAt), lt(e.aiAttemptedAt, sql`now() - interval '1 hour'`)), entryIds ? inArray(e.id, entryIds) : undefined))
@@ -120,6 +121,26 @@ async function linkExactTransfers(entryIds?: string[]) {
     complete as (select transfer_id from locked group by transfer_id having count(*) filter (where status = 'pending') = 2)
     update imported_entries e set status = 'transfer', transfer_id = l.transfer_id, category_id = null, categorized_by = 'ai',
       ai_reason = 'Matched transfer between your accounts', ai_suggestion = null, updated_at = now()
+    from locked l where e.id = l.id and l.transfer_id in (select transfer_id from complete) returning e.id`);
+  return result.rows.length / 2;
+}
+
+/**
+ * Pairs transfers that were each filed on their own, typically because the two sides came from
+ * different uploads (Wise sends, MariBank receives). Totals do not change; the pair becomes one movement.
+ */
+async function pairFiledTransfers() {
+  const db = getDb(), e = importedEntries;
+  const filed = await db.select().from(e).where(and(eq(e.status, "transfer"), isNull(e.transferId))).orderBy(desc(e.occurredOn)).limit(500);
+  // Same narrow matching as pending suggestions: exact opposite amounts, same currency, within 7 days, unambiguous.
+  const pairs = transferSuggestions(filed.map((row) => ({ ...row, status: "pending" as const })));
+  if (!pairs.length) return 0;
+  const payload = pairs.flatMap(([a, b]) => { const transferId = crypto.randomUUID(); return [{ id: a.id, transfer_id: transferId }, { id: b.id, transfer_id: transferId }]; });
+  const result = await db.execute(sql`
+    with pairs as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(id uuid, transfer_id uuid)),
+    locked as materialized (select e.id, e.status, e.transfer_id as current, p.transfer_id from imported_entries e join pairs p on p.id = e.id order by e.id for update of e),
+    complete as (select transfer_id from locked group by transfer_id having count(*) filter (where status = 'transfer' and current is null) = 2)
+    update imported_entries e set transfer_id = l.transfer_id, updated_at = now()
     from locked l where e.id = l.id and l.transfer_id in (select transfer_id from complete) returning e.id`);
   return result.rows.length / 2;
 }

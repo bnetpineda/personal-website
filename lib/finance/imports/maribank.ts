@@ -1,3 +1,4 @@
+import type { StatementBalance } from "../statement-balances";
 import { ImportError, uniqueEntries, type EntryKind, type ImportEntry } from "./types";
 
 /** One positioned run of text from a PDF page. `y` grows upwards, as in PDF coordinates. */
@@ -36,7 +37,7 @@ function rowDate(text: string, period: { from: string; to: string }): string {
 /** Items on the same visual line as `y`, left to right. */
 const sameLine = (page: PdfPage, y: number, tolerance = 3) => page.filter((i) => Math.abs(i.y - y) <= tolerance).sort((a, b) => a.x - b.x);
 
-interface Totals { outgoing: number; incoming: number }
+interface Totals { outgoing: number; incoming: number; ending?: number }
 
 /** ACCOUNT SUMMARY rows: account name, starting balance, total outgoing, total incoming, ending balance. */
 function summaryTotals(page: PdfPage): Map<string, Totals> {
@@ -45,7 +46,7 @@ function summaryTotals(page: PdfPage): Map<string, Totals> {
   const totals = new Map<string, Totals>();
   for (const label of page.filter((i) => i.y < header.y - 12 && i.x < header.x - 60 && /^[A-Z][A-Z &-]+$/.test(i.text.trim()))) {
     const amounts = sameLine(page, label.y).filter((i) => AMOUNT.test(i.text.trim()));
-    if (amounts.length === 4) totals.set(label.text.trim(), { outgoing: cents(amounts[1].text), incoming: cents(amounts[2].text) });
+    if (amounts.length === 4) totals.set(label.text.trim(), { outgoing: cents(amounts[1].text), incoming: cents(amounts[2].text), ending: cents(amounts[3].text) });
   }
   if (!totals.size) throw new ImportError("The account summary could not be read.");
   return totals;
@@ -84,7 +85,7 @@ export function describeRow(name: string, detail: string, incoming: boolean): { 
   return { kind: "payment", description: words(`${channel}: ${name}`) };
 }
 
-export interface MariBankStatement { entries: ImportEntry[]; period: { from: string; to: string }; accounts: string[] }
+export interface MariBankStatement { entries: ImportEntry[]; period: { from: string; to: string }; accounts: string[]; balances: StatementBalance[] }
 
 /**
  * Reads the "<ACCOUNT> - TRANSACTION DETAILS" tables of a MariBank e-statement. Each amount is
@@ -150,5 +151,7 @@ export function parseMariBankStatement(pages: PdfPage[]): MariBankStatement {
       throw new ImportError(`The ${name.toLowerCase()} rows do not add up to the statement's totals, so nothing was imported. Upload the original PDF from the MariBank app.`);
     }
   }
-  return { entries: uniqueEntries(entries), period, accounts: [...totals.keys()] };
+  // The summary's ending balance is the account's balance on the last day of the period.
+  const balances = [...totals].map(([name, t]): StatementBalance => ({ provider: "maribank", account: name.toLowerCase(), currency: "PHP", amount: t.ending! / 100, asOf: period.to }));
+  return { entries: uniqueEntries(entries), period, accounts: [...totals.keys()], balances };
 }

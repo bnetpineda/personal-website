@@ -258,6 +258,22 @@ export const accountConnections = pgTable("account_connections", {
 }, (t) => [check("account_connections_provider", sql`${t.provider} in ('binance', 'ibkr')`)]);
 
 /** Immutable source amounts. Review decisions survive repeated imports and deleted cash-flow entries. */
+/**
+ * Closing balances from uploaded bank statements (Wise, MariBank), one per account and currency.
+ * They count as cash in net worth; an older statement never replaces a newer balance.
+ */
+export const statementBalances = pgTable("statement_balances", {
+  provider: text("provider").$type<Provider>().notNull(),
+  account: text("account").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+  amount: money("amount").notNull(),
+  asOf: date("as_of").notNull(),
+  ...timestamps,
+}, (t) => [
+  primaryKey({ columns: [t.provider, t.account, t.currency] }),
+  check("statement_balances_provider", sql`${t.provider} in ('wise', 'maribank')`),
+]);
+
 export const importedEntries = pgTable("imported_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
   provider: text("provider").$type<Provider>().notNull(),

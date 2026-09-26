@@ -7,13 +7,19 @@ import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { categories, categoryRules } from "@/lib/db/schema";
 import { providerSchema } from "@/lib/finance/connections/types";
-import { applyCategoryRules, ingestEntries } from "@/lib/finance/imports/service";
+import { applyCategoryRules, ingestEntries, saveStatementBalances } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { parseMariBankStatement } from "@/lib/finance/imports/maribank";
 import { pdfPages } from "@/lib/finance/imports/pdf-text";
 import { ImportError, uniqueEntries } from "@/lib/finance/imports/types";
 import { detectFeeMode, mergeWiseStatements, parseWiseStatement } from "@/lib/finance/imports/wise-csv";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
+
+/** The tail of an import message: which balances now count in net worth. */
+function balancesNote(currencies: string[], warning?: string) {
+  const updated = currencies.length ? ` Balance updated: ${currencies.join(", ")}.` : "";
+  return `${updated}${warning ? ` ${warning}` : ""}`;
+}
 
 function message(error: unknown): FormState {
   return { ok: false, message: error instanceof ImportError ? error.message : "The import could not be saved. Check the statement format and try again." };
@@ -33,19 +39,20 @@ async function csvEntries(data: FormData) {
 }
 /**
  * Every Wise CSV at once, in one step: the fee format is detected per file, then rules and AI file
- * the entries before answering. Only transactions import; Wise balances are not tracked.
+ * the entries before answering. Each currency's closing balance counts as cash in net worth.
  * Re-importing is safe; entries already imported are skipped.
  */
 export async function importWiseStatements(data: FormData): Promise<FormState> {
   await requireAdmin();
   try {
-    const { entries, files } = await csvEntries(data);
+    const { entries, files, balances, balanceWarning } = await csvEntries(data);
     if (!entries.length) throw new ImportError("These statements have no transactions.");
     const result = await ingestEntries(entries);
+    const updated = await saveStatementBalances(balances.map((b) => ({ provider: "wise", account: "personal", ...b })));
     await applyCategoryRules();
     const ai = await categorizeQuietly();
     revalidatePath("/admin", "layout");
-    return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${describeAiRun(ai)}` };
+    return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${balancesNote(updated, balanceWarning)}${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
 }
 
@@ -67,11 +74,12 @@ export async function importMariBankStatements(data: FormData): Promise<FormStat
     const entries = uniqueEntries(statements.flatMap((s) => s.entries));
     if (!entries.length) throw new ImportError("These statements have no transactions.");
     const result = await ingestEntries(entries);
+    const updated = await saveStatementBalances(statements.flatMap((s) => s.balances));
     await applyCategoryRules();
     const ai = await categorizeQuietly();
     revalidatePath("/admin", "layout");
     const months = statements.length === 1 ? "1 statement" : `${statements.length} statements`;
-    return { ok: true, message: `Imported ${result.inserted} new entries from ${months}; ${result.duplicates} were already imported.${describeAiRun(ai)}` };
+    return { ok: true, message: `Imported ${result.inserted} new entries from ${months}; ${result.duplicates} were already imported.${balancesNote(updated)}${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
 }
 

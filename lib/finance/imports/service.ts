@@ -2,11 +2,12 @@ import "server-only";
 import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { pgCode } from "@/lib/db/errors";
-import { categoryRules, importedEntries } from "@/lib/db/schema";
+import { categoryRules, importedEntries, statementBalances } from "@/lib/db/schema";
 import { fxToPhp } from "../calc";
 import { CURRENCIES } from "../constants";
 import { ensureFx } from "../service";
 import { canPost, matchingRule } from "./review";
+import type { StatementBalance } from "../statement-balances";
 import { ImportError, uniqueEntries, type ImportEntry } from "./types";
 
 /** One SQL statement makes the whole import atomic, including concurrent duplicate imports. */
@@ -31,6 +32,24 @@ export function ingestQuery(input: ImportEntry[], guard: SQL = sql`select 'impor
         returning (xmax = 0) as inserted
       ) select count(*) filter (where inserted)::int as inserted, count(*) filter (where not inserted)::int as duplicates,
         exists(select 1 from guard) as active from saved`;
+}
+
+/** Saves statement closing balances; a balance dated before the saved one is kept out. Returns the currencies updated. */
+export async function saveStatementBalances(balances: StatementBalance[]): Promise<string[]> {
+  // Several statements for one account: only the latest reaches the upsert (it cannot touch a row twice).
+  const latest = new Map<string, StatementBalance>();
+  for (const balance of balances) {
+    const key = `${balance.provider}:${balance.account}:${balance.currency}`;
+    if ((latest.get(key)?.asOf ?? "") <= balance.asOf) latest.set(key, balance);
+  }
+  if (!latest.size) return [];
+  const b = statementBalances;
+  const saved = await getDb().insert(b).values([...latest.values()]).onConflictDoUpdate({
+    target: [b.provider, b.account, b.currency],
+    set: { amount: sql`excluded.amount`, asOf: sql`excluded.as_of`, updatedAt: sql`now()` },
+    setWhere: sql`excluded.as_of >= ${b.asOf}`,
+  }).returning({ currency: b.currency });
+  return [...new Set(saved.map((row) => row.currency))].sort();
 }
 
 export async function ingestEntries(input: ImportEntry[], lease?: { provider: string; id: string }) {
