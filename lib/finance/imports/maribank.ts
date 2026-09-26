@@ -1,4 +1,4 @@
-import { ImportError, uniqueEntries, type ImportEntry } from "./types";
+import { ImportError, uniqueEntries, type EntryKind, type ImportEntry } from "./types";
 
 /** One positioned run of text from a PDF page. `y` grows upwards, as in PDF coordinates. */
 export interface PdfItem { text: string; x: number; y: number; width: number }
@@ -67,6 +67,23 @@ function columnsAt(page: PdfPage, outgoing: PdfItem): Columns | null {
   return { dateX: date.x, textX: text.x, outgoingX: outgoing.x, outgoingRight: edge(outgoing.x, incoming.x), incomingRight: edge(incoming.x, Infinity), headerY: outgoing.y };
 }
 
+/**
+ * A statement row is a name ("Shopee", "ATM Cash Withdrawal", "Card Fee") over a channel
+ * ("Payment", "Cash Withdrawal", "ATM Withdrawal"). Words it the way the row reads to a person.
+ * "Transfer" is only the channel, not a verdict: those rows say who paid whom, so money from
+ * someone else is not presumed to be the account holder's own.
+ */
+export function describeRow(name: string, detail: string, incoming: boolean): { kind: EntryKind; description: string } {
+  const channel = detail.trim();
+  const words = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (/interest/i.test(`${name} ${channel}`)) return { kind: "interest", description: words(`MariBank ${(channel || name).toLowerCase()}`) };
+  if (/\bfee\b/i.test(name)) return { kind: "fee", description: words(channel ? `${channel} fee` : name) };
+  if (/^cash withdrawal$/i.test(channel)) return { kind: "payment", description: "ATM cash withdrawal" };
+  if (/^(?:reward|cashback)$/i.test(channel)) return { kind: "payment", description: words(name) };
+  if (!channel || /^transfer$/i.test(channel)) return { kind: "payment", description: words(`${incoming ? "Received from" : "Sent to"} ${name}`) };
+  return { kind: "payment", description: words(`${channel}: ${name}`) };
+}
+
 export interface MariBankStatement { entries: ImportEntry[]; period: { from: string; to: string }; accounts: string[] }
 
 /**
@@ -114,17 +131,14 @@ export function parseMariBankStatement(pages: PdfPage[]): MariBankStatement {
       read.set(account, tally);
 
       const occurredOn = rowDate(dateText, period);
-      const interest = /interest/i.test(`${name} ${detail}`);
-      // "Transfer" is MariBank's channel, not a verdict: say who paid whom, so the money is not presumed to be the person's own.
-      const channel = detail && !/^transfer$/i.test(detail) ? ` (${detail})` : "";
-      const description = interest ? `MariBank ${(detail || name).toLowerCase()}` : `${incoming ? "Received from" : "Sent to"} ${name}${channel}`;
+      const { kind, description } = describeRow(name, detail, incoming);
       // No transaction IDs on the statement: identify a row by what it is, so a re-downloaded statement matches.
       const base = [occurredOn, incoming ? "in" : "out", amount, `${name} ${detail}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")].join(":").slice(0, 230);
       const n = (seen.get(base) ?? 0) + 1;
       seen.set(base, n);
       entries.push({ provider: "maribank", accountKey: account.toLowerCase(), externalId: n > 1 ? `${base}:${n}` : base, occurredOn,
-        kind: interest ? "interest" : "payment", amount: (incoming ? amount : -amount) / 100, currency: "PHP",
-        description: description.replace(/\s+/g, " ").slice(0, 200), realizedPnl: null });
+        kind, amount: (incoming ? amount : -amount) / 100, currency: "PHP",
+        description, realizedPnl: null });
     }
   }
 

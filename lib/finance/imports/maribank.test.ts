@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { parseMariBankStatement, type PdfItem } from "./maribank";
+import { describeRow, parseMariBankStatement, type PdfItem } from "./maribank";
+import type { EntryKind } from "./types";
 
 // Positions follow a real MariBank e-statement: amounts are right-aligned under OUTGOING / INCOMING.
 const at = (text: string, x: number, y: number, width = text.length * 5): PdfItem => ({ text, x, y, width });
@@ -58,5 +59,23 @@ describe("MariBank statement PDFs", () => {
     expect(() => parseMariBankStatement([[at("Some other bank", 40, 700)]])).toThrow("MariBank");
     const noPeriod = statement().map((page) => page.filter((i) => !i.text.includes(" to ")));
     expect(() => parseMariBankStatement(noPeriod)).toThrow("period");
+  });
+});
+
+describe("MariBank row wording", () => {
+  test("follows the channel under each name", () => {
+    const cases: [string, string, boolean, EntryKind, string][] = [
+      ["Acme Studio Ltd", "Transfer", true, "payment", "Received from Acme Studio Ltd"],
+      ["Juan Dela Cruz", "Transfer", false, "payment", "Sent to Juan Dela Cruz"],
+      ["Interest", "Net Interest", true, "interest", "MariBank net interest"],
+      ["Card Fee", "ATM Withdrawal", false, "fee", "ATM Withdrawal fee"],
+      ["ATM Cash Withdrawal", "Cash Withdrawal", false, "payment", "ATM cash withdrawal"],
+      ["Debit Card Cashback", "Reward", true, "payment", "Debit Card Cashback"],
+      ["Shopee", "Payment", false, "payment", "Payment: Shopee"],
+      ["Starbucks 349 Sm Clrk", "Card Payment", false, "payment", "Card Payment: Starbucks 349 Sm Clrk"],
+      ["DITO 100", "Load - Regular", false, "payment", "Load - Regular: DITO 100"],
+    ];
+    for (const [name, detail, incoming, kind, description] of cases) expect(describeRow(name, detail, incoming)).toEqual({ kind, description });
+    expect(describeRow("Coffee Feeder Inc", "Card Payment", false).kind).toBe("payment");
   });
 });

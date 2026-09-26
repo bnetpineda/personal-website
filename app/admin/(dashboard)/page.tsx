@@ -89,7 +89,7 @@ export default async function HomePage() {
           {
             label: "Monthly income",
             value: <Money value={income.total} />,
-            hint: payers.length ? `${payers.map((p) => p.name).join(", ")} · last paid ${dayLabel(payers.map((p) => p.lastOn).sort().at(-1)!)}` : "Import a statement to see it",
+            hint: payers.length ? `${payers.slice(0, 2).map((p) => p.name).join(", ")}${payers.length > 2 ? ` +${payers.length - 2} more` : ""} · last paid ${dayLabel(payers.map((p) => p.lastOn).sort().at(-1)!)}` : "Import a statement to see it",
           },
           { label: `In · ${monthLabel(month, "short")}`, value: <Money value={thisMonth.income} /> },
           {
