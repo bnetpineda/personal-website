@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { Pause, Play, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { getAccounts, getCategories, getFx, getRecurring, type RecurringRow } from "@/lib/dal";
+import { getAccounts, getCategories, getFx, getImportedIncome, getRecurring, type RecurringRow } from "@/lib/dal";
 import { sumInPhp } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { addDays, todayManila } from "@/lib/finance/dates";
+import { addDays, addMonths, dayLabel, todayManila } from "@/lib/finance/dates";
 import { describeSchedule, dueOccurrences, monthlyEquivalent, upcomingOccurrences } from "@/lib/finance/recurrence";
+import { repeatPayers } from "@/lib/finance/repeat-income";
 import { deleteRecurring, setRecurringPaused } from "../../_actions/recurring";
 import type { FormCategory } from "../../_components/cash-flow-form";
 import { FormSheet } from "../../_components/form";
@@ -40,12 +41,14 @@ function toDTO(r: RecurringRow): RecurringDTO {
 
 export default async function RecurringPage() {
   const today = todayManila();
-  const [rows, incomeCategories, expenseCategories, accounts, fx] = await Promise.all([
+  // Six months of imported income: long enough to see a monthly payer repeat, recent enough to still be paying.
+  const [rows, incomeCategories, expenseCategories, accounts, fx, received] = await Promise.all([
     getRecurring(),
     getCategories("income"),
     getCategories("expense"),
     getAccounts(),
     getFx(),
+    getImportedIncome(`${addMonths(today.slice(0, 7), -5)}-01`),
   ]);
 
   const toForm = (list: typeof incomeCategories): FormCategory[] => list.map(({ id, name, color, archived }) => ({ id, name, color, archived }));
@@ -55,7 +58,10 @@ export default async function RecurringPage() {
   const live = rows.filter((r) => !r.paused && r.nextOn != null);
   const perMonth = (kind: CashFlowKind) =>
     sumInPhp(fx, live.filter((r) => r.kind === kind).map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency })));
-  const income = perMonth("income");
+  const payers = repeatPayers(received);
+  const scheduledIncome = perMonth("income");
+  const importedIncome = sumInPhp(fx, payers.map((p) => ({ amount: p.monthly, currency: p.currency })));
+  const income = { total: scheduledIncome.total + importedIncome.total, missing: [...scheduledIncome.missing, ...importedIncome.missing] };
   const expenses = perMonth("expense");
   const missingFx = [...new Set([...income.missing, ...expenses.missing])];
 
@@ -78,7 +84,8 @@ export default async function RecurringPage() {
 
   const list = (kind: CashFlowKind) => {
     const items = rows.filter((r) => r.kind === kind);
-    if (items.length === 0) {
+    const imported = kind === "income" ? payers : [];
+    if (items.length === 0 && imported.length === 0) {
       return (
         <EmptyState title="Nothing yet">
           {kind === "expense" ? "Add rent, bills and subscriptions so they log themselves." : "Add your salary so it logs itself on payday."}
@@ -133,6 +140,28 @@ export default async function RecurringPage() {
             </EditableRow>
           );
         })}
+        {imported.map((p) => (
+          <Item key={p.key}>
+            <ItemMedia>
+              <Swatch color={p.categoryColor} />
+            </ItemMedia>
+            <ItemContent>
+              <ItemTitle>
+                {p.name}
+                <Badge variant="outline">Imported</Badge>
+              </ItemTitle>
+              <ItemDescription>
+                {[`${p.payments} payments`, p.categoryName, `Last ${dayLabel(p.lastOn)}`].join(" · ")}
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <span className="flex flex-col items-end font-mono text-sm">
+                <Money value={p.monthly} currency={p.currency} />
+                <span className="text-xs text-muted-foreground">avg/mo</span>
+              </span>
+            </ItemActions>
+          </Item>
+        ))}
       </ItemGroup>
     );
   };
@@ -147,7 +176,7 @@ export default async function RecurringPage() {
       <StatCards
         items={[
           { label: "Net per month", value: <Money value={income.total - expenses.total} signed />, primary: true },
-          { label: "Income per month", value: <Money value={income.total} />, hint: `${live.filter((r) => r.kind === "income").length} active` },
+          { label: "Income per month", value: <Money value={income.total} />, hint: `${live.filter((r) => r.kind === "income").length} active${payers.length ? ` · ${payers.length} from imports` : ""}` },
           { label: "Fixed costs per month", value: <Money value={expenses.total} />, hint: `${live.filter((r) => r.kind === "expense").length} active` },
         ]}
       />

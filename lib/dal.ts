@@ -260,6 +260,18 @@ export async function getRecurring(kind?: CashFlowKind) {
     .orderBy(asc(recurringCashFlows.paused), sql`${recurringCashFlows.nextOn} asc nulls last`, asc(recurringCashFlows.description));
 }
 
+/** Imported income posted to Transactions since `since`, for spotting payers that repeat. */
+export async function getImportedIncome(since: string) {
+  await requireAdmin();
+  return getDb()
+    .select({ description: importedEntries.description, occurredOn: cashFlows.occurredOn, amount: cashFlows.amount, currency: cashFlows.currency,
+      categoryName: categories.name, categoryColor: categories.color })
+    .from(cashFlows)
+    .innerJoin(importedEntries, eq(importedEntries.id, cashFlows.id))
+    .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
+    .where(and(eq(cashFlows.kind, "income"), gte(cashFlows.occurredOn, since)));
+}
+
 export async function getSnapshots() {
   await requireAdmin();
   return getDb().select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate));
