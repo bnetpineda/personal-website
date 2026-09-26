@@ -47,11 +47,11 @@ function ImportStatementsButton({ label, accept, pattern, empty, action }: {
 }
 
 export function ImportWiseButton() {
-  return <ImportStatementsButton label="Import Wise CSVs" accept=".csv,text/csv" pattern={/\.csv$/i} empty="Choose Wise statement CSV files." action={importWiseStatements} />;
+  return <ImportStatementsButton label="Import CSVs" accept=".csv,text/csv" pattern={/\.csv$/i} empty="Choose Wise statement CSV files." action={importWiseStatements} />;
 }
 
 export function ImportMariBankButton() {
-  return <ImportStatementsButton label="Import MariBank PDFs" accept=".pdf,application/pdf" pattern={/\.pdf$/i} empty="Choose MariBank statement PDF files." action={importMariBankStatements} />;
+  return <ImportStatementsButton label="Import PDFs" accept=".pdf,application/pdf" pattern={/\.pdf$/i} empty="Choose MariBank statement PDF files." action={importMariBankStatements} />;
 }
 
 export function ImportAction({ action, children }: { action: () => Promise<FormState>; children: React.ReactNode }) {

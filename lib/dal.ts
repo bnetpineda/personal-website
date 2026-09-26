@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, getTableColumns, gte, ilike, isNotNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import {
@@ -19,6 +19,7 @@ import {
 import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
+import { statementCoverage } from "@/lib/finance/imports/coverage";
 import { loadFxTable } from "@/lib/finance/service";
 import { loadConnectionViews } from "@/lib/finance/connections/service";
 
@@ -35,6 +36,16 @@ export async function getFx(): Promise<FxTable> {
 export async function getConnections() {
   await requireAdmin();
   return loadConnectionViews();
+}
+
+/** What uploaded statements have brought in so far, per bank: the months with activity and when the last upload was. */
+export async function getStatementImports() {
+  await requireAdmin();
+  const e = importedEntries;
+  const rows = await getDb()
+    .select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
+    .from(e).where(inArray(e.provider, ["wise", "maribank"])).groupBy(e.provider, sql`2`);
+  return statementCoverage(rows);
 }
 
 export async function getCategories(kind?: CashFlowKind) {

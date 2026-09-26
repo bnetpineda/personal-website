@@ -117,7 +117,7 @@ export function parseMariBankStatement(pages: PdfPage[]): MariBankStatement {
       const interest = /interest/i.test(`${name} ${detail}`);
       // "Transfer" is MariBank's channel, not a verdict: say who paid whom, so the money is not presumed to be the person's own.
       const channel = detail && !/^transfer$/i.test(detail) ? ` (${detail})` : "";
-      const description = interest ? (detail || name) : `${incoming ? "Received from" : "Sent to"} ${name}${channel}`;
+      const description = interest ? `MariBank ${(detail || name).toLowerCase()}` : `${incoming ? "Received from" : "Sent to"} ${name}${channel}`;
       // No transaction IDs on the statement: identify a row by what it is, so a re-downloaded statement matches.
       const base = [occurredOn, incoming ? "in" : "out", amount, `${name} ${detail}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")].join(":").slice(0, 230);
       const n = (seen.get(base) ?? 0) + 1;

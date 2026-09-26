@@ -4,14 +4,26 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { computeNetWorth, fxToPhp, type FxTable } from "@/lib/finance/calc";
-import { SYNC_PROVIDERS, PROVIDER_META, isConnectionStale, type ConnectionView } from "@/lib/finance/connections/types";
-import { dayLabel, timeAgo } from "@/lib/finance/dates";
+import { SYNC_PROVIDERS, PROVIDER_META, isConnectionStale, type ConnectionView, type Provider } from "@/lib/finance/connections/types";
+import { dayLabel, monthLabel, timeAgo } from "@/lib/finance/dates";
+import type { StatementCoverage } from "@/lib/finance/imports/coverage";
 import { formatQty } from "@/lib/finance/format";
 import { ConnectAccountButton, ConnectionSettings, CredentialExpiryButton, SyncConnectionsButton } from "./connection-controls";
 import { ImportMariBankButton, ImportWiseButton } from "./import-controls";
 import { Money } from "./ui";
 
-export function ConnectedAccounts({ connections, fx }: { connections: ConnectionView[]; fx: FxTable }) {
+/** What a bank's uploaded statements cover, so a missing month is easy to spot. */
+function StatementStatus({ coverage, now }: { coverage?: StatementCoverage; now: Date }) {
+  if (!coverage) return <p className="text-sm text-muted-foreground">Nothing imported yet.</p>;
+  const span = coverage.from === coverage.to ? monthLabel(coverage.from, "short") : `${monthLabel(coverage.from, "short")} – ${monthLabel(coverage.to, "short")}`;
+  return <>
+    <p className="font-display text-lg">{span}</p>
+    <p className="font-mono text-xs text-muted-foreground">{coverage.entries} entries · last upload {timeAgo(coverage.importedAt, now)}</p>
+    {coverage.missing.length > 0 && <p className="text-sm text-warning">No activity in {coverage.missing.map((m) => monthLabel(m, "short")).join(", ")}. Upload {coverage.missing.length === 1 ? "that statement" : "those statements"} if you have them.</p>}
+  </>;
+}
+
+export function ConnectedAccounts({ connections, fx, statements }: { connections: ConnectionView[]; fx: FxTable; statements: Partial<Record<Provider, StatementCoverage>> }) {
   const now = new Date();
   return (
     <section aria-label="Connected accounts" className="mb-6 flex flex-col gap-4">
@@ -69,6 +81,7 @@ export function ConnectedAccounts({ connections, fx }: { connections: Connection
             <CardDescription>{PROVIDER_META.wise.scope}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            <StatementStatus coverage={statements.wise} now={now} />
             <p className="text-sm text-muted-foreground">{PROVIDER_META.wise.description} Wise does not share personal-account activity through its API, so there is nothing to sync.</p>
             <ImportWiseButton />
             <p className="text-xs text-muted-foreground">Select or drag all your Wise statement CSVs at once, one per currency. They import and categorize in one step.</p>
@@ -81,6 +94,7 @@ export function ConnectedAccounts({ connections, fx }: { connections: Connection
             <CardDescription>{PROVIDER_META.maribank.scope}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            <StatementStatus coverage={statements.maribank} now={now} />
             <p className="text-sm text-muted-foreground">{PROVIDER_META.maribank.description} Upload the original PDFs: each must add up to its own account summary before anything is saved.</p>
             <ImportMariBankButton />
             <p className="text-xs text-muted-foreground">Select or drag several months at once. Re-importing a month skips what is already there.</p>

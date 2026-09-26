@@ -34,7 +34,7 @@ describe("MariBank statement PDFs", () => {
     expect(period).toEqual({ from: "2025-12-01", to: "2025-12-31" });
     expect(accounts).toEqual(["SAVINGS"]);
     expect(entries.map(({ occurredOn, kind, amount, description, accountKey, currency }) => ({ occurredOn, kind, amount, description, accountKey, currency }))).toEqual([
-      { occurredOn: "2025-12-31", kind: "interest", amount: 0.12, description: "Net Interest", accountKey: "savings", currency: "PHP" },
+      { occurredOn: "2025-12-31", kind: "interest", amount: 0.12, description: "MariBank net interest", accountKey: "savings", currency: "PHP" },
       { occurredOn: "2025-12-05", kind: "payment", amount: 1500, description: "Received from Acme Studio Ltd", accountKey: "savings", currency: "PHP" },
       { occurredOn: "2025-12-28", kind: "payment", amount: -250, description: "Sent to Juan Dela Cruz", accountKey: "savings", currency: "PHP" },
     ]);
