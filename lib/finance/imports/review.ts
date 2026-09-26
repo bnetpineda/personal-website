@@ -1,4 +1,5 @@
 import type { CategoryRule, ImportedEntry } from "@/lib/db/schema";
+import { isBank } from "../connections/types";
 import { CURRENCIES } from "../constants";
 import { daysBetween } from "../dates";
 import type { ImportEntry } from "./types";
@@ -43,7 +44,7 @@ export function earningsByCurrency(entries: Pick<ImportedEntry, "provider" | "ki
   const rows = new Map<string, { currency: string; contributions: number; rewards: number; dividends: number; interest: number; fees: number; taxes: number; realized: number | null }>();
   let postedCash = 0;
   for (const e of entries) {
-    if (e.status === "ignored" || e.provider === "wise") continue;
+    if (e.status === "ignored" || isBank(e.provider)) continue;
     // Posted cash already lives on Transactions. Counting it here would add it twice.
     if (e.status === "posted" && POSTED_CASH_KINDS.has(e.kind)) {
       postedCash += 1;

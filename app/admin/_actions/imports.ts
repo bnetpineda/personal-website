@@ -9,7 +9,9 @@ import { categories, categoryRules } from "@/lib/db/schema";
 import { providerSchema } from "@/lib/finance/connections/types";
 import { applyCategoryRules, ingestEntries } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
-import { ImportError } from "@/lib/finance/imports/types";
+import { parseMariBankStatement } from "@/lib/finance/imports/maribank";
+import { pdfPages } from "@/lib/finance/imports/pdf-text";
+import { ImportError, uniqueEntries } from "@/lib/finance/imports/types";
 import { detectFeeMode, mergeWiseStatements, parseWiseStatement } from "@/lib/finance/imports/wise-csv";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
 
@@ -44,6 +46,32 @@ export async function importWiseStatements(data: FormData): Promise<FormState> {
     const ai = await categorizeQuietly();
     revalidatePath("/admin", "layout");
     return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${describeAiRun(ai)}` };
+  } catch (error) { return message(error); }
+}
+
+/**
+ * MariBank monthly statement PDFs, several at once. Each file must add up to its own summary
+ * totals before anything is saved; then rules and AI file the entries, as for Wise.
+ */
+export async function importMariBankStatements(data: FormData): Promise<FormState> {
+  await requireAdmin();
+  try {
+    const files = data.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
+    if (!files.length) throw new ImportError("Choose at least one MariBank statement PDF.");
+    if (files.length > 12) throw new ImportError("Import up to 12 MariBank statements at a time.");
+    if (files.reduce((sum, file) => sum + file.size, 0) > 2_500_000) throw new ImportError("The selected files are too large together. Import them in smaller groups.");
+    const statements = await Promise.all(files.map(async (file) => {
+      try { return parseMariBankStatement(await pdfPages(new Uint8Array(await file.arrayBuffer()))); }
+      catch (error) { throw error instanceof ImportError && files.length > 1 ? new ImportError(`${file.name}: ${error.message}`) : error; }
+    }));
+    const entries = uniqueEntries(statements.flatMap((s) => s.entries));
+    if (!entries.length) throw new ImportError("These statements have no transactions.");
+    const result = await ingestEntries(entries);
+    await applyCategoryRules();
+    const ai = await categorizeQuietly();
+    revalidatePath("/admin", "layout");
+    const months = statements.length === 1 ? "1 statement" : `${statements.length} statements`;
+    return { ok: true, message: `Imported ${result.inserted} new entries from ${months}; ${result.duplicates} were already imported.${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
 }
 

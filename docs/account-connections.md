@@ -107,6 +107,23 @@ accounts), so the API connection was removed and its saved token deleted (migrat
 `0011_drop_wise_connection`). The Wise card on Connections imports balance statement CSVs instead;
 see below. Wise balances are not part of net worth.
 
+## MariBank
+
+MariBank has no API. **Import MariBank PDFs** (MariBank card on `/admin/connections`) reads the
+monthly e-statement PDFs from the MariBank app, several months at once (up to 12 files, 2.5 MB in
+total). Password-protected PDFs are refused; save a copy without the password first.
+
+Only the text layer is read (via `unpdf`); nothing in the PDF is executed. Each
+`<ACCOUNT> - TRANSACTION DETAILS` table is read row by row: an amount is Outgoing or Incoming by which
+column header it is right-aligned under, a row's date comes from the statement period (a bare month,
+used for monthly interest, is the last day of that month), and every account's rows must add up to the
+**Account summary** totals or the whole upload is refused. Rows become payments described as
+"Received from …" / "Sent to …" (the channel, when it is not a plain Transfer, in brackets) so rules and
+AI can file them as income or spending; money from the account holder's own name is a transfer, and net
+interest is interest. Statements carry no transaction
+IDs, so a row is identified by date, direction, amount and counterparty: re-importing a month, or a
+re-downloaded copy of it, skips what is already there. Balances are not saved.
+
 ## CSV imports and category rules
 
 **Import Wise CSVs** (Wise card on `/admin/connections`) supports Wise English **balance statement** CSVs, not the transfer-list export. Wise exports one

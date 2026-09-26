@@ -32,10 +32,10 @@ export interface RepeatPayer {
   categoryColor: string;
 }
 
-/** "Received money from Centauri Media Ltd with reference INV-12" → "Centauri Media Ltd". */
+/** "Received money from Centauri Media Ltd with reference INV-12" (Wise) or "Received from Paypal Pte Ltd" (MariBank) → the sender. */
 export function payerName(description: string): string {
-  const wise = /^received money from (.+?)(?: with reference\b.*)?$/i.exec(description.trim());
-  return (wise?.[1] ?? description).replace(/\s+/g, " ").trim();
+  const sender = /^received(?: money)? from (.+?)(?: with reference\b.*)?$/i.exec(description.trim());
+  return (sender?.[1] ?? description).replace(/\s+/g, " ").trim();
 }
 
 const monthIndex = (day: string) => Number(day.slice(0, 4)) * 12 + Number(day.slice(5, 7));

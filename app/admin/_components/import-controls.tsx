@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import type { Category } from "@/lib/db/schema";
 import type { FormState } from "@/lib/finance/schemas";
-import { importWiseStatements, saveCategoryRule, setRuleEnabled } from "../_actions/imports";
+import { importMariBankStatements, importWiseStatements, saveCategoryRule, setRuleEnabled } from "../_actions/imports";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
 import { Money } from "./ui";
 
@@ -18,30 +18,40 @@ export function NativeAmount({ value, currency, crypto = false }: { value: numbe
     : <Money value={value} currency={currency} signed />;
 }
 
-/** Opens the file picker straight away. Picking or dropping several CSVs (one per currency) imports them all. */
-export function ImportWiseButton() {
+/** Opens the file picker straight away. Picking or dropping several statements imports them all. */
+function ImportStatementsButton({ label, accept, pattern, empty, action }: {
+  label: string; accept: string; pattern: RegExp; empty: string; action: (data: FormData) => Promise<FormState>;
+}) {
   const input = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [count, setCount] = useState(0);
   const upload = (picked: File[]) => {
-    const files = picked.filter((file) => /\.csv$/i.test(file.name));
-    if (!files.length) { notify({ ok: false, message: "Choose Wise statement CSV files." }); return; }
+    const files = picked.filter((file) => pattern.test(file.name));
+    if (!files.length) { notify({ ok: false, message: empty }); return; }
     const data = new FormData();
     for (const file of files) data.append("file", file);
     setCount(files.length);
     startTransition(async () => {
-      try { notify(await importWiseStatements(data)); }
+      try { notify(await action(data)); }
       catch { notify({ ok: false, message: "Import could not finish. Retry safely; entries already imported are skipped." }); }
       if (input.current) input.current.value = "";
     });
   };
   return <>
-    <input ref={input} type="file" accept=".csv,text/csv" multiple hidden onChange={(e) => upload([...(e.target.files ?? [])])} />
+    <input ref={input} type="file" accept={accept} multiple hidden onChange={(e) => upload([...(e.target.files ?? [])])} />
     <Button variant="outline" size="sm" disabled={pending} onClick={() => input.current?.click()}
       onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (!pending) upload([...e.dataTransfer.files]); }}>
-      {pending ? <><Spinner />Importing {count} {count === 1 ? "file" : "files"}…</> : <><FileUp />Import Wise CSVs</>}
+      {pending ? <><Spinner />Importing {count} {count === 1 ? "file" : "files"}…</> : <><FileUp />{label}</>}
     </Button>
   </>;
+}
+
+export function ImportWiseButton() {
+  return <ImportStatementsButton label="Import Wise CSVs" accept=".csv,text/csv" pattern={/\.csv$/i} empty="Choose Wise statement CSV files." action={importWiseStatements} />;
+}
+
+export function ImportMariBankButton() {
+  return <ImportStatementsButton label="Import MariBank PDFs" accept=".pdf,application/pdf" pattern={/\.pdf$/i} empty="Choose MariBank statement PDF files." action={importMariBankStatements} />;
 }
 
 export function ImportAction({ action, children }: { action: () => Promise<FormState>; children: React.ReactNode }) {
@@ -62,7 +72,7 @@ function RuleForm({ categories }: { categories: Category[] }) {
   return <form key={formKey} onSubmit={onSubmit} className="flex flex-col gap-6"><FieldGroup>
     <FormField id="rule-text" label="Description contains"><Input id="rule-text" name="contains" placeholder="e.g. Spotify" minLength={2} maxLength={120} required /></FormField>
     <FormField id="rule-provider" label="Provider"><Select name="provider" defaultValue="any"><SelectTrigger id="rule-provider"><SelectValue /></SelectTrigger><SelectContent>
-      <SelectItem value="any">Any provider</SelectItem><SelectItem value="wise">Wise</SelectItem><SelectItem value="ibkr">IBKR</SelectItem>
+      <SelectItem value="any">Any provider</SelectItem><SelectItem value="wise">Wise</SelectItem><SelectItem value="maribank">MariBank</SelectItem><SelectItem value="ibkr">IBKR</SelectItem>
     </SelectContent></Select></FormField>
     <FormField id="rule-kind" label="Entry type"><Select name="kind" value={kind} onValueChange={setKind}><SelectTrigger id="rule-kind"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="expense">Expense</SelectItem><SelectItem value="income">Income</SelectItem></SelectContent></Select></FormField>
     <FormField id="rule-category" label="Category"><Select key={kind} name="categoryId" required><SelectTrigger id="rule-category"><SelectValue placeholder="Choose a category" /></SelectTrigger><SelectContent>

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SITE } from "@/lib/constants";
 import type { Category, ImportedEntry } from "@/lib/db/schema";
 import type { CashFlowKind } from "../constants";
+import { isBank } from "../connections/types";
 import { canPost } from "./review";
 
 export const AI_DECISIONS = ["post", "transfer", "investment", "ignore"] as const;
@@ -34,9 +35,9 @@ const TRANSFER_KINDS: readonly string[] = ["payment", "transfer", "other"];
 const CASH_ENTRY_KINDS: readonly string[] = ["dividend", "interest", "fee", "tax"];
 const direction = (amount: number): CashFlowKind => amount > 0 ? "income" : "expense";
 
-/** Wise money the budget cannot convert: own-account movements stay transfers, anything else is set aside. */
+/** Bank money the budget cannot convert: own-account movements stay transfers, anything else is set aside. */
 function unconvertibleWise(entry: Entry): AiDecisionKind | null {
-  if (entry.provider !== "wise" || canPost(entry)) return null;
+  if (!isBank(entry.provider) || canPost(entry)) return null;
   return TRANSFER_KINDS.includes(entry.kind) && entry.kind !== "payment" ? "transfer" : "ignore";
 }
 
@@ -49,7 +50,7 @@ export function allowedDecisions(entry: Entry): AiDecisionKind[] {
   if (TRANSFER_KINDS.includes(entry.kind)) allowed.push("transfer");
   // Budget-currency dividends, interest, fees and tax are cash entries. The ledger option is for
   // crypto and for currencies the budget cannot convert; offering both is what made Jev split.
-  if (entry.provider !== "wise" && !(canPost(entry) && CASH_ENTRY_KINDS.includes(entry.kind))) allowed.push("investment");
+  if (!isBank(entry.provider) && !(canPost(entry) && CASH_ENTRY_KINDS.includes(entry.kind))) allowed.push("investment");
   allowed.push("ignore");
   return allowed;
 }
@@ -65,7 +66,7 @@ const LEDGER_REASONS: Partial<Record<string, string>> = {
  */
 export function ledgerDecision(entry: Entry): AiDecision | null {
   const reason = LEDGER_REASONS[entry.kind];
-  return reason && entry.provider !== "wise" && !canPost(entry) ? { id: entry.id, decision: "investment", reason } : null;
+  return reason && !isBank(entry.provider) && !canPost(entry) ? { id: entry.id, decision: "investment", reason } : null;
 }
 
 /** Wise activity in a currency the budget cannot convert has one possible answer, so the model is not asked. */
@@ -141,7 +142,7 @@ export function routineDecision(entry: Entry, categories: CategoryOption[], acco
   return { id: entry.id, decision: "post", categoryId: category.id, reason: `${label} posted to ${category.name}` };
 }
 
-const INSTRUCTIONS = `You categorize one person's financial activity imported from Wise (multi-currency money account), Interactive Brokers (IBKR, stock broker) and Binance (crypto exchange).
+const INSTRUCTIONS = `You categorize one person's financial activity imported from Wise (multi-currency money account), MariBank (Philippine savings bank), Interactive Brokers (IBKR, stock broker) and Binance (crypto exchange).
 accountHolder is that person. Money sent to or received from them, including a longer legal name that contains their first and last name, is a transfer between their own accounts.
 For each entry return exactly one decision, using only a decision listed in that entry's "allowed":
 - "post": a real income or expense for the personal budget. Pick categoryId from the categories whose kind matches the entry's direction (positive amount = income, negative = expense). Use that category's "about" text. Pay from an employer is Salary. Pay from a client is Freelance. Business is revenue of a business the account holder owns.

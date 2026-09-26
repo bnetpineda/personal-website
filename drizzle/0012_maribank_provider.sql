@@ -1,0 +1,2 @@
+ALTER TABLE "imported_entries" DROP CONSTRAINT "imported_entries_provider";--> statement-breakpoint
+ALTER TABLE "imported_entries" ADD CONSTRAINT "imported_entries_provider" CHECK ("imported_entries"."provider" in ('wise', 'binance', 'ibkr', 'maribank'));

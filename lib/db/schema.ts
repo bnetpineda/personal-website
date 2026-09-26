@@ -287,7 +287,7 @@ export const importedEntries = pgTable("imported_entries", {
   index("imported_entries_status_date_idx").on(t.status, t.occurredOn),
   index("imported_entries_transfer_idx").on(t.transferId),
   index("imported_entries_binance_trades_idx").on(t.accountKey, t.updatedAt).where(sql`${t.provider} = 'binance' and ${t.trade} is not null`),
-  check("imported_entries_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr')`),
+  check("imported_entries_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr', 'maribank')`),
   check("imported_entries_kind", sql`${t.kind} in ('payment','transfer','reward','dividend','interest','fee','tax','trade','other')`),
   check("imported_entries_status", sql`${t.status} in ('pending','posted','ignored','transfer','reviewed')`),
   check("imported_entries_categorized_by", sql`${t.categorizedBy} is null or ${t.categorizedBy} in ('rule','ai','manual')`),

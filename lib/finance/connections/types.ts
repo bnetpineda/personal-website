@@ -2,10 +2,14 @@ import { z } from "zod";
 import { ASSET_CLASSES } from "../constants";
 import { removeBinanceEarnReceipts } from "./binance-positions";
 
-/** Where imported activity comes from. Wise arrives only as statement CSVs. */
-export const PROVIDERS = ["wise", "binance", "ibkr"] as const;
+/** Where imported activity comes from. Wise and MariBank arrive only as uploaded statements. */
+export const PROVIDERS = ["wise", "binance", "ibkr", "maribank"] as const;
 export const providerSchema = z.enum(PROVIDERS);
 export type Provider = z.infer<typeof providerSchema>;
+
+/** Bank accounts: their activity is everyday income and spending, never investment bookkeeping. */
+export const BANK_PROVIDERS: readonly Provider[] = ["wise", "maribank"];
+export const isBank = (provider: Provider) => BANK_PROVIDERS.includes(provider);
 
 /** Accounts that sync through an API. Wise personal tokens cannot, so Wise is not one of them. */
 export const SYNC_PROVIDERS = ["binance", "ibkr"] as const;
@@ -18,6 +22,11 @@ export const PROVIDER_META = {
     description: "Transactions from the balance statement CSVs you download from Wise.",
     scope: "Statement CSV import",
     docs: "https://wise.com/help/articles/2736049/how-do-i-get-a-statement",
+  },
+  maribank: {
+    name: "MariBank",
+    description: "Transactions from the monthly statement PDFs in the MariBank app.",
+    scope: "Statement PDF import",
   },
   binance: {
     name: "Binance",

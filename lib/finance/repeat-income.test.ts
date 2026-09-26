@@ -9,6 +9,7 @@ describe("repeat payers", () => {
     expect(payerName("Received money from Centauri Media Ltd with reference INV-12")).toBe("Centauri Media Ltd");
     expect(payerName("Received money from Centauri Media Ltd")).toBe("Centauri Media Ltd");
     expect(payerName("Dividend  AAPL")).toBe("Dividend AAPL");
+    expect(payerName("Received from Acme Studio Ltd")).toBe("Acme Studio Ltd");
   });
 
   test("a monthly payer's rate is its latest pay; the average covers every month", () => {

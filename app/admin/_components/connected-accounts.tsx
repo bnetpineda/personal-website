@@ -8,14 +8,14 @@ import { SYNC_PROVIDERS, PROVIDER_META, isConnectionStale, type ConnectionView }
 import { dayLabel, timeAgo } from "@/lib/finance/dates";
 import { formatQty } from "@/lib/finance/format";
 import { ConnectAccountButton, ConnectionSettings, CredentialExpiryButton, SyncConnectionsButton } from "./connection-controls";
-import { ImportWiseButton } from "./import-controls";
+import { ImportMariBankButton, ImportWiseButton } from "./import-controls";
 import { Money } from "./ui";
 
 export function ConnectedAccounts({ connections, fx }: { connections: ConnectionView[]; fx: FxTable }) {
   const now = new Date();
   return (
     <section aria-label="Connected accounts" className="mb-6 flex flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {SYNC_PROVIDERS.map((provider) => {
           const meta = PROVIDER_META[provider];
           const connection = connections.find((c) => c.provider === provider);
@@ -73,6 +73,17 @@ export function ConnectedAccounts({ connections, fx }: { connections: Connection
             <ImportWiseButton />
             <p className="text-xs text-muted-foreground">Select or drag all your Wise statement CSVs at once, one per currency. They import and categorize in one step.</p>
             <a href={PROVIDER_META.wise.docs} target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-4">How to download a Wise statement</a>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{PROVIDER_META.maribank.name}</CardTitle>
+            <CardDescription>{PROVIDER_META.maribank.scope}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">{PROVIDER_META.maribank.description} Upload the original PDFs: each must add up to its own account summary before anything is saved.</p>
+            <ImportMariBankButton />
+            <p className="text-xs text-muted-foreground">Select or drag several months at once. Re-importing a month skips what is already there.</p>
           </CardContent>
         </Card>
       </div>
