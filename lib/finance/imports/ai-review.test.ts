@@ -195,7 +195,7 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("AI decisions post, move and h
   }
 });
 
-test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("a clear Jev choice is filed, a close one goes to Other, and a same-day twin is not posted twice", async () => {
+test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("a clear Jev choice is filed, a close one goes to Other, a logged twin is not posted twice, and another import is not a twin", async () => {
   mock.module("server-only", () => ({}));
   const { getDb } = await import("@/lib/db");
   const { categorizeWithAi } = await import("./ai-service");
@@ -209,8 +209,13 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("a clear Jev choice is filed, 
       { provider: "wise", accountKey: scope, externalId: "SURE", occurredOn: "2001-03-01", kind: "payment", amount: -12, currency: "PHP", description: `${scope} confident` },
       { provider: "wise", accountKey: scope, externalId: "CLOSE", occurredOn: "2001-03-02", kind: "payment", amount: -8, currency: "PHP", description: `${scope} unsure` },
       { provider: "wise", accountKey: scope, externalId: "TWIN", occurredOn: "2001-03-03", kind: "payment", amount: -5, currency: "PHP", description: `${scope} recurring` },
+      { provider: "maribank", accountKey: scope, externalId: "SEPARATE", occurredOn: "2001-03-04", kind: "payment", amount: -7, currency: "PHP", description: `${scope} second bank` },
     ]).returning();
     await db.insert(cashFlows).values({ kind: "expense", occurredOn: "2001-03-03", amount: 5, currency: "PHP", amountPhp: 5, categoryId, description: `${scope} logged` });
+    // Already filed from the first bank: the same date and amount from the second bank is separate money.
+    const [filed] = await db.insert(importedEntries).values({ provider: "wise", accountKey: scope, externalId: "FILED", occurredOn: "2001-03-04", kind: "payment",
+      amount: -7, currency: "PHP", description: `${scope} first bank`, status: "posted", categoryId, categorizedBy: "rule" }).returning();
+    await db.insert(cashFlows).values({ id: filed.id, kind: "expense", occurredOn: "2001-03-04", amount: 7, currency: "PHP", amountPhp: 7, categoryId, description: `${scope} first bank` });
     ids = rows.map((row) => row.id);
     const model = {
       specificationVersion: "v4" as const, provider: "test", modelId: "jev-test", supportedQuestionTypes: ["choice" as const],
@@ -225,7 +230,7 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("a clear Jev choice is filed, 
     };
     const result = await categorizeWithAi({ classifier: { kind: "evaluation", model: model as unknown as Experimental_EvaluationModel }, entryIds: ids });
     const [other] = await db.select().from(categoryTable).where(and(eq(categoryTable.kind, "expense"), eq(categoryTable.name, "Other"), eq(categoryTable.archived, false)));
-    expect(result).toMatchObject({ posted: 2, duplicates: 1, unsure: 0, held: 0 });
+    expect(result).toMatchObject({ posted: 3, duplicates: 1, unsure: 0, held: 0 });
     const saved = new Map((await db.select().from(importedEntries).where(inArray(importedEntries.id, ids))).map((row) => [row.externalId, row]));
     expect(saved.get("SURE")).toMatchObject({ status: "posted", categoryId, categorizedBy: "ai" });
     expect(saved.get("CLOSE")).toMatchObject({ status: "posted", categoryId: other.id, categorizedBy: "ai", aiSuggestion: null });
@@ -234,7 +239,10 @@ test.skipIf(process.env.FINANCE_DB_TESTS !== "1")("a clear Jev choice is filed, 
     expect(saved.get("TWIN")).toMatchObject({ status: "ignored", categoryId: null, categorizedBy: "ai" });
     expect(saved.get("TWIN")!.aiReason).toStartWith("Already in Transactions");
     expect(await db.select().from(cashFlows).where(eq(cashFlows.id, saved.get("TWIN")!.id))).toHaveLength(0);
+    expect(saved.get("SEPARATE")).toMatchObject({ status: "posted", categoryId });
   } finally {
+    const filed = await db.select({ id: importedEntries.id }).from(importedEntries).where(eq(importedEntries.accountKey, scope));
+    ids = [...new Set([...ids, ...filed.map((row) => row.id)])];
     if (ids.length) await db.delete(cashFlows).where(inArray(cashFlows.id, ids));
     await db.delete(cashFlows).where(eq(cashFlows.description, `${scope} logged`));
     if (ids.length) await db.delete(importedEntries).where(inArray(importedEntries.id, ids));

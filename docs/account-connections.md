@@ -187,9 +187,10 @@ deposits and withdrawals, and budget-currency dividends, interest, fees and tax 
 
 Each entry gets one decision, validated server-side against what posting and the ledger accept:
 
-- **post**: fiat Wise/IBKR income or expense goes to Transactions under a category whose kind
-  matches the amount's sign. If the same date, currency, amount and direction is already in
-  Transactions (a recurring or manual entry), the import is ignored as `Already in Transactions`.
+- **post**: fiat Wise/MariBank/IBKR income or expense goes to Transactions under a category whose kind
+  matches the amount's sign. If an entry you logged by hand or from a recurring schedule has the same
+  date, currency, amount and direction, the import is ignored as `Already in Transactions`. Other
+  imports never count as twins: two ₱500 payments on one day, or the same amount from two banks, both post.
 - **transfer**: principal moving between your own accounts (payment/transfer/other types only).
 - **investment**: IBKR/Binance activity kept in the earnings ledger (status `reviewed`).
 - **ignore**: noise such as holds or reversals.

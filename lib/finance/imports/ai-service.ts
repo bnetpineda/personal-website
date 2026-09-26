@@ -32,7 +32,7 @@ function configuredClassifier(apiKey: string): Classifier {
  * model call, so overlapping runs (sync + import + cron) never pay twice. An entry still pending an
  * hour after its claim (no exchange rate yet, or an answer that failed validation) is asked again;
  * `retry` asks again right away. Posting keeps the rule path's guards: pending rows only and
- * category kind matches the amount's sign; a same-day twin already in cash flows is ignored instead.
+ * category kind matches the amount's sign; a same-day twin the person logged (by hand or from a schedule) is ignored instead.
  */
 export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model, classifier: given, entryIds, ledgerShortcut = true }: {
   retry?: boolean; limit?: number; model?: LanguageModel; classifier?: Classifier; entryIds?: string[];
@@ -195,8 +195,9 @@ async function applyDecisions(decisions: AiDecision[]) {
           s.description, upper(s.provider), 'Categorized by AI: ' || s.reason
         from source s where s.rate > 0
           and round(abs(s.amount) * s.rate, 2) < 1000000000000
+          -- Only an entry the person logged (by hand or from a schedule) is a twin; other imports are separate money.
           and not exists (select 1 from cash_flows f where f.occurred_on = s.occurred_on and f.currency = s.currency
-            and f.amount = round(abs(s.amount), 2) and f.kind::text = case when s.amount > 0 then 'income' else 'expense' end)
+            and f.amount = round(abs(s.amount), 2) and f.kind::text = case when s.amount > 0 then 'income' else 'expense' end and not exists (select 1 from imported_entries i where i.id = f.id))
         on conflict do nothing returning id
       ), outcome as (
         -- Priced but not posted means the same amount is already logged that day (a recurring or manual entry).

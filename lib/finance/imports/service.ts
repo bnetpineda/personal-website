@@ -64,7 +64,7 @@ export async function postImportedEntry(id: string, categoryId: number, allowDup
         s.description, upper(s.provider), 'Imported transaction; PHP conversion uses the exchange rate at posting.'
       from source s join categories c on c.id = ${categoryId} and not c.archived and c.kind::text = case when s.amount > 0 then 'income' else 'expense' end
       where ${allowDuplicate} or not exists (select 1 from cash_flows f where f.occurred_on = s.occurred_on
-        and f.currency = s.currency and f.amount = round(abs(s.amount), 2) and f.kind = c.kind)
+        and f.currency = s.currency and f.amount = round(abs(s.amount), 2) and f.kind = c.kind and not exists (select 1 from imported_entries i where i.id = f.id))
       on conflict do nothing returning id
     ) update imported_entries set status = 'posted', category_id = ${categoryId}, categorized_by = 'manual', ai_suggestion = null, updated_at = now()
       where id in (select id from posted) returning id`);
@@ -113,10 +113,9 @@ export async function applyCategoryRules(entryIds?: string[]) {
         s.description, upper(s.provider), 'Automatically imported; PHP conversion uses the rate at posting.'
       from source s where s.auto_post and s.rate > 0
         and round(abs(s.amount) * s.rate, 2) < 1000000000000
+        -- Same-day, same-amount imports are separate payments (two ₱500 checkouts); only a logged entry is a twin.
         and not exists (select 1 from cash_flows f where f.occurred_on = s.occurred_on and f.currency = s.currency
-          and f.amount = round(abs(s.amount), 2) and f.kind::text = case when s.amount > 0 then 'income' else 'expense' end)
-        and not exists (select 1 from source other where other.id <> s.id and other.occurred_on = s.occurred_on
-          and other.currency = s.currency and round(abs(other.amount), 2) = round(abs(s.amount), 2) and sign(other.amount) = sign(s.amount))
+          and f.amount = round(abs(s.amount), 2) and f.kind::text = case when s.amount > 0 then 'income' else 'expense' end and not exists (select 1 from imported_entries i where i.id = f.id))
       on conflict do nothing returning id
     ), updated as (
       update imported_entries e set category_id = s.target_category, categorized_by = 'rule', ai_reason = null, ai_suggestion = null,
