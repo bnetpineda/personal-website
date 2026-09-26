@@ -1,7 +1,7 @@
 # Private account connections
 
 Open **Settings → Manage connections** (`/admin/connections`). Connections are protected by
-the existing admin login. **Holdings** (`/admin/holdings`) displays saved Wise, Binance and IBKR
+the existing admin login. **Holdings** (`/admin/holdings`) displays saved Binance and IBKR
 positions alongside manual holdings, with asset-class filters covering both. Use **Sync accounts**
 or an account's **Sync now** to update connected quantities and values; **Refresh prices** updates
 manual holding quotes and exchange rates. Provider positions are displayed directly from the saved
@@ -101,28 +101,11 @@ Reference: [IBKR Flex Web Service](https://www.interactivebrokers.com/docs/web-a
 
 ## Wise
 
-The dashboard accepts an existing Wise API token for a personal or business profile. API
-balance access depends on the token's permissions. Use **Import Wise CSV** on the Wise card in Connections
-for transaction history. Statement imports and **Holdings** also support tracking balances
-when API balance access is unavailable.
-
-Open **Connect** on the Wise card, enter the token, and click
-**Find my profile**. The dashboard calls `GET https://api.wise.com/2026Q3/profiles`, fills a
-single profile's numeric ID, or asks you to choose when several are returned. Deactivated profiles
-are omitted. Only IDs and profile types are returned to the browser; credentials are not saved
-until **Save & sync**. You can also enter a known profile ID manually. The connection reads
-STANDARD and SAVINGS balances using the documented `2026Q3` API, values each balance using
-`totalWorth` once, and leaves invested balances' cost basis unknown. Access remains subject
-to Wise's account and regional restrictions. No browser login automation is used.
-
-Transaction history cannot be synced for personal accounts. Wise documents statement access for
-personal tokens only for accounts based in the US, Canada, Australia, New Zealand, Singapore or
-Malaysia, and has since stopped accepting signed (SCA) requests from personal accounts entirely, so
-statements cannot be read through the API. Import the balance statement CSV instead.
-
-References: [token eligibility](https://docs.wise.com/guides/developer/auth-and-security/personal-api-token),
-[profile lookup](https://docs.wise.com/api-reference/profile/profilelist),
-[balance endpoint](https://docs.wise.com/api-reference/balance/balancelist).
+Wise does not sync. Personal Wise API tokens cannot read statements (Wise documents statement access
+for personal tokens only in a few countries, and no longer accepts signed SCA requests from personal
+accounts), so the API connection was removed and its saved token deleted (migration
+`0011_drop_wise_connection`). The Wise card on Connections imports balance statement CSVs instead;
+see below. Wise balances are not part of net worth.
 
 ## CSV imports and category rules
 
@@ -148,14 +131,8 @@ principal and fee while preserving the original signed total. All files import a
 with a previous import (same ID, different amount or date) rejects the whole batch and changes nothing.
 CSV data is never evaluated as spreadsheet formulas, and uploaded files are not retained.
 
-If a CSV contains **Running Balance**, its closing balance per currency (dated to the last transaction
-shown) updates the Wise cash holding, or creates one when none exists. The running-balance chain
-determines ascending/descending order, including same-day entries; ambiguous order, inconsistent totals
-or negative balances skip the balance without inventing a result. Files without that column still import
-activity. A balance is skipped, and the result message says so, when Wise API balances already count in
-net worth, when several Wise holdings match the currency, or when a different balance is saved for that
-date. Transactions and balances commit together, and older statements cannot roll back a newer dated
-balance. One personal balance per currency is supported; separate profiles/jars must not be combined.
+Closing balances in **Running Balance** are checked for a consistent order but not saved: statements
+import transactions only.
 
 Source identity is provider + account + external transaction ID. Wise adds currency and direction
 to distinguish conversion legs and reversals. Binance uses the account UID and provider history

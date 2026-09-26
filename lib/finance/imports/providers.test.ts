@@ -29,7 +29,6 @@ test("changing totals, repeated pages and truncated responses reject the whole h
   await expect(fetchHistory(credentials, ioFor(() => ({ total: 2, rows: [rewards(1234567890000)] })), now)).rejects.toThrow("repeated");
   await expect(fetchHistory(credentials, ioFor(() => ({ total: 2, rows: [] })), now)).rejects.toThrow("incomplete");
 });
-test("IBKR history requires the separately configured query; Wise points to CSV", async () => {
+test("IBKR history requires the separately configured query", async () => {
   await expect(fetchHistory({ provider: "ibkr", token: "test-token", queryId: "123" })).rejects.toThrow("history Flex Query");
-  await expect(fetchHistory({ provider: "wise", token: "test-token", profileId: "123" })).rejects.toThrow("CSV");
 });

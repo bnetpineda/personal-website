@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { computeNetWorth } from "../calc";
 import { openCredentials, sealCredentials } from "./crypto";
 import { flexFixture } from "./fixtures";
-import { assertReadOnlyBinance, flexResponse, parseBinanceBalances, parseEarnPage, parseIbkrStatement, parseWiseBalances } from "./parsers";
+import { assertReadOnlyBinance, flexResponse, parseBinanceBalances, parseEarnPage, parseIbkrStatement } from "./parsers";
 import { includedPositions, isConnectionStale, type ConnectedPosition, type Credentials } from "./types";
 
 describe("account credentials", () => {
@@ -13,7 +13,7 @@ describe("account credentials", () => {
     expect(sealed).not.toContain(credentials.apiSecret);
     expect(sealCredentials(credentials, secret)).not.toBe(sealed);
     expect(openCredentials(sealed, "binance", secret)).toEqual(credentials);
-    expect(() => openCredentials(sealed, "wise", secret)).toThrow();
+    expect(() => openCredentials(sealed, "ibkr", secret)).toThrow();
     expect(() => openCredentials(sealed, "binance", secret + "rotated")).toThrow();
     const parts = sealed.split(".");
     parts[3] = (parts[3][0] === "A" ? "B" : "A") + parts[3].slice(1);
@@ -23,18 +23,6 @@ describe("account credentials", () => {
 });
 
 describe("provider balance normalization", () => {
-  const wise = { id: 1, currency: "USD", type: "STANDARD", investmentState: "NOT_INVESTED",
-    amount: { value: 70, currency: "USD" }, reservedAmount: { value: 30, currency: "USD" }, totalWorth: { value: 100, currency: "USD" } };
-  test("Wise uses total worth once and leaves investment costs unknown", () => {
-    const cash = parseWiseBalances([wise], "123").positions[0];
-    expect(cash.marketValue).toBe(100);
-    expect(cash.costBasis).toBe(100);
-    const invested = parseWiseBalances([{ ...wise, investmentState: "INVESTED" }], "123").positions[0];
-    expect(invested.assetClass).toBe("fund");
-    expect(invested.costBasis).toBeNull();
-    expect(() => parseWiseBalances([{ ...wise, totalWorth: undefined }], "123")).toThrow();
-    expect(() => parseWiseBalances([{ ...wise, totalWorth: { value: 100, currency: "EUR" } }], "123")).toThrow();
-  });
   test("Spot includes locked assets, drops zero balances, and rejects missing numbers", () => {
     const result = parseBinanceBalances({ balances: [{ asset: "BTC", free: "0.10", locked: "0.05" }, { asset: "ETH", free: "0", locked: "0" }] });
     expect(result).toHaveLength(1);

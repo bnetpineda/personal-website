@@ -141,7 +141,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
 
       {visible.filter((p) => !filter || p.assetClass === filter).length === 0 ? (
         <EmptyState title={positions.length > 0 ? "No holdings match these filters" : "No holdings yet"}>
-          {positions.length > 0 ? "Show small balances or choose All." : "Connect Binance, IBKR or Wise and your positions appear here after the first sync."}
+          {positions.length > 0 ? "Show small balances or choose All." : "Connect Binance or IBKR and your positions appear here after the first sync."}
         </EmptyState>
       ) : (
         <HoldingsTable connections={connections} fx={fx} filter={filter} showSmall={showSmall} binanceCosts={binanceCosts} />

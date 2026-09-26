@@ -5,8 +5,8 @@ import { z } from "zod";
 import { fetchCoinGeckoPrices } from "../prices";
 import { readJson, readText } from "./http";
 import { BINANCE_MISSING_PRICE_WARNING, removeBinanceEarnReceipts } from "./binance-positions";
-import { assertReadOnlyBinance, flexResponse, parseBinanceBalances, parseEarnPage, parseIbkrStatement, parseWiseBalances, parseWiseProfiles } from "./parsers";
-import { ConnectionError, snapshotSchema, type ConnectedPosition, type ConnectionSnapshot, type Credentials, type WiseProfileOption } from "./types";
+import { assertReadOnlyBinance, flexResponse, parseBinanceBalances, parseEarnPage, parseIbkrStatement } from "./parsers";
+import { ConnectionError, snapshotSchema, type ConnectedPosition, type ConnectionSnapshot, type Credentials } from "./types";
 
 const BINANCE = "https://api.binance.com";
 const FLEX = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/";
@@ -19,18 +19,6 @@ export interface ProviderIO {
 }
 export const defaultIO: ProviderIO = { json: readJson, text: readText, quotes: fetchCoinGeckoPrices,
   pause: async (ms, signal) => { await delay(ms, undefined, { signal }); } };
-
-export async function fetchWiseProfiles(token: string, io: Pick<ProviderIO, "json"> = defaultIO): Promise<WiseProfileOption[]> {
-  try {
-    const body = await io.json(new URL("https://api.wise.com/2026Q3/profiles"),
-      { Authorization: `Bearer ${token}` }, AbortSignal.timeout(10000));
-    return parseWiseProfiles(body);
-  } catch (error) {
-    if (error instanceof ConnectionError) throw error;
-    // Validation and transport errors may contain personal data or the credential.
-    throw new ConnectionError("Wise profiles could not be read. Check your API token and try again.");
-  }
-}
 
 export async function binanceReader(credentials: Extract<Credentials, { provider: "binance" }>, signal: AbortSignal, io: ProviderIO) {
   const time = z.object({ serverTime: z.number().int().positive() }).parse(await io.json(new URL(`${BINANCE}/api/v3/time`), {}, signal));
@@ -118,9 +106,5 @@ export async function fetchAccountSnapshot(credentials: Credentials, io: Provide
   switch (credentials.provider) {
     case "binance": return binance(credentials, signal, io);
     case "ibkr": return parseIbkrStatement(await fetchFlexReport(credentials, signal, io));
-    case "wise": {
-      const url = new URL(`https://api.wise.com/2026Q3/profiles/${credentials.profileId}/balances?types=STANDARD,SAVINGS`);
-      return parseWiseBalances(await io.json(url, { Authorization: `Bearer ${credentials.token}` }, signal), credentials.profileId);
-    }
   }
 }

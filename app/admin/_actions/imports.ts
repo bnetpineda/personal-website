@@ -31,7 +31,7 @@ async function csvEntries(data: FormData) {
 }
 /**
  * Every Wise CSV at once, in one step: the fee format is detected per file, then rules and AI file
- * the entries before answering. Balances come from the Wise connection, not the statements.
+ * the entries before answering. Only transactions import; Wise balances are not tracked.
  * Re-importing is safe; entries already imported are skipped.
  */
 export async function importWiseStatements(data: FormData): Promise<FormState> {

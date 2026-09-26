@@ -2,7 +2,7 @@ import "server-only";
 import { get } from "node:https";
 import { ConnectionError } from "./types";
 
-const HOSTS = new Set(["api.wise.com", "api.binance.com", "ndcdyn.interactivebrokers.com"]);
+const HOSTS = new Set(["api.binance.com", "ndcdyn.interactivebrokers.com"]);
 
 /** GET-only, fixed hosts, no redirects, bounded time/body. URLs with tokens are never logged. */
 export function readText(url: URL, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<string> {

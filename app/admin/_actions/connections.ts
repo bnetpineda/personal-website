@@ -9,9 +9,8 @@ import { getDb } from "@/lib/db";
 import { accountConnections } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { sealCredentials } from "@/lib/finance/connections/crypto";
-import { fetchWiseProfiles } from "@/lib/finance/connections/providers";
 import { syncAccount, syncAllAccounts } from "@/lib/finance/connections/service";
-import { ConnectionError, credentialsSchema, providerSchema, wiseTokenSchema, type Provider, type WiseProfileLookup } from "@/lib/finance/connections/types";
+import { credentialsSchema, syncProviderSchema, type SyncProvider } from "@/lib/finance/connections/types";
 import type { FormState } from "@/lib/finance/schemas";
 import { ensureFx, snapshotQuietly } from "@/lib/finance/service";
 import { applyCategoryRules } from "@/lib/finance/imports/service";
@@ -29,21 +28,6 @@ async function refreshTotals({ categorize = false } = {}) {
   }
   revalidatePath("/admin", "layout");
   return summary;
-}
-
-export async function findWiseProfiles(data: FormData): Promise<WiseProfileLookup> {
-  await requireAdmin();
-  const token = wiseTokenSchema.safeParse(data.get("token"));
-  if (!token.success) return { ok: false, message: "Enter your Wise API token first." };
-  try {
-    const profiles = await fetchWiseProfiles(token.data);
-    if (!profiles.length) return { ok: false, message: "Wise returned no active profiles for this token." };
-    return { ok: true, profiles, message: profiles.length === 1
-      ? "Wise profile ID filled in. You can now save and sync."
-      : "Choose the Wise profile you want to connect." };
-  } catch (error) {
-    return { ok: false, message: error instanceof ConnectionError ? error.message : "Profile lookup failed. Try again." };
-  }
 }
 
 export async function saveConnection(_previous: FormState, data: FormData): Promise<FormState> {
@@ -76,7 +60,7 @@ export async function saveConnection(_previous: FormState, data: FormData): Prom
 
 export async function saveConnectionExpiry(_previous: FormState, data: FormData): Promise<FormState> {
   await requireAdmin();
-  const provider = providerSchema.safeParse(data.get("provider"));
+  const provider = syncProviderSchema.safeParse(data.get("provider"));
   const date = z.union([z.iso.date(), z.literal("")]).safeParse(data.get("credentialsExpireOn"));
   if (!provider.success || !date.success) return { ok: false, message: "Check the expiry date." };
   await getDb().update(accountConnections).set({ credentialsExpireOn: date.data || null }).where(eq(accountConnections.provider, provider.data));
@@ -84,9 +68,9 @@ export async function saveConnectionExpiry(_previous: FormState, data: FormData)
   return { ok: true, message: "Credential reminder updated." };
 }
 
-export async function syncConnections(provider?: Provider): Promise<FormState> {
+export async function syncConnections(provider?: SyncProvider): Promise<FormState> {
   await requireAdmin();
-  if (provider !== undefined && !providerSchema.safeParse(provider).success) return { ok: false, message: "Unknown provider." };
+  if (provider !== undefined && !syncProviderSchema.safeParse(provider).success) return { ok: false, message: "Unknown provider." };
   try {
     const results = provider ? [await syncAccount(provider)] : await syncAllAccounts();
     const summary = await refreshTotals({ categorize: true });
@@ -98,9 +82,9 @@ export async function syncConnections(provider?: Provider): Promise<FormState> {
   }
 }
 
-export async function updateConnection(provider: Provider, setting: "enabled" | "includeInNetWorth", value: boolean): Promise<FormState> {
+export async function updateConnection(provider: SyncProvider, setting: "enabled" | "includeInNetWorth", value: boolean): Promise<FormState> {
   await requireAdmin();
-  if (!providerSchema.safeParse(provider).success || !["enabled", "includeInNetWorth"].includes(setting) || typeof value !== "boolean") {
+  if (!syncProviderSchema.safeParse(provider).success || !["enabled", "includeInNetWorth"].includes(setting) || typeof value !== "boolean") {
     return { ok: false, message: "Invalid connection setting." };
   }
   const db = getDb();
@@ -115,9 +99,9 @@ export async function updateConnection(provider: Provider, setting: "enabled" | 
     : value ? "Synced balances included in net worth." : "Synced balances excluded from net worth." };
 }
 
-export async function disconnectAccount(provider: Provider): Promise<FormState> {
+export async function disconnectAccount(provider: SyncProvider): Promise<FormState> {
   await requireAdmin();
-  if (!providerSchema.safeParse(provider).success) return { ok: false, message: "Unknown provider." };
+  if (!syncProviderSchema.safeParse(provider).success) return { ok: false, message: "Unknown provider." };
   await getDb().delete(accountConnections).where(eq(accountConnections.provider, provider));
   await refreshTotals();
   return { ok: true, message: "Disconnected. Revoke the token in the provider's app if you no longer need it." };

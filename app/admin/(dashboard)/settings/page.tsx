@@ -40,7 +40,7 @@ export default async function SettingsPage() {
       title: "Connected accounts",
       description: connections.length
         ? `${connections.map((c) => PROVIDER_META[c.provider].name).join(", ")} · sync daily, import Wise CSVs`
-        : "Connect Wise, Binance or IBKR to track balances automatically",
+        : "Connect Binance or IBKR to track balances automatically, and import Wise CSVs",
     },
     {
       href: "/admin/recurring",

@@ -14,7 +14,7 @@ import { EmptyState, Money, MonthPicker, PageHeader } from "../../_components/ui
 export default async function EarningsPage({ searchParams }: { searchParams: Promise<{ month?: string; period?: string }> }) {
   const params = await searchParams, current = currentMonth(), month = isMonth(params.month) ? params.month : current, allTime = params.period === "all";
   const [data, connections] = await Promise.all([getEarnings(allTime ? null : month), getConnections()]);
-  const tracked = connections.filter((c) => c.includeInNetWorth && c.provider !== "wise");
+  const tracked = connections.filter((c) => c.includeInNetWorth);
   const positions = tracked.flatMap((c) => (c.provider === "binance" ? removeBinanceEarnReceipts(c.snapshot?.positions ?? []) : (c.snapshot?.positions ?? []))
     .filter((p) => p.assetClass !== "cash").map((p) => ({ ...p, provider: c.provider })));
   const known = new Map<string, number>();
@@ -41,7 +41,7 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
       {binanceMissing > 0 && <p className="text-sm text-warning">Binance does not supply cost basis through this connection.</p>}
     </CardContent></Card>
     <Card><CardHeader><CardTitle>Latest automatic history window</CardTitle><CardDescription>Older IBKR reports and Binance backfill progress are recorded in Investment history. These dates describe the most recent regular sync only.</CardDescription></CardHeader><CardContent className="flex flex-col gap-4">
-      {connections.filter((c) => c.provider !== "wise").map((c) => <div key={c.provider}><p className="font-mono text-sm uppercase">{c.provider}</p><p className="text-sm">{c.historyCoverage ? `${c.historyCoverage.from} through ${c.historyCoverage.to} · ${c.historyCoverage.description}` : "No successful history import yet."}</p>{c.historyError && <p className="text-sm text-destructive">{c.historyError}</p>}</div>)}
+      {connections.map((c) => <div key={c.provider}><p className="font-mono text-sm uppercase">{c.provider}</p><p className="text-sm">{c.historyCoverage ? `${c.historyCoverage.from} through ${c.historyCoverage.to} · ${c.historyCoverage.description}` : "No successful history import yet."}</p>{c.historyError && <p className="text-sm text-destructive">{c.historyError}</p>}</div>)}
       <Button asChild variant="outline" className="self-start"><Link href="/admin/connections">Manage connections</Link></Button>
       <Button asChild variant="outline" className="self-start"><Link href="/admin/history">Import older history</Link></Button>
     </CardContent></Card>

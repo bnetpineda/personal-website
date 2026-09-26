@@ -1,53 +1,13 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { z } from "zod";
 import type { AssetClass } from "../constants";
-import { ConnectionError, snapshotSchema, type ConnectedPosition, type ConnectionSnapshot, type WiseProfileOption } from "./types";
+import { ConnectionError, snapshotSchema, type ConnectedPosition, type ConnectionSnapshot } from "./types";
 
 // Empty/missing numeric fields must never silently become zero.
 const number = z.union([z.number(), z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/)])
   .transform(Number).pipe(z.number().finite());
 const id = z.union([z.string().min(1), z.number().int().safe()]).transform(String);
 const currency = z.string().regex(/^[A-Z]{3}$/);
-const money = z.object({ value: number, currency });
-
-export function parseWiseProfiles(body: unknown): WiseProfileOption[] {
-  const rows = z.array(z.object({
-    id: z.union([z.string().regex(/^[1-9]\d{0,29}$/), z.number().int().safe().positive()]).transform(String),
-    type: z.enum(["PERSONAL", "BUSINESS"]),
-    currentState: z.enum(["HIDDEN", "VISIBLE", "DEACTIVATED"]).optional(),
-  })).max(100).parse(body);
-  if (new Set(rows.map((row) => row.id)).size !== rows.length) {
-    throw new ConnectionError("Wise returned duplicate profiles. Try again later.");
-  }
-  return rows.filter((row) => row.currentState !== "DEACTIVATED").map(({ id, type }) => ({ id, type }));
-}
-
-export function parseWiseBalances(body: unknown, profileId: string, now = new Date()): ConnectionSnapshot {
-  const rows = z.array(z.object({
-    id,
-    currency,
-    type: z.enum(["STANDARD", "SAVINGS"]),
-    name: z.string().nullish(),
-    investmentState: z.string(),
-    totalWorth: money,
-  })).parse(body);
-  const positions = rows.map((r): ConnectedPosition => {
-    if (r.totalWorth.currency !== r.currency) throw new ConnectionError("Wise returned mismatched balance currencies. Previous balances were kept.");
-    const cash = r.investmentState === "NOT_INVESTED";
-    return {
-      id: `${profileId}:${r.id}`,
-      name: r.name || `${r.currency} ${r.type === "SAVINGS" ? "jar" : "balance"}`,
-      symbol: r.currency,
-      assetClass: cash ? "cash" : "fund",
-      currency: r.currency,
-      quantity: cash ? r.totalWorth.value : 1,
-      // totalWorth already includes reserved/invested money. Don't add amount again.
-      marketValue: r.totalWorth.value,
-      costBasis: cash ? r.totalWorth.value : null,
-    };
-  });
-  return snapshotSchema.parse({ asOf: now.toISOString(), positions, warnings: [] });
-}
 
 export function parseBinanceBalances(body: unknown): { asset: string; quantity: number }[] {
   const account = z.object({ balances: z.array(z.object({

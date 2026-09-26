@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { computeNetWorth, fxToPhp, type FxTable } from "@/lib/finance/calc";
-import { PROVIDERS, PROVIDER_META, isConnectionStale, type ConnectionView } from "@/lib/finance/connections/types";
+import { SYNC_PROVIDERS, PROVIDER_META, isConnectionStale, type ConnectionView } from "@/lib/finance/connections/types";
 import { dayLabel, timeAgo } from "@/lib/finance/dates";
 import { formatQty } from "@/lib/finance/format";
 import { ConnectAccountButton, ConnectionSettings, CredentialExpiryButton, SyncConnectionsButton } from "./connection-controls";
@@ -16,7 +16,7 @@ export function ConnectedAccounts({ connections, fx }: { connections: Connection
   return (
     <section aria-label="Connected accounts" className="mb-6 flex flex-col gap-4">
       <div className="grid gap-4 md:grid-cols-3">
-        {PROVIDERS.map((provider) => {
+        {SYNC_PROVIDERS.map((provider) => {
           const meta = PROVIDER_META[provider];
           const connection = connections.find((c) => c.provider === provider);
           const snapshot = connection?.snapshot;
@@ -59,14 +59,22 @@ export function ConnectedAccounts({ connections, fx }: { connections: Connection
                   <p className="text-xs text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ?? "No reminder set"}</p>
                   <CredentialExpiryButton provider={provider} expiresOn={connection.credentialsExpireOn} />
                 </> : <ConnectAccountButton provider={provider} />}
-                {provider === "wise" && <>
-                  <ImportWiseButton />
-                  <p className="text-xs text-muted-foreground">Select or drag all your Wise statement CSVs at once, one per currency. They import and categorize in one step.</p>
-                </>}
               </CardContent>
             </Card>
           );
         })}
+        <Card>
+          <CardHeader>
+            <CardTitle>{PROVIDER_META.wise.name}</CardTitle>
+            <CardDescription>{PROVIDER_META.wise.scope}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">{PROVIDER_META.wise.description} Wise does not share personal-account activity through its API, so there is nothing to sync.</p>
+            <ImportWiseButton />
+            <p className="text-xs text-muted-foreground">Select or drag all your Wise statement CSVs at once, one per currency. They import and categorize in one step.</p>
+            <a href={PROVIDER_META.wise.docs} target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-4">How to download a Wise statement</a>
+          </CardContent>
+        </Card>
       </div>
       {connections.filter((c) => c.snapshot).map((connection) => (
         <Card key={connection.provider}>

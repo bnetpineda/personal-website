@@ -152,7 +152,7 @@ export default async function HomePage() {
           }
         >
           {connections.length === 0 ? (
-            <EmptyState title="No accounts connected">Connect Wise, Binance or IBKR once and balances update by themselves every day.</EmptyState>
+            <EmptyState title="No accounts connected">Connect Binance or IBKR once and balances update by themselves every day. Wise comes in as statement CSVs.</EmptyState>
           ) : (
             <ItemGroup>
               {connections.map((c) => {

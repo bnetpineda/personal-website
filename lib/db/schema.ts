@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { ConnectionSnapshot, Provider } from "../finance/connections/types";
+import type { ConnectionSnapshot, Provider, SyncProvider } from "../finance/connections/types";
 import type { AiSuggestion, CategorizedBy, EntryKind, EntryStatus, HistoryCoverage, SpotTrade } from "../finance/imports/types";
 import {
   type AnyPgColumn,
@@ -237,9 +237,9 @@ export const loginAttempts = pgTable(
   ]
 );
 
-/** One private account connection per provider. Secrets are encrypted before persistence. */
+/** One private account connection per syncing provider. Secrets are encrypted before persistence. */
 export const accountConnections = pgTable("account_connections", {
-  provider: text("provider").$type<Provider>().primaryKey(),
+  provider: text("provider").$type<SyncProvider>().primaryKey(),
   encryptedCredentials: text("encrypted_credentials").notNull(),
   enabled: boolean("enabled").notNull().default(true),
   // Opt in after reviewing existing manual holdings to avoid double counting.
@@ -255,7 +255,7 @@ export const accountConnections = pgTable("account_connections", {
   syncLease: uuid("sync_lease"),
   leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
   ...timestamps,
-}, (t) => [check("account_connections_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr')`)]);
+}, (t) => [check("account_connections_provider", sql`${t.provider} in ('binance', 'ibkr')`)]);
 
 /** Immutable source amounts. Review decisions survive repeated imports and deleted cash-flow entries. */
 export const importedEntries = pgTable("imported_entries", {

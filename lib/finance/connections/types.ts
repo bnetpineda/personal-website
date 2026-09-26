@@ -2,16 +2,22 @@ import { z } from "zod";
 import { ASSET_CLASSES } from "../constants";
 import { removeBinanceEarnReceipts } from "./binance-positions";
 
+/** Where imported activity comes from. Wise arrives only as statement CSVs. */
 export const PROVIDERS = ["wise", "binance", "ibkr"] as const;
 export const providerSchema = z.enum(PROVIDERS);
 export type Provider = z.infer<typeof providerSchema>;
 
+/** Accounts that sync through an API. Wise personal tokens cannot, so Wise is not one of them. */
+export const SYNC_PROVIDERS = ["binance", "ibkr"] as const;
+export const syncProviderSchema = z.enum(SYNC_PROVIDERS);
+export type SyncProvider = z.infer<typeof syncProviderSchema>;
+
 export const PROVIDER_META = {
   wise: {
     name: "Wise",
-    description: "Currency balances and jars from your connected Wise profile.",
-    scope: "Balances and jars",
-    docs: "https://docs.wise.com/guides/developer/auth-and-security/personal-api-token",
+    description: "Transactions from the balance statement CSVs you download from Wise.",
+    scope: "Statement CSV import",
+    docs: "https://wise.com/help/articles/2736049/how-do-i-get-a-statement",
   },
   binance: {
     name: "Binance",
@@ -29,19 +35,7 @@ export const PROVIDER_META = {
 
 const secret = z.string().trim().min(8, "Enter a valid credential").max(4096);
 const numericId = z.string().trim().regex(/^\d{1,30}$/, "Use the numeric ID from your account");
-export const wiseTokenSchema = secret;
-
-/** The lookup exposes only what is needed to choose a profile, never its personal details. */
-export interface WiseProfileOption {
-  id: string;
-  type: "PERSONAL" | "BUSINESS";
-}
-export type WiseProfileLookup =
-  | { ok: true; message: string; profiles: WiseProfileOption[] }
-  | { ok: false; message: string };
-
 export const credentialsSchema = z.discriminatedUnion("provider", [
-  z.object({ provider: z.literal("wise"), token: wiseTokenSchema, profileId: numericId }),
   z.object({ provider: z.literal("binance"), apiKey: secret, apiSecret: secret }),
   z.object({ provider: z.literal("ibkr"), token: secret, queryId: numericId,
     historyQueryId: z.preprocess((v) => v === "" ? undefined : v, numericId.optional()) }),
@@ -79,7 +73,7 @@ export type ConnectionSnapshot = z.infer<typeof snapshotSchema>;
 
 /** Safe page/export representation. Credentials and sync leases never leave the server. */
 export interface ConnectionView {
-  provider: Provider;
+  provider: SyncProvider;
   enabled: boolean;
   includeInNetWorth: boolean;
   snapshot: ConnectionSnapshot | null;
@@ -94,7 +88,7 @@ export interface ConnectionView {
 }
 
 export interface SyncResult {
-  provider: Provider;
+  provider: SyncProvider;
   ok: boolean;
   message: string;
 }
@@ -109,7 +103,7 @@ export function includedPositions(connections: readonly (Pick<ConnectionView, "i
   });
 }
 
-export function isConnectionStale(connection: { provider: Provider; snapshot: { asOf: string } | null; lastSyncedAt: Date | null }, now = new Date()): boolean {
+export function isConnectionStale(connection: { provider: SyncProvider; snapshot: { asOf: string } | null; lastSyncedAt: Date | null }, now = new Date()): boolean {
   if (!connection.snapshot || !connection.lastSyncedAt) return true;
   const day = 86_400_000;
   // Daily jobs have a scheduling window; IBKR statements also span weekends/holidays.

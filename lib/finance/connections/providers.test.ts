@@ -2,52 +2,14 @@ import { createHmac } from "node:crypto";
 import { describe, expect, mock, test } from "bun:test";
 // Next enforces this boundary at build time; Bun exercises the server provider code here.
 mock.module("server-only", () => ({}));
-const { fetchAccountSnapshot, fetchWiseProfiles } = await import("./providers");
+const { fetchAccountSnapshot } = await import("./providers");
 import type { ProviderIO } from "./providers";
 import { flexFixture } from "./fixtures";
-import { ConnectionError } from "./types";
 
 const unused = async (): Promise<never> => { throw new Error("Unexpected request"); };
 const baseIO: ProviderIO = { json: unused, text: unused, quotes: unused, pause: async () => {} };
 
 describe("account API workflows", () => {
-  test("Wise profile lookup authenticates at its fixed endpoint and returns only IDs and types", async () => {
-    const profiles = await fetchWiseProfiles("test-wise-token", { json: async (url, headers, signal) => {
-      expect(url.href).toBe("https://api.wise.com/2026Q3/profiles");
-      expect(headers).toEqual({ Authorization: "Bearer test-wise-token" });
-      expect(signal).toBeInstanceOf(AbortSignal);
-      return [
-        { id: 123, type: "PERSONAL", currentState: "VISIBLE", userId: 999, publicId: "public-uuid",
-          fullName: "Private Name", email: "private@example.com", address: { city: "Private City" } },
-        { id: "456", type: "BUSINESS", businessName: "Private Company" },
-        { id: 789, type: "PERSONAL", currentState: "DEACTIVATED" },
-      ];
-    } });
-    expect(profiles).toEqual([{ id: "123", type: "PERSONAL" }, { id: "456", type: "BUSINESS" }]);
-  });
-
-  test("Wise profile lookup keeps empty results empty and rejects unsafe or ambiguous IDs", async () => {
-    expect(await fetchWiseProfiles("test-wise-token", { json: async () => [] })).toEqual([]);
-    for (const response of [
-      [{ id: Number.MAX_SAFE_INTEGER + 1, type: "PERSONAL" }],
-      [{ publicId: "not-the-profile-id", type: "PERSONAL" }],
-      [{ id: "../123", type: "PERSONAL" }],
-      [{ id: 123, type: "PERSONAL" }, { id: "123", type: "BUSINESS" }],
-      { profiles: [{ id: 123, type: "PERSONAL" }] },
-    ]) {
-      await expect(fetchWiseProfiles("test-wise-token", { json: async () => response })).rejects.toBeInstanceOf(ConnectionError);
-    }
-  });
-
-  test("Wise profile lookup hides raw failures and preserves safe provider errors", async () => {
-    await expect(fetchWiseProfiles("test-wise-token", { json: async () => {
-      throw new Error("private token or profile details");
-    } })).rejects.toThrow("Wise profiles could not be read. Check your API token and try again.");
-    await expect(fetchWiseProfiles("test-wise-token", { json: async () => {
-      throw new ConnectionError("Account access was denied.");
-    } })).rejects.toThrow("Account access was denied.");
-  });
-
   test("Binance signs read requests, follows Earn pages, and values Spot and Earn separately", async () => {
     const calls: string[] = [];
     const snapshot = await fetchAccountSnapshot({ provider: "binance", apiKey: "test-read-key", apiSecret: "test-hmac-secret" }, {

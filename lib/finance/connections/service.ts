@@ -7,7 +7,7 @@ import { env } from "@/lib/env";
 import { openCredentials } from "./crypto";
 import { fetchAccountSnapshot } from "./providers";
 import { normalizeBinanceSnapshot } from "./binance-positions";
-import { ConnectionError, type ConnectionView, type Provider, type SyncResult } from "./types";
+import { ConnectionError, type ConnectionView, type SyncProvider, type SyncResult } from "./types";
 import { fetchHistory } from "../imports/providers";
 import { ingestEntries } from "../imports/service";
 import { ImportError, type HistoryCoverage } from "../imports/types";
@@ -29,7 +29,7 @@ export async function loadConnectionViews(): Promise<ConnectionView[]> {
   }));
 }
 
-export async function syncAccount(provider: Provider): Promise<SyncResult> {
+export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
   const db = getDb();
   const lease = randomUUID();
   const now = new Date();
@@ -57,14 +57,12 @@ export async function syncAccount(provider: Provider): Promise<SyncResult> {
     }
     let historyError: string | null = null;
     let historyCoverage: HistoryCoverage | undefined;
-    if (provider !== "wise") {
-      try {
-        const history = await fetchHistory(credentials);
-        await ingestEntries(history.entries, { provider, id: lease });
-        historyCoverage = history.coverage;
-      } catch (error) {
-        historyError = error instanceof ImportError || error instanceof ConnectionError ? error.message : "Transaction history could not sync. Check report fields and retry; earlier imports were kept.";
-      }
+    try {
+      const history = await fetchHistory(credentials);
+      await ingestEntries(history.entries, { provider, id: lease });
+      historyCoverage = history.coverage;
+    } catch (error) {
+      historyError = error instanceof ImportError || error instanceof ConnectionError ? error.message : "Transaction history could not sync. Check report fields and retry; earlier imports were kept.";
     }
     const updated = await db.update(accountConnections).set({
       snapshot, lastSyncedAt: new Date(), error: null, syncLease: null, leaseExpiresAt: null,
