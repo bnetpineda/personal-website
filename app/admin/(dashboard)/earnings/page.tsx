@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getConnections } from "@/lib/dal";
+import { knownCost } from "@/lib/finance/calc";
 import { removeBinanceEarnReceipts } from "@/lib/finance/connections/binance-positions";
 import { CURRENCIES } from "@/lib/finance/constants";
 import { currentMonth, isMonth } from "@/lib/finance/dates";
@@ -18,11 +19,14 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   const positions = tracked.flatMap((c) => (c.provider === "binance" ? removeBinanceEarnReceipts(c.snapshot?.positions ?? []) : (c.snapshot?.positions ?? []))
     .filter((p) => p.assetClass !== "cash").map((p) => ({ ...p, provider: c.provider })));
   const known = new Map<string, number>();
-  for (const p of positions) if (p.costBasis != null && p.marketValue != null) known.set(p.currency, (known.get(p.currency) ?? 0) + p.marketValue - p.costBasis);
-  const unknown = positions.filter((p) => p.costBasis == null || p.marketValue == null);
+  for (const p of positions) {
+    const cost = knownCost(p);
+    if (cost != null && p.marketValue != null) known.set(p.currency, (known.get(p.currency) ?? 0) + p.marketValue - cost);
+  }
+  const unknown = positions.filter((p) => knownCost(p) == null || p.marketValue == null);
   const binanceMissing = unknown.filter((p) => p.provider === "binance").length;
   return <>
-    <PageHeader eyebrow="Investments" title="Earnings" back={{ href: "/admin/holdings", label: "Holdings" }}><MonthPicker month={month} current={current} href={(m) => `/admin/earnings?month=${m}`} /></PageHeader>
+    <PageHeader eyebrow="Investments" title="Earnings" back={{ href: "/admin/holdings", label: "Portfolio" }}><MonthPicker month={month} current={current} href={(m) => `/admin/earnings?month=${m}`} /></PageHeader>
     <div className="mb-4 flex gap-2"><Button asChild size="sm" variant={allTime ? "default" : "outline"}><Link href="/admin/earnings?period=all">All time</Link></Button><Button asChild size="sm" variant={allTime ? "outline" : "default"}><Link href={`/admin/earnings?month=${month}`}>Selected month</Link></Button></div>
     <Alert className="mb-6"><AlertTitle>Imported activity, in its original currency</AlertTitle><AlertDescription>
       Totals cover imported Binance and IBKR records {allTime ? "across all imported dates" : "for this month"}, including activity AI has not filed yet. Ignored entries are excluded. Contributions count deposits and withdrawals filed as transfers; linked transfers between investment accounts are excluded. This is not a total-return calculation.

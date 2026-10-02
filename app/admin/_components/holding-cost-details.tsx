@@ -22,7 +22,7 @@ export function BinanceCostDetails({ cost, children }: { cost: HoldingCost; chil
       <Button variant="link" size="sm" aria-label={`${cost.symbol} cost and P/L details`}>{cost.symbol}</Button>}>
     <div className="group/shell flex flex-col gap-5" data-private={hidden}>
       {cost.reasons.length > 0 && <ul className="flex flex-col gap-2 text-sm text-muted-foreground">{cost.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
-      {cost.status === "partial" && <p className="text-sm">Holdings totals skip this estimate until these gaps are closed.</p>}
+      {cost.status === "partial" && <p className="text-sm">Portfolio still counts this estimate in its P/L; these gaps can make it less exact.</p>}
       {estimate ? <>
         <div><p className="text-sm text-muted-foreground">Estimated unrealized P/L</p><p className="mt-1 font-display text-2xl"><TokenAmount value={estimate.pnl} currency="USDT" signed tone /></p></div>
         <dl className="grid grid-cols-2 gap-4 text-sm">

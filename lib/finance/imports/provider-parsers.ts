@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { parseFlexXml } from "../connections/parsers";
 import { todayManila } from "../dates";
+import type { NavPoint } from "../performance";
 import { ImportError, uniqueEntries, type EntryKind, type HistoryImport, type ImportEntry } from "./types";
 
 export const numeric = z.union([z.number(), z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/)])
@@ -10,7 +11,9 @@ export const identifier = z.union([z.string().min(1), z.number().int().safe()]).
 const record = z.record(z.string(), z.unknown());
 const array = (value: unknown): unknown[] => value == null || value === "" ? [] : Array.isArray(value) ? value : [value];
 const asset = z.string().regex(/^[A-Z0-9_]{2,30}$/);
-const date = (value: unknown) => z.iso.date().parse(z.string().parse(value).split(";")[0].replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3"));
+/** IBKR dates come as yyyyMMdd (or ISO), sometimes with a ";time" suffix. */
+const isoDay = z.string().transform((v) => v.split(";")[0].replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3")).pipe(z.iso.date());
+const date = (value: unknown) => isoDay.parse(value);
 
 export function parseRewardsPage(body: unknown, kind: "flexible" | "locked", accountKey: string) {
   const page = z.object({ total: numeric.pipe(z.number().int().nonnegative()), rows: z.array(record) }).parse(body);
@@ -52,15 +55,37 @@ export function parseCapitalPage(body: unknown, kind: "deposit" | "withdraw", ac
   return entries;
 }
 
+const navRow = z.object({ "@_reportDate": isoDay, "@_total": numeric, "@_currency": z.string().optional() });
+const currencyCode = z.string().regex(/^[A-Z]{3}$/);
+
+/**
+ * Net Asset Value (NAV) in Base is optional: IBKR's own value for each day of the report, in the base
+ * currency (on each row, else Account Information's). Unreadable rows are skipped; they never fail the import.
+ */
+function navPoints(s: Record<string, unknown>, accountKey: string, from: string, to: string): NavPoint[] {
+  const section = record.safeParse(s.EquitySummaryInBase);
+  if (!section.success) return [];
+  const info = record.safeParse(s.AccountInformation);
+  return array(section.data.EquitySummaryByReportDateInBase).flatMap((raw) => {
+    const row = navRow.safeParse(raw);
+    if (!row.success) return [];
+    const currency = currencyCode.safeParse(row.data["@_currency"] ?? (info.success ? info.data["@_currency"] : undefined));
+    const day = row.data["@_reportDate"];
+    if (!currency.success || day < from || day > to) return [];
+    return [{ accountKey, date: day, value: row.data["@_total"], currency: currency.data }];
+  });
+}
+
 export function parseIbkrHistory(xml: string): HistoryImport {
   const root = record.parse(parseFlexXml(xml).FlexQueryResponse);
   const statements = array(record.parse(root.FlexStatements).FlexStatement).map((s) => record.parse(s));
   if (!statements.length) throw new ImportError("IBKR returned no history statements.");
-  const entries: ImportEntry[] = [], from: string[] = [], to: string[] = [], accounts: string[] = [];
+  const entries: ImportEntry[] = [], from: string[] = [], to: string[] = [], accounts: string[] = [], nav: NavPoint[] = [];
   for (const s of statements) {
     const accountKey = identifier.parse(s["@_accountId"]);
     accounts.push(accountKey);
     from.push(date(s["@_fromDate"])); to.push(date(s["@_toDate"]));
+    nav.push(...navPoints(s, accountKey, from.at(-1)!, to.at(-1)!));
     if (s.CashTransactions === undefined || s.Trades === undefined) throw new ImportError("Add Cash Transactions and Trades (Executions) to the history Flex Query.");
     const cash = s.CashTransactions === "" ? {} : record.parse(s.CashTransactions);
     for (const raw of array(cash.CashTransaction)) {
@@ -92,5 +117,6 @@ export function parseIbkrHistory(xml: string): HistoryImport {
   if (from.some((day, i) => day > to[i])) throw new ImportError("IBKR returned a reversed history date range.");
   if (new Set(from).size !== 1 || new Set(to).size !== 1) throw new ImportError("Use the same history date range for all accounts in the IBKR query.");
   for (const entry of entries) if (entry.occurredOn < from[0] || entry.occurredOn > to[0]) throw new ImportError("An IBKR transaction falls outside its report dates. Check the query date fields.");
-  return { entries: uniqueEntries(entries), accounts: [...new Set(accounts)], coverage: { from: from.sort()[0], to: to.sort().at(-1)!, description: "IBKR cash transactions and execution-level trades. Realized P/L includes trade commissions." } };
+  return { entries: uniqueEntries(entries), accounts: [...new Set(accounts)], nav, coverage: { from: from.sort()[0], to: to.sort().at(-1)!,
+    description: `IBKR cash transactions and execution-level trades${nav.length ? ", plus daily NAV" : ""}. Realized P/L includes trade commissions.` } };
 }

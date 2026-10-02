@@ -94,7 +94,7 @@ export function HoldingsTable({ connections, fx, filter, showSmall, binanceCosts
   const cells = (row: Row) => <>
     <TableCell className="text-right font-mono">{row.quantity == null ? dash : <span className="group-data-[private=true]/shell:blur-sm">{row.quantity}</span>}</TableCell>
     <TableCell className="text-right font-mono">{row.value()}</TableCell>
-    <TableCell className="text-right font-mono">{row.pnl ? row.pnl() : dash}</TableCell>
+    <TableCell className="text-right font-mono">{row.pnl ? <span className="flex flex-col items-end">{row.pnl()}<span className="text-xs"><Pct value={row.pnlPct} tone /></span></span> : dash}</TableCell>
   </>;
   const description = (row: Row) => <>{row.quantity && <span className="group-data-[private=true]/shell:blur-sm">{row.quantity}</span>}{row.quantity && row.meta && " · "}{row.meta}</>;
   const aside = (row: Row) => <span className="flex flex-col items-end font-mono text-sm">

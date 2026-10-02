@@ -9,6 +9,7 @@ import {
   holdings,
   liabilities,
   netWorthSnapshots,
+  portfolioSnapshots,
   recurringCashFlows,
   importedEntries,
   categoryRules,
@@ -254,16 +255,23 @@ export async function getSnapshots() {
   return getDb().select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate));
 }
 
+/** Each investment account's daily value, oldest first. */
+export async function getPortfolioSnapshots() {
+  await requireAdmin();
+  return getDb().select().from(portfolioSnapshots).orderBy(asc(portfolioSnapshots.snapshotDate));
+}
+
 /** Everything, for the JSON backup download. */
 export async function getExportData() {
   await requireAdmin();
   const db = getDb();
-  const [h, l, c, f, s, x, r, connections, imports, rules, dismissals, reports, historyStreams] = await Promise.all([
+  const [h, l, c, f, s, p, x, r, connections, imports, rules, dismissals, reports, historyStreams] = await Promise.all([
     db.select().from(holdings).orderBy(asc(holdings.createdAt)),
     db.select().from(liabilities).orderBy(asc(liabilities.createdAt)),
     db.select().from(categories).orderBy(asc(categories.id)),
     db.select().from(cashFlows).orderBy(asc(cashFlows.occurredOn), asc(cashFlows.createdAt)),
     db.select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate)),
+    db.select().from(portfolioSnapshots).orderBy(asc(portfolioSnapshots.snapshotDate), asc(portfolioSnapshots.provider)),
     db.select().from(fxRates).orderBy(asc(fxRates.currency)),
     db.select().from(recurringCashFlows).orderBy(asc(recurringCashFlows.createdAt)),
     loadConnectionViews(),
@@ -273,5 +281,5 @@ export async function getExportData() {
     db.select().from(investmentReports).orderBy(asc(investmentReports.createdAt)),
     db.select().from(investmentSyncs).orderBy(asc(investmentSyncs.createdAt)),
   ]);
-  return { holdings: h, liabilities: l, categories: c, cashFlows: f, recurring: r, netWorthSnapshots: s, fxRates: x, connections, importedEntries: imports, categoryRules: rules, notificationDismissals: dismissals, investmentReports: reports, investmentSyncs: historyStreams };
+  return { holdings: h, liabilities: l, categories: c, cashFlows: f, recurring: r, netWorthSnapshots: s, portfolioSnapshots: p, fxRates: x, connections, importedEntries: imports, categoryRules: rules, notificationDismissals: dismissals, investmentReports: reports, investmentSyncs: historyStreams };
 }

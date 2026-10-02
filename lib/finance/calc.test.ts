@@ -8,6 +8,7 @@ import {
   connectedHoldingMetrics,
   holdingMetrics,
   isSmallHolding,
+  knownCost,
   monthlySeries,
   savingsRate,
   type Position,
@@ -63,6 +64,16 @@ describe("connected holding display metrics", () => {
       .toEqual({ valuePhp: -4480, pnl: 20, pnlPhp: 1120, pnlPct: 0.2 });
     expect(connectedHoldingMetrics({ currency: "USD", marketValue: 0, costBasis: 100 }, fx).pnlPct).toBe(-1);
     expect(connectedHoldingMetrics({ currency: "USD", marketValue: 100, costBasis: 0 }, fx).pnlPct).toBeNull();
+  });
+
+  test("a reported cost of 0 on something still held is unknown, never 100% profit", () => {
+    expect(knownCost({ marketValue: 100, costBasis: 0 })).toBeNull();
+    expect(knownCost({ marketValue: 0, costBasis: 0 })).toBe(0);
+    expect(knownCost({ marketValue: 100, costBasis: null })).toBeNull();
+    expect(knownCost({ marketValue: -80, costBasis: -100 })).toBe(-100);
+    expect(connectedHoldingMetrics({ currency: "USD", marketValue: 100, costBasis: 0 }, fx)).toEqual({ valuePhp: 5600, pnl: null, pnlPhp: null, pnlPct: null });
+    const nw = computeNetWorth([], [], fx, [{ id: "voo", name: "VOO", symbol: "VOO", assetClass: "etf", currency: "USD", quantity: 2, marketValue: 100, costBasis: 0 }]);
+    expect(nw).toMatchObject({ assetsPhp: 5600, investedPhp: 0, unrealizedPhp: 0, unrealizedPct: null, missingCostBasis: ["VOO"] });
   });
 });
 

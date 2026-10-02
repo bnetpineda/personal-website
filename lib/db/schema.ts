@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { ConnectionSnapshot, Provider, SyncProvider } from "../finance/connections/types";
 import type { AiSuggestion, CategorizedBy, EntryKind, EntryStatus, HistoryCoverage, SpotTrade } from "../finance/imports/types";
+import type { PortfolioSource } from "../finance/performance";
 import {
   type AnyPgColumn,
   bigserial,
@@ -223,6 +224,26 @@ export const netWorthSnapshots = pgTable("net_worth_snapshots", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Each investment account's value per day, in US dollars (see lib/finance/performance.ts). Binance rows are
+ * dated by the Manila day its balances were read, IBKR rows by statement date. Every connected account is
+ * recorded, whether or not it counts in net worth.
+ */
+export const portfolioSnapshots = pgTable("portfolio_snapshots", {
+  provider: text("provider").$type<SyncProvider>().notNull(),
+  snapshotDate: date("snapshot_date").notNull(),
+  valueUsd: numeric("value_usd", { precision: 18, scale: 2, mode: "number" }).notNull(),
+  /** Cost and unrealized P/L of the holdings with a known cost; null when there are none (and on IBKR NAV days). */
+  costUsd: numeric("cost_usd", { precision: 18, scale: 2, mode: "number" }),
+  pnlUsd: numeric("pnl_usd", { precision: 18, scale: 2, mode: "number" }),
+  source: text("source").$type<PortfolioSource>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.provider, t.snapshotDate] }),
+  check("portfolio_snapshots_provider", sql`${t.provider} in ('binance', 'ibkr')`),
+  check("portfolio_snapshots_source", sql`${t.source} in ('balances', 'nav')`),
+]);
+
 export const loginAttempts = pgTable(
   "login_attempts",
   {
@@ -392,3 +413,4 @@ export type CashFlow = typeof cashFlows.$inferSelect;
 export type RecurringCashFlow = typeof recurringCashFlows.$inferSelect;
 export type Liability = typeof liabilities.$inferSelect;
 export type NetWorthSnapshot = typeof netWorthSnapshots.$inferSelect;
+export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;

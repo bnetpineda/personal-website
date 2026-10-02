@@ -106,6 +106,25 @@ describe("provider history", () => {
     expect(() => parseIbkrHistory(history('', '<Trade levelOfDetail="SUMMARY" />'))).toThrow("Executions");
     expect(() => parseIbkrHistory(history('').replace('<Trades></Trades>', ''))).toThrow("Cash Transactions and Trades");
   });
+  test("IBKR daily NAV is optional, read in the base currency, and never fails the history", () => {
+    expect(parseIbkrHistory(history('')).nav).toEqual([]);
+    const withNav = (rows: string, info = "") => history('').replace("<Trades>", `${info}<EquitySummaryInBase>${rows}</EquitySummaryInBase><Trades>`);
+    const result = parseIbkrHistory(withNav(
+      '<EquitySummaryByReportDateInBase accountId="TEST" currency="USD" reportDate="20260902" cash="10" stock="90" total="100" />' +
+      '<EquitySummaryByReportDateInBase accountId="TEST" currency="USD" reportDate="20260903" total="101.5" />' +
+      // Unreadable or out-of-range rows are skipped.
+      '<EquitySummaryByReportDateInBase accountId="TEST" currency="USD" reportDate="20260903" total="" />' +
+      '<EquitySummaryByReportDateInBase accountId="TEST" currency="USD" reportDate="20261001" total="5" />'));
+    expect(result.nav).toEqual([
+      { accountKey: "TEST", date: "2026-09-02", value: 100, currency: "USD" },
+      { accountKey: "TEST", date: "2026-09-03", value: 101.5, currency: "USD" },
+    ]);
+    expect(result.coverage.description).toContain("daily NAV");
+    // Without a currency on the row, Account Information's base currency applies; without either, the row is skipped.
+    expect(parseIbkrHistory(withNav('<EquitySummaryByReportDateInBase reportDate="20260902" total="7" />', '<AccountInformation accountId="TEST" currency="EUR" />')).nav)
+      .toEqual([{ accountKey: "TEST", date: "2026-09-02", value: 7, currency: "EUR" }]);
+    expect(parseIbkrHistory(withNav('<EquitySummaryByReportDateInBase reportDate="20260902" total="7" />')).nav).toEqual([]);
+  });
 });
 
 describe("review and accounting", () => {

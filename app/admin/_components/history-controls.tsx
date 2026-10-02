@@ -103,11 +103,11 @@ function ReportForm() {
     });
   };
   return <form ref={ref} onSubmit={(e) => { e.preventDefault(); run(false); }} onChange={() => { setPreview(null); setResult(null); }} className="flex flex-col gap-6">
-    <p className="text-sm text-muted-foreground">In IBKR Reports → Flex Queries, run an Activity query for each historical date range. Include Cash Transactions (all fields) and Trades (Executions, all fields), then export XML. Use consistent dates across accounts. Up to 2.5 MB and 25,000 entries per file; no 30-day limit. Current balances are unchanged.</p>
+    <p className="text-sm text-muted-foreground">In IBKR Reports → Flex Queries, run an Activity query for each historical date range. Include Cash Transactions (all fields) and Trades (Executions, all fields), then export XML. Add Net Asset Value (NAV) in Base to chart the account&apos;s earlier days on Portfolio. Use consistent dates across accounts. Up to 2.5 MB and 25,000 entries per file; no 30-day limit. Current balances are unchanged.</p>
     <FormField id="investment-report" label="Activity Flex XML"><Input id="investment-report" name="file" type="file" accept=".xml,text/xml,application/xml" required disabled={pending} /></FormField>
     {preview?.ok && <>
       <Alert variant={preview.conflicts ? "destructive" : "default"}><AlertTitle>History preview</AlertTitle><AlertDescription>
-        {preview.coverage?.from} through {preview.coverage?.to} · {preview.accounts?.length} account(s) · {preview.total} entries · {preview.duplicates} already imported.
+        {preview.coverage?.from} through {preview.coverage?.to} · {preview.accounts?.length} account(s) · {preview.total} entries · {preview.duplicates} already imported{preview.navDays ? ` · ${preview.navDays} days of NAV` : ""}.
         {preview.conflicts ? ` ${preview.conflicts} changed records must be checked before importing.` : " Old and overlapping reports can be imported safely."}
       </AlertDescription></Alert>
       <Table><TableHeader><TableRow><TableHead>Activity</TableHead><TableHead>Amount</TableHead></TableRow></TableHeader><TableBody>

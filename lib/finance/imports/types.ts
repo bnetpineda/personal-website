@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { providerSchema } from "../connections/types";
+import type { NavPoint } from "../performance";
 
 export const ENTRY_KINDS = ["payment", "transfer", "reward", "dividend", "interest", "fee", "tax", "trade", "other"] as const;
 export type EntryKind = typeof ENTRY_KINDS[number];
@@ -31,7 +32,8 @@ export const importEntrySchema = z.object({
 }).refine((r) => r.amount !== 0 || r.kind === "trade", "Empty transaction amount");
 export type ImportEntry = z.output<typeof importEntrySchema>;
 export interface HistoryCoverage { from: string; to: string; description: string }
-export interface HistoryImport { entries: ImportEntry[]; coverage: HistoryCoverage; accounts?: string[] }
+/** `nav`: IBKR's daily net asset value, when the report includes Net Asset Value (NAV) in Base. */
+export interface HistoryImport { entries: ImportEntry[]; coverage: HistoryCoverage; accounts?: string[]; nav?: NavPoint[] }
 export class ImportError extends Error {}
 
 export function sourceKey(r: Pick<ImportEntry, "provider" | "accountKey" | "externalId">) {

@@ -5,8 +5,9 @@ import { syncAllAccounts } from "@/lib/finance/connections/service";
 import { applyCategoryRules } from "@/lib/finance/imports/service";
 import { categorizeQuietly } from "@/lib/finance/imports/ai-service";
 import { syncInvestmentHistory } from "@/lib/finance/imports/history-service";
+import { recordPortfolioQuietly } from "@/lib/finance/portfolio";
 
-// Vercel Cron: sync accounts, refresh FX, record net worth, post recurring entries, then categorize imports.
+// Vercel Cron: sync accounts, refresh FX, record net worth and each account's value, post recurring entries, then categorize imports.
 export const maxDuration = 300;
 
 /** Vercel sends `Authorization: Bearer $CRON_SECRET`. Digests keep the comparison length-safe. */
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
   }
   const [connections, history] = await Promise.all([syncAllAccounts(), syncInvestmentHistory()]);
   const summary = await refreshRates();
+  await recordPortfolioQuietly();
   const recurring = await postDueRecurring();
   const imports = await applyCategoryRules();
   // Rules first: the model only sees what the person's own rules leave pending.

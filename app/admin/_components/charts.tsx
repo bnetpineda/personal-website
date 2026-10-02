@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, LabelList, Pie, PieChart, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
@@ -12,10 +12,9 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { budgetSegments } from "@/lib/finance/calc";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { addDays } from "@/lib/finance/dates";
+import { dayLabel } from "@/lib/finance/dates";
 import { formatMoney, formatPct } from "@/lib/finance/format";
 import { EmptyState, type BreakdownRow } from "./ui";
 
@@ -35,56 +34,34 @@ function moneyFormatter(value: unknown, name: unknown, item: { color?: string },
   return <TooltipRow label={config[key]?.label ?? key} value={formatMoney(Number(value))} />;
 }
 
-const netWorthConfig = {
-  netWorth: { label: "Net worth", color: "var(--chart-1)" },
-} satisfies ChartConfig;
-
-const RANGES = [
+export const RANGES = [
   { value: "1M", days: 31 },
   { value: "3M", days: 92 },
   { value: "1Y", days: 366 },
   { value: "All", days: 0 },
 ] as const;
 
-export function NetWorthChart({ points, today }: { points: { date: string; netWorth: number }[]; today: string }) {
-  const [range, setRange] = useState<string>("3M");
-  const days = RANGES.find((r) => r.value === range)?.days ?? 0;
-  const data = days ? points.filter((p) => p.date >= addDays(today, -days)) : points;
-
-  if (points.length < 2) {
-    return <EmptyState title="Building history">A net-worth point is saved every day — the trend appears from the second day on.</EmptyState>;
-  }
-
+/** One account's value (or P/L) over time. The caller picks the range and says what is charted. */
+export function PortfolioChart({ points, label, color, currency }: { points: { date: string; value: number }[]; label: string; color: string; currency: string }) {
+  const config = { value: { label, color } } satisfies ChartConfig;
   return (
-    <div className="flex flex-col gap-4">
-      <ToggleGroup type="single" variant="outline" size="sm" value={range} onValueChange={(v) => v && setRange(v)} aria-label="Range">
-        {RANGES.map((r) => (
-          <ToggleGroupItem key={r.value} value={r.value}>
-            {r.value}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-      <div className="transition group-data-[private=true]/shell:blur-sm">
-        <ChartContainer config={netWorthConfig} className="aspect-auto h-64 w-full">
-          <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} />
-            <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} tickFormatter={(d: string) => d.slice(5)} />
-            <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={compact} domain={["auto", "auto"]} />
-            <ChartTooltip
-              content={<ChartTooltipContent formatter={(value, name, item, index, payload) => moneyFormatter(value, name, item, index, payload, netWorthConfig)} />}
-            />
-            <Area
-              dataKey="netWorth"
-              type="monotone"
-              fill="var(--color-netWorth)"
-              fillOpacity={0.35}
-              stroke="var(--color-netWorth)"
-              strokeWidth={3}
-              isAnimationActive={false}
-            />
-          </AreaChart>
-        </ChartContainer>
-      </div>
+    <div className="transition group-data-[private=true]/shell:blur-sm">
+      <ChartContainer config={config} className="aspect-auto h-48 w-full">
+        <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} tickFormatter={(d: string) => d.slice(5)} />
+          <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(v: number) => formatMoney(v, currency, { compact: true })} domain={["auto", "auto"]} />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                labelFormatter={(day) => dayLabel(String(day))}
+                formatter={(value) => <TooltipRow label={label} value={formatMoney(Number(value), currency)} />}
+              />
+            }
+          />
+          <Area dataKey="value" type="monotone" fill="var(--color-value)" fillOpacity={0.35} stroke="var(--color-value)" strokeWidth={3} isAnimationActive={false} />
+        </AreaChart>
+      </ChartContainer>
     </div>
   );
 }

@@ -38,6 +38,7 @@ function ConnectionForm({ provider }: { provider: SyncProvider }) {
             <li>For history, create a second XML Activity Flex Query covering Last 30 Calendar Days, with yyyyMMdd dates.</li>
             <li>Include Cash Transactions with all fields, including Transaction ID, Report Date, Currency, Amount, Type and Description.</li>
             <li>Include Trades at Executions level only: Trade ID, Trade Date, Symbol, Currency, Buy/Sell, Proceeds, Realized PNL, IB Commission, IB Commission Currency and Level of Detail.</li>
+            <li>Optionally include Net Asset Value (NAV) in Base, so Portfolio can chart the days before tracking started.</li>
           </ol>
           <p>Reports update after the trading day. Keep the token expiry date in mind.</p>
         </div>

@@ -51,8 +51,8 @@ export default async function SettingsPage() {
     {
       href: "/admin/holdings",
       icon: <Wallet />,
-      title: "Holdings & investments",
-      description: "Positions, P/L, allocation, earnings and history",
+      title: "Portfolio",
+      description: "How Binance and IBKR are doing: value, P/L, best and worst holdings, earnings and history",
     },
   ];
 

@@ -13,6 +13,7 @@ import { syncAccount, syncAllAccounts } from "@/lib/finance/connections/service"
 import { credentialsSchema, syncProviderSchema, type SyncProvider } from "@/lib/finance/connections/types";
 import type { FormState } from "@/lib/finance/schemas";
 import { ensureFx, snapshotQuietly } from "@/lib/finance/service";
+import { recordPortfolioQuietly } from "@/lib/finance/portfolio";
 import { applyCategoryRules } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 
@@ -21,6 +22,7 @@ async function refreshTotals({ categorize = false } = {}) {
   const rows = await getDb().select({ snapshot: accountConnections.snapshot }).from(accountConnections);
   try { await ensureFx(rows.flatMap((r) => r.snapshot?.positions.map((p) => p.currency) ?? [])); } catch { /* UI reports missing FX. */ }
   after(snapshotQuietly);
+  after(recordPortfolioQuietly);
   let summary = "";
   if (categorize) {
     await applyCategoryRules();

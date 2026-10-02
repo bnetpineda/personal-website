@@ -1,6 +1,6 @@
 import { ArrowLeftRight, House, Settings } from "lucide-react";
 
-/** The three tabs. Everything else (holdings, recurring, connections…) hangs off Home or Settings. */
+/** The three tabs. Everything else (portfolio, recurring, connections…) hangs off Home or Settings. */
 export const ADMIN_NAV = [
   { href: "/admin", label: "Home", icon: House },
   { href: "/admin/transactions", label: "Activity", icon: ArrowLeftRight },

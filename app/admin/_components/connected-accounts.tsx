@@ -134,13 +134,13 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
   );
 }
 
-export function ConnectedValuationNotice({ missingPrices, missingCostBasis }: { missingPrices: string[]; missingCostBasis: string[] }) {
-  if (missingPrices.length === 0 && missingCostBasis.length === 0) return null;
+/** Unpriced positions are left out of every total. Missing cost basis is explained on each account's card. */
+export function ConnectedValuationNotice({ missingPrices }: { missingPrices: string[] }) {
+  if (missingPrices.length === 0) return null;
   return <Alert variant="warning" className="mb-6">
     <AlertTitle>Some account data is unavailable</AlertTitle>
     <AlertDescription>
-      {missingPrices.length > 0 && `${missingPrices.length} synced positions have no price and are excluded from totals. `}
-      {missingCostBasis.length > 0 && "Cost basis and unrealized P/L cover only positions with a known cost. "}
+      {missingPrices.length} synced positions have no price and are excluded from totals.{" "}
       <Link href="/admin/connections" className="underline underline-offset-4">Review connected balances</Link>
     </AlertDescription>
   </Alert>;

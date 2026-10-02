@@ -76,7 +76,7 @@ Use the component that fits; don't rebuild it from `div`s.
 
 Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`,
 `Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`, the recurring
-`OccurrenceList` / `DuePanel` / `DueActions`, `EditableRow`, `AddEntry`, `BudgetsForm`, and the charts `NetWorthChart`, `CashFlowChart`,
+`OccurrenceList` / `DuePanel` / `DueActions`, `EditableRow`, `AddEntry`, `BudgetsForm`, `PortfolioAccounts`, and the charts `PortfolioChart`, `CashFlowChart`,
 `AllocationChart`, `BreakdownChart`) — reuse them before writing new ones.
 
 ## 3. Rules (enforced — `design-system.lint.json`)
@@ -121,7 +121,7 @@ components without re-applying these (`--overwrite` replaces the house style).
 - **Toasts never show amounts** that weren't typed by the user — they aren't blurred by privacy mode.
 - **Keep it simple**: three tabs (Home, Activity, Settings). Synced accounts, recurring items and
   AI filing do the data entry, so a new screen or panel has to earn its place; secondary pages
-  (Connections, Recurring, Holdings, Earnings, History) hang off Home or Settings with a
+  (Connections, Recurring, Portfolio, Earnings, History) hang off Home or Settings with a
   `PageHeader back` link instead of joining the tab bar.
 - **Adding entries**: manual entry is the exception. One `AddEntry` sheet on Activity —
   don't build other add forms for cash flows.

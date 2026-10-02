@@ -1,8 +1,9 @@
 # Private account connections
 
 Open **Settings → Manage connections** (`/admin/connections`). Connections are protected by
-the existing admin login. **Holdings** (`/admin/holdings`) displays saved Binance and IBKR
-positions alongside manual holdings, with asset-class filters covering both. Use **Sync accounts**
+the existing admin login. **Portfolio** (`/admin/holdings`) shows how Binance and IBKR are doing
+(see [Portfolio performance](#portfolio-performance)) above every saved position, with asset-class
+filters. Use **Sync accounts**
 or an account's **Sync now** to update connected quantities and values; **Refresh prices** updates
 manual holding quotes and exchange rates. Provider positions are displayed directly from the saved
 snapshot and are never copied into manual holdings.
@@ -295,8 +296,10 @@ extra units from profit. It does not establish which lots were transferred, and 
 zero-cost acquisitions. Snapshot USDT/USD rates (or the same snapshot's USDT balance valuation
 for legacy snapshots) convert that quote-currency P/L, then current FX presents it in PHP.
 
-Holdings' estimated P/L and tracked cost summaries include these estimates for accounts included
-in totals, even when small rows are hidden. Provider-reported `costBasis` remains unchanged;
+Portfolio's Binance P/L, best/worst coins and recorded P/L history add up every coin that has an
+estimated P/L, including estimates with gaps: Simple Earn rewards mark nearly every coin's estimate
+as partial, so leaving those out would leave crypto with no P/L at all. The coin's sheet lists its
+gaps, and small rows still count when hidden. Provider-reported `costBasis` remains unchanged;
 these estimates do not rewrite the source ledger or replace the overview's reported-cost figures.
 **Refresh** updates balances, manual prices and one batch of each enabled configured Spot stream;
 paused streams stay paused, and larger backlogs continue from Investment history or daily sync.
@@ -311,6 +314,42 @@ References: [Binance reward history](https://developers.binance.com/en/docs/cata
 [Binance deposits/withdrawals](https://developers.binance.com/en/docs/catalog/core-trading-wallet/api/rest-api/capital),
 [IBKR cash transactions](https://www.ibkrguides.com/reportingreference/reportguide/cash%20transactionsfq.htm),
 [IBKR trade P/L](https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm).
+
+## Portfolio performance
+
+**Portfolio** (`/admin/holdings`, linked from Home's Accounts panel and Settings) answers how the
+investments are doing. It covers every connected account, whether or not it counts in net worth (a
+card says when it does not):
+
+- **Portfolio value**, **Profit / loss** (with the cost it is measured against) and **Value · 30 days**.
+- One card per account: value (with its US dollar amount), P/L, the change over the selected range,
+  a chart, and the biggest winners and losers by amount (holdings under US$1 are left out). **Value**
+  charts the account's worth, so deposits and withdrawals show up in it; **P/L** charts unrealized
+  profit, which deposits do not move. The range (1M, 3M, 1Y, All) and the view apply to every card;
+  while history is shorter than the range, the change starts at the first saved day and says so.
+- Allocation by asset class, then the holdings table, whose P/L column shows the percentage too.
+
+P/L uses IBKR's reported cost basis and Binance's Spot purchase estimates (see above). A cost basis of
+0 on a position that is still held is treated as unknown, never as 100% profit, here, in net worth's
+unrealized total and on Earnings. Each card says what its P/L leaves out and where to fill the gap.
+
+**History.** `portfolio_snapshots` keeps one row per account per day: its value and, where known, the
+cost and unrealized P/L of its holdings. Rows are in US dollars, since both accounts value holdings in
+dollars, and pages convert them with today's USD→PHP rate, so the charts show how the investments
+moved rather than the peso. Binance rows are dated by the Manila day its balances were read, IBKR rows
+by statement date. The daily cron records every connected account after refreshing FX; so do manual
+syncs and opening Portfolio. An account holding a currency without an exchange rate is skipped for
+that day rather than recorded short. Disconnecting an account keeps its history.
+
+**Earlier IBKR days.** Add **Net Asset Value (NAV) in Base** to the history Activity Flex Query (or to
+a report you upload in Investment history) and IBKR's own daily NAV fills the days before recording
+started: the last 30 days on the next sync, any period by upload. Rows read the base currency from the
+row or from Account Information; a day counts only when every account in the report has it, and
+unreadable rows are skipped without failing the history import. NAV only fills days that have no
+recorded balances, so a recorded day is never replaced. Binance has no comparable history, so its
+chart starts on the first day it is recorded.
+
+Apply migration `0014_portfolio_snapshots` to production before deploying this version.
 
 ## Private notifications
 

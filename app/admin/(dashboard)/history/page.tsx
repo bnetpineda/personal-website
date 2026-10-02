@@ -15,7 +15,7 @@ export default async function InvestmentHistoryPage({ searchParams }: { searchPa
   const page = /^\d{1,5}$/.test(params.page ?? "") ? Number(params.page) : 0;
   const data = await getInvestmentHistory(provider, page), href = (p: string, n = 0) => `/admin/history?provider=${p}&page=${n}`;
   return <>
-    <PageHeader eyebrow="Investments" title="History" back={{ href: "/admin/holdings", label: "Holdings" }}><ConfigureHistoryButton yesterday={utcYesterday()} /><ImportInvestmentButton /></PageHeader>
+    <PageHeader eyebrow="Investments" title="History" back={{ href: "/admin/holdings", label: "Portfolio" }}><ConfigureHistoryButton yesterday={utcYesterday()} /><ImportInvestmentButton /></PageHeader>
     <p className="mb-6 text-sm text-muted-foreground">Load older activity once and keep collecting new records. A completed import means the provider returned everything available for that stream; it does not prove that every product, trading pair or date is covered.</p>
     <Card className="mb-6"><CardHeader><CardTitle>Binance import progress</CardTitle><CardDescription>Spot starts at the earliest available trade for each configured pair. Earn and completed crypto transfers use your selected dates. Daily sync continues saved progress after deployment.</CardDescription></CardHeader><CardContent className="flex flex-col gap-5">
       <ImportHoldingCostsButton disabled={false} />

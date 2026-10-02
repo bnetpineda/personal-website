@@ -12,6 +12,7 @@ import { parseIbkrHistory } from "@/lib/finance/imports/provider-parsers";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { applyCategoryRules, ingestQuery } from "@/lib/finance/imports/service";
 import { ImportError, sameSource, sourceKey, type HistoryCoverage, type ImportEntry } from "@/lib/finance/imports/types";
+import { saveIbkrNav } from "@/lib/finance/portfolio";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
 
 function failure(error: unknown): FormState {
@@ -25,7 +26,7 @@ async function report(data: FormData) {
   if (parsed.entries.length > 25_000) throw new ImportError("Import up to 25,000 entries per file. Export a shorter date range.");
   return { ...parsed, hash: createHash("sha256").update(text).digest("hex") };
 }
-export interface HistoryPreview extends FormState { entries?: ImportEntry[]; total?: number; duplicates?: number; conflicts?: number; coverage?: HistoryCoverage; accounts?: string[] }
+export interface HistoryPreview extends FormState { entries?: ImportEntry[]; total?: number; duplicates?: number; conflicts?: number; coverage?: HistoryCoverage; accounts?: string[]; navDays?: number }
 export async function previewInvestmentReport(data: FormData): Promise<HistoryPreview> {
   await requireAdmin();
   try {
@@ -35,7 +36,8 @@ export async function previewInvestmentReport(data: FormData): Promise<HistoryPr
     const byKey = new Map(existing.map((e) => [sourceKey(e), e]));
     const duplicates = parsed.entries.filter((e) => byKey.has(sourceKey(e))).length;
     const conflicts = parsed.entries.filter((e) => { const old = byKey.get(sourceKey(e)); return old && !sameSource(e, old); }).length;
-    return { ok: true, total: parsed.entries.length, duplicates, conflicts, coverage: parsed.coverage, accounts: parsed.accounts, entries: parsed.entries.slice(0, 10) };
+    return { ok: true, total: parsed.entries.length, duplicates, conflicts, coverage: parsed.coverage, accounts: parsed.accounts, entries: parsed.entries.slice(0, 10),
+      navDays: new Set(parsed.nav?.map((p) => p.date)).size };
   } catch (error) { return failure(error); }
 }
 export async function importInvestmentReport(data: FormData): Promise<FormState> {
@@ -46,10 +48,12 @@ export async function importInvestmentReport(data: FormData): Promise<FormState>
       db.insert(investmentReports).values({ provider: "ibkr", fileHash: parsed.hash, accounts: parsed.accounts!,
         fromDate: parsed.coverage.from, toDate: parsed.coverage.to, entries: parsed.entries.length }).onConflictDoNothing(),
     ]);
+    // Best effort, like on sync: the entries above are already saved.
+    const navDays = await saveIbkrNav(parsed.nav ?? []).catch((err) => { console.error("[admin] IBKR NAV save failed", err); return 0; });
     await applyCategoryRules();
     const ai = await categorizeQuietly();
     revalidatePath("/admin", "layout");
-    return { ok: true, message: `Imported ${Number(saved.rows[0]?.inserted ?? 0)} new entries; skipped ${Number(saved.rows[0]?.duplicates ?? 0)} duplicates.${describeAiRun(ai)}` };
+    return { ok: true, message: `Imported ${Number(saved.rows[0]?.inserted ?? 0)} new entries; skipped ${Number(saved.rows[0]?.duplicates ?? 0)} duplicates.${navDays ? ` Added ${navDays} days of IBKR values to Portfolio.` : ""}${describeAiRun(ai)}` };
   } catch (error) { return failure(error); }
 }
 export async function configureInvestmentHistory(_previous: FormState, data: FormData): Promise<FormState> {

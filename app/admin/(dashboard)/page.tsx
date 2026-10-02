@@ -150,7 +150,7 @@ export default async function HomePage() {
             connections.length + banks.length > 0 ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/admin/holdings">
-                  Holdings <ArrowRight />
+                  Portfolio <ArrowRight />
                 </Link>
               </Button>
             ) : (

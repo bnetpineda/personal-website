@@ -76,15 +76,24 @@ export function holdingMetrics(h: Position, fx: FxTable): HoldingMetrics {
   };
 }
 
+/**
+ * A position's cost, or null when it is unknown. Missing cost is never zero cost: a broker can report a
+ * missing basis as 0, and something still held never cost nothing.
+ */
+export function knownCost(position: Pick<ConnectedPosition, "marketValue" | "costBasis">): number | null {
+  return position.costBasis == null || (position.costBasis === 0 && position.marketValue !== 0) ? null : position.costBasis;
+}
+
 /** Provider values already include contract multipliers. Missing cost is never zero cost. */
 export function connectedHoldingMetrics(position: Pick<ConnectedPosition, "marketValue" | "costBasis" | "currency">, fx: FxTable) {
   const rate = fxToPhp(fx, position.currency);
-  const pnl = position.marketValue == null || position.costBasis == null ? null : position.marketValue - position.costBasis;
+  const cost = knownCost(position);
+  const pnl = position.marketValue == null || cost == null ? null : position.marketValue - cost;
   return {
     valuePhp: position.marketValue == null || rate == null ? null : position.marketValue * rate,
     pnl,
     pnlPhp: pnl == null || rate == null ? null : pnl * rate,
-    pnlPct: pnl == null || position.costBasis == null || position.costBasis === 0 ? null : pnl / Math.abs(position.costBasis),
+    pnlPct: pnl == null || !cost ? null : pnl / Math.abs(cost),
   };
 }
 
@@ -149,9 +158,10 @@ export function computeNetWorth(
   for (const p of connected) {
     if (p.quantity === 0 && p.marketValue === 0) continue;
     const rate = fxToPhp(fx, p.currency);
+    const cost = knownCost(p);
     if (rate == null) missing.add(p.currency);
     if (p.marketValue == null) missingPrices.push(p.name);
-    if (p.costBasis == null) missingCostBasis.push(p.name);
+    if (cost == null) missingCostBasis.push(p.name);
     if (rate == null || p.marketValue == null) continue;
     const value = p.marketValue * rate;
     // Short positions and negative cash are obligations, not negative asset tiles.
@@ -160,10 +170,10 @@ export function computeNetWorth(
       assets += value;
       byClass[p.assetClass] = (byClass[p.assetClass] ?? 0) + value;
     }
-    if (p.costBasis != null) {
-      invested += p.costBasis * rate;
-      unrealized += (p.marketValue - p.costBasis) * rate;
-      if (p.assetClass !== "cash") nonCashCost += Math.abs(p.costBasis * rate);
+    if (cost != null) {
+      invested += cost * rate;
+      unrealized += (p.marketValue - cost) * rate;
+      if (p.assetClass !== "cash") nonCashCost += Math.abs(cost * rate);
     }
   }
 
