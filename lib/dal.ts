@@ -186,6 +186,20 @@ export async function getCategoryTotals(kind: CashFlowKind, month: string): Prom
   return new Map(rows.map((r) => [r.categoryId, r.total ?? 0]));
 }
 
+/** Recorded PHP cash flow in a half-open date range, used for equal-day comparisons. */
+export async function getPeriodTotals(start: string, end: string) {
+  await requireAdmin();
+  const rows = await getDb()
+    .select({ kind: cashFlows.kind, total: sum(cashFlows.amountPhp).mapWith(Number) })
+    .from(cashFlows)
+    .where(and(gte(cashFlows.occurredOn, start), lt(cashFlows.occurredOn, end)))
+    .groupBy(cashFlows.kind);
+  return {
+    income: rows.find((r) => r.kind === "income")?.total ?? 0,
+    expense: rows.find((r) => r.kind === "expense")?.total ?? 0,
+  };
+}
+
 /** PHP totals per (month, kind) for `months` months ending at `endMonth`. */
 export async function getMonthlyTotals(endMonth: string, months: number): Promise<MonthTotal[]> {
   await requireAdmin();

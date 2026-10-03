@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
 const cardVariants = cva(
-  "flex flex-col gap-6 rounded-lg border-2 border-border py-6 shadow-md",
+  "group/card flex flex-col gap-6 rounded-lg border-2 border-border py-6 shadow-md",
   {
     variants: {
       variant: {

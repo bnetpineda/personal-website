@@ -7,7 +7,7 @@ export function About() {
     <section className="section section--alt bg-pat" id="about">
       <div className="wrap">
         <SectionHead
-          idx="01"
+          idx="02"
           kicker="Who's behind the keyboard"
           title="About"
           lead="Discipline is the throughline — from the gym to the IDE. I like tearing things down and building them back stronger."

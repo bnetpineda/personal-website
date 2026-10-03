@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConnectedPosition } from "./connections/types";
 import type { HoldingCost } from "./imports/holding-costs";
-import { accountTotals, changeSince, combineChanges, fxToUsd, moverRows, navTotals, snapshotDay, topMovers, withCurrent } from "./performance";
+import { accountTotals, changeSince, combineChanges, fxToUsd, moverRows, navTotals, profitLossCoverage, snapshotDay, topMovers, withCurrent } from "./performance";
 
 const fx = { USD: 56, EUR: 62 };
 const position = (overrides: Partial<ConnectedPosition>): ConnectedPosition => ({
@@ -62,6 +62,27 @@ describe("accountTotals", () => {
     expect(totals.costUsd).toBe(250 + 160);
     expect(totals.pnlUsd).toBe(90);
     expect(accountTotals("binance", positions, fx, [unavailable])).toMatchObject({ costUsd: null, pnlUsd: null });
+  });
+});
+
+describe("profit/loss coverage", () => {
+  test("a zero broker basis is unknown; cash and dust do not make P/L partial", () => {
+    expect(profitLossCoverage("ibkr", [
+      position({ symbol: "VOO", marketValue: 500, costBasis: 0 }),
+      position({ symbol: "KNOWN", marketValue: 100, costBasis: 80 }),
+      position({ symbol: "USD", assetClass: "cash", marketValue: 50, costBasis: null }),
+      position({ symbol: "DUST", marketValue: 0.5, costBasis: null }),
+    ], fx)).toEqual({ known: 1, missing: 1 });
+  });
+
+  test("Binance coverage counts a coin once across Spot and Earn, and requires a usable estimate", () => {
+    const positions = [
+      position({ id: "spot:BTC", symbol: "BTC", assetClass: "crypto", costBasis: null }),
+      position({ id: "earn:BTC", symbol: "BTC", assetClass: "crypto", costBasis: null }),
+      position({ symbol: "ETH", assetClass: "crypto", costBasis: null }),
+    ];
+    expect(profitLossCoverage("binance", positions, fx, [coin("BTC", 10), { ...coin("ETH", 0), pnlEstimate: null }])).toEqual({ known: 1, missing: 1 });
+    expect(profitLossCoverage("ibkr", [], fx)).toEqual({ known: 0, missing: 0 });
   });
 });
 

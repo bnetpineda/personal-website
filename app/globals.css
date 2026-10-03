@@ -27,7 +27,7 @@
   /* --accent (lime) is defined by the palette below; used for hover/highlight surfaces. */
   --accent-foreground: var(--accent-ink);
   --destructive: var(--danger);
-  --success: #0f8f45;
+  --success: #08783b;
   --warning: #f5b700;
   --warning-foreground: #15140f;
   --border: var(--ink);
@@ -197,7 +197,7 @@
   --ink-soft:     #45433a;
   --accent:       #b6f23a;     /* lime — the DNA */
   --accent-ink:   #15140F;
-  --danger:       #ff4d3d;
+  --danger:       #b82720;
 
   /* form (locked: Hard shadow + Soft corners) */
   --border-w:     3px;
@@ -225,6 +225,7 @@
   --paper-2:  #211f16;
   --ink:      #f1eee2;
   --ink-soft: #b4b0a0;
+  --danger:   #ff4d3d;
 }
 
 body {

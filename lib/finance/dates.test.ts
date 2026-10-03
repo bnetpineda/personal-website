@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addMonths, currentMonth, isMonth, monthRange, timeAgo, todayManila } from "./dates";
+import { addMonths, currentMonth, isMonth, monthComparison, monthRange, timeAgo, todayManila } from "./dates";
 
 describe("Manila calendar", () => {
   test("todayManila uses UTC+8, not the server's UTC date", () => {
@@ -29,5 +29,32 @@ describe("Manila calendar", () => {
     expect(timeAgo(new Date("2026-09-19T11:15:00Z"), now)).toBe("45 min ago");
     expect(timeAgo(new Date("2026-09-19T06:00:00Z"), now)).toBe("6 h ago");
     expect(timeAgo(new Date("2026-09-15T12:00:00Z"), now)).toBe("4 d ago");
+  });
+});
+
+describe("cash-flow comparison periods", () => {
+  test("October 3 compares three recorded days with September 1–3", () => {
+    expect(monthComparison("2026-10", "2026-10-03")).toEqual({
+      selected: { start: "2026-10-01", end: "2026-10-04" },
+      previous: { start: "2026-09-01", end: "2026-09-04" },
+      monthToDate: true,
+    });
+  });
+
+  test("caps both elapsed windows at the length of the shorter month", () => {
+    expect(monthComparison("2024-03", "2024-03-31")).toMatchObject({
+      selected: { start: "2024-03-01", end: "2024-03-30" },
+      previous: { start: "2024-02-01", end: "2024-03-01" },
+    });
+    expect(monthComparison("2026-03", "2026-03-31")?.selected.end).toBe("2026-03-29");
+  });
+
+  test("past months compare complete months across year boundaries; future months have no comparison", () => {
+    expect(monthComparison("2026-01", "2026-10-03")).toEqual({
+      selected: { start: "2026-01-01", end: "2026-02-01" },
+      previous: { start: "2025-12-01", end: "2026-01-01" },
+      monthToDate: false,
+    });
+    expect(monthComparison("2026-11", "2026-10-03")).toBeNull();
   });
 });

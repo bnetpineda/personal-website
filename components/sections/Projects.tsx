@@ -61,7 +61,7 @@ export function Projects() {
     <section className="section bg-pat" id="work">
       <div className="wrap">
         <SectionHead
-          idx="02"
+          idx="01"
           kicker="Things I've shipped"
           title="Selected Work"
           lead="Three products taken from idea to running code — AI, ops platforms, real-time marketplaces. Tap any gallery to scrub through the real screens."

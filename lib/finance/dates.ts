@@ -35,6 +35,21 @@ export function monthRange(month: string): { start: string; end: string } {
   return { start: `${month}-01`, end: `${addMonths(month, 1)}-01` };
 }
 
+/** Full completed months, or the same number of elapsed days in each month. Future months have no comparison. */
+export function monthComparison(month: string, today: string) {
+  const current = today.slice(0, 7);
+  if (month > current) return null;
+  const selected = monthRange(month);
+  const previous = monthRange(addMonths(month, -1));
+  const monthToDate = month === current;
+  if (monthToDate) {
+    const days = Math.min(Number(today.slice(8, 10)), daysBetween(previous.start, previous.end));
+    selected.end = addDays(selected.start, days);
+    previous.end = addDays(previous.start, days);
+  }
+  return { selected, previous, monthToDate };
+}
+
 export function monthLabel(month: string, style: "long" | "short" = "long"): string {
   const [y, m] = month.split("-").map(Number);
   return new Intl.DateTimeFormat("en-PH", { month: style, year: "numeric", timeZone: "UTC" }).format(
@@ -47,6 +62,16 @@ export function dayLabel(day: string): string {
   return new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(
     new Date(Date.UTC(y, m - 1, d))
   );
+}
+
+/** Inclusive calendar dates, with a year and shared month/year compressed for small screens. */
+export function dayRangeLabel(from: string, to: string): string {
+  const date = (day: string) => {
+    const [y, m, d] = day.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  };
+  return new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+    .formatRange(date(from), date(to));
 }
 
 function toUtcDays(day: string): number {

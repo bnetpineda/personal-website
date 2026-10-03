@@ -17,12 +17,15 @@ import {
   getFx,
   getLastEntryDefaults,
   getMonthlyTotals,
+  getPeriodTotals,
   getRecurring,
+  getStatementImports,
   type CashFlowRow,
 } from "@/lib/dal";
 import { budgetProgress, monthlySeries, savingsRate, sumInPhp } from "@/lib/finance/calc";
 import { CASH_FLOW_KINDS, type CashFlowKind } from "@/lib/finance/constants";
-import { addDays, addMonths, currentMonth, dayLabel, isMonth, monthLabel, monthRange, todayManila } from "@/lib/finance/dates";
+import { addDays, addMonths, currentMonth, dayLabel, dayRangeLabel, isMonth, monthComparison, monthLabel, monthRange, todayManila } from "@/lib/finance/dates";
+import { missingStatementProviders } from "@/lib/finance/imports/coverage";
 import { upcomingOccurrences } from "@/lib/finance/recurrence";
 import { deleteCashFlow, restoreCashFlow } from "../../_actions/cash-flows";
 import { BudgetsForm } from "../../_components/budgets-form";
@@ -33,6 +36,7 @@ import { FormSheet } from "../../_components/form";
 import { transactionsHref } from "../../_components/nav";
 import { OccurrenceList } from "../../_components/recurring";
 import { EditableRow } from "../../_components/row-actions";
+import { StatementCoverageNotice } from "../../_components/statement-coverage";
 import { EmptyState, Money, MonthPicker, PageHeader, Panel, Pct, StatCards, type BreakdownRow } from "../../_components/ui";
 
 export const metadata: Metadata = {
@@ -47,9 +51,9 @@ const KIND_TABS: { kind: CashFlowKind | null; label: string }[] = [
   { kind: "income", label: "Income" },
 ];
 
-/** Change vs last month as a signed percentage ("—" without a base). */
-const vsLast = (now: number, before: number, month: string) =>
-  before > 0 ? <><Pct value={(now - before) / before} tone />{` vs ${monthLabel(month, "short")}`}</> : `— vs ${monthLabel(month, "short")}`;
+/** Lower spending and higher income are improvements; the signed percentage still describes the change. */
+const changeHint = (now: number, before: number, kind: CashFlowKind, period: string) =>
+  before > 0 ? <><Pct value={(now - before) / before} tone lowerIsBetter={kind === "expense"} />{` vs ${period}`}</> : "No recorded comparison base";
 
 const budgetHint = (progress: { over: boolean; remaining: number } | null, empty: string) =>
   progress == null ? empty : progress.over ? <><Money value={Math.abs(progress.remaining)} /> over</> : <><Money value={progress.remaining} /> left</>;
@@ -60,11 +64,12 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   const today = todayManila(now);
   const current = currentMonth(now);
   const month = isMonth(params.month) ? params.month : current;
+  const comparison = monthComparison(month, today);
   const q = typeof params.q === "string" ? params.q.trim().slice(0, 100) : "";
   const kindParam = CASH_FLOW_KINDS.includes(params.kind as CashFlowKind) ? (params.kind as CashFlowKind) : null;
   const categoryParam = Number(params.category);
 
-  const [allCategories, entries, monthly, expenseTotals, incomeTotals, accounts, recurring, fx, suggestions, lastExpense, lastIncome] = await Promise.all([
+  const [allCategories, entries, monthly, expenseTotals, incomeTotals, accounts, recurring, fx, suggestions, lastExpense, lastIncome, statements, selectedPeriod, previousPeriod] = await Promise.all([
     getCategories(),
     getCashFlows({ kind: kindParam ?? undefined, month, q: q || undefined }),
     getMonthlyTotals(month, 12),
@@ -76,6 +81,9 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
     getEntrySuggestions(),
     getLastEntryDefaults("expense"),
     getLastEntryDefaults("income"),
+    getStatementImports(),
+    comparison?.monthToDate ? getPeriodTotals(comparison.selected.start, comparison.selected.end) : null,
+    comparison?.monthToDate ? getPeriodTotals(comparison.previous.start, comparison.previous.end) : null,
   ]);
 
   // A category filter implies its kind.
@@ -105,7 +113,15 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   // ---- month summary ----
   const series = monthlySeries(month, 12, monthly);
   const [prev, thisMonth] = series.slice(-2);
-  const rate = savingsRate(thisMonth.income, thisMonth.expense);
+  const missingStatements = missingStatementProviders(statements, month);
+  const missingPrevious = missingStatementProviders(statements, addMonths(month, -1));
+  const rate = missingStatements.length || month > current ? null : savingsRate(thisMonth.income, thisMonth.expense);
+  const compare = (kind: CashFlowKind) => {
+    if (!comparison) return "Future month · no comparison";
+    if (missingStatements.length || missingPrevious.length) return "Comparison unavailable · incomplete coverage";
+    return changeHint((selectedPeriod ?? thisMonth)[kind], (previousPeriod ?? prev)[kind], kind,
+      comparison.monthToDate ? "matched days" : monthLabel(addMonths(month, -1), "short"));
+  };
   const expenseCategories = allCategories.filter((c) => c.kind === "expense");
   const categorySpent = category?.kind === "expense" ? (expenseTotals.get(category.id) ?? 0) : 0;
   const categoryEarned = category?.kind === "income" ? (incomeTotals.get(category.id) ?? 0) : 0;
@@ -122,19 +138,19 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
         {
           label: `Spent · ${monthLabel(month, "short")}`,
           value: <Money value={thisMonth.expense} />,
-          hint: vsLast(thisMonth.expense, prev.expense, addMonths(month, -1)),
+          hint: compare("expense"),
           primary: kind !== "income",
         },
         {
           label: `Earned · ${monthLabel(month, "short")}`,
           value: <Money value={thisMonth.income} />,
-          hint: vsLast(thisMonth.income, prev.income, addMonths(month, -1)),
+          hint: compare("income"),
           primary: kind === "income",
         },
         {
-          label: "Net",
+          label: missingStatements.length ? "Recorded net" : "Net",
           value: <Money value={thisMonth.income - thisMonth.expense} signed tone />,
-          hint: rate != null ? <>Saved <Pct value={rate} /></> : "Savings rate: —",
+          hint: missingStatements.length ? "Savings rate unavailable · incomplete coverage" : rate != null ? <>{month === current ? "Month-to-date savings " : "Saved "}<Pct value={rate} /></> : "Savings rate: —",
         },
       ];
   // One category: only the cards that mean something for its kind.
@@ -235,6 +251,16 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
       </PageHeader>
 
       <StatCards items={visibleStats} />
+
+      {!q && <StatementCoverageNotice missing={missingStatements} month={month} />}
+      {!q && !missingStatements.length && <StatementCoverageNotice missing={missingPrevious} month={addMonths(month, -1)} comparisonOnly />}
+      {!q && comparison && (
+        <p className="mb-6 text-sm text-muted-foreground">
+          Comparison: {dayRangeLabel(comparison.selected.start, addDays(comparison.selected.end, -1))}
+          {" vs "}{dayRangeLabel(comparison.previous.start, addDays(comparison.previous.end, -1))}.
+          {comparison.monthToDate && " Equal-day windows; totals above reflect recorded activity this month."}
+        </p>
+      )}
 
       <div className="mb-6 flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

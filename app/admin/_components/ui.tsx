@@ -32,7 +32,7 @@ export function Money({
   return (
     <span
       className={cn(
-        "tabular-nums transition group-data-[private=true]/shell:blur-sm",
+        "tabular-nums transition group-data-[private=true]/shell:blur-sm group-data-[variant=primary]/card:text-primary-foreground",
         tone && value > 0 && "text-success",
         tone && value < 0 && "text-destructive"
       )}
@@ -42,10 +42,11 @@ export function Money({
   );
 }
 
-export function Pct({ value, tone = false }: { value: number | null; tone?: boolean }) {
+export function Pct({ value, tone = false, lowerIsBetter = false }: { value: number | null; tone?: boolean; lowerIsBetter?: boolean }) {
   if (value == null) return <span className="text-muted-foreground">—</span>;
+  const improvement = lowerIsBetter ? -value : value;
   return (
-    <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm", tone && value > 0 && "text-success", tone && value < 0 && "text-destructive")}>
+    <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm group-data-[variant=primary]/card:text-primary-foreground", tone && improvement > 0 && "text-success", tone && improvement < 0 && "text-destructive")}>
       {formatPct(value, { signed: tone })}
     </span>
   );

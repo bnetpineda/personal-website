@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getMonthlyTotals, getStatementBalances, getTeachGroups, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
+import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getMonthlyTotals, getStatementBalances, getStatementImports, getTeachGroups, getRecentCashFlows, getRecurring, getSnapshots } from "@/lib/dal";
 import { computeNetWorth, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, includedPositions, isConnectionStale } from "@/lib/finance/connections/types";
@@ -15,6 +15,7 @@ import { getNotifications } from "@/lib/finance/notifications-dal";
 import { dueOccurrences } from "@/lib/finance/recurrence";
 import { importedIncomeSince, monthlyIncome, repeatPayers } from "@/lib/finance/repeat-income";
 import { statementPositions } from "@/lib/finance/statement-balances";
+import { missingBalanceProviders, missingStatementProviders } from "@/lib/finance/imports/coverage";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
 import { deleteCashFlow, restoreCashFlow } from "../_actions/cash-flows";
 import { CashFlowForm, type FormCategory } from "../_components/cash-flow-form";
@@ -23,6 +24,7 @@ import { DismissNotificationButton } from "../_components/notification-controls"
 import { DuePanel } from "../_components/recurring";
 import { TeachJev } from "../_components/teach-jev";
 import { EditableRow } from "../_components/row-actions";
+import { StatementCoverageNotice } from "../_components/statement-coverage";
 import { EmptyState, MissingFxAlert, Money, PageHeader, Panel, Pct, StatCards } from "../_components/ui";
 
 export const metadata: Metadata = {
@@ -35,7 +37,7 @@ export default async function HomePage() {
   const today = todayManila(now);
   const month = currentMonth(now);
 
-  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts, received, balances, teach] = await Promise.all([
+  const [connections, fx, snapshots, monthly, recent, recurring, allCategories, accounts, alerts, received, balances, teach, statements] = await Promise.all([
     getConnections(),
     getFx(),
     getSnapshots(),
@@ -48,6 +50,7 @@ export default async function HomePage() {
     getImportedIncome(importedIncomeSince(today)),
     getStatementBalances(),
     getTeachGroups(),
+    getStatementImports(),
   ]);
   const formCategories: Record<CashFlowKind, FormCategory[]> = { expense: [], income: [] };
   for (const c of allCategories) formCategories[c.kind].push({ id: c.id, name: c.name, color: c.color, archived: c.archived });
@@ -68,7 +71,9 @@ export default async function HomePage() {
     return { provider, total: computeNetWorth([], [], fx, statementPositions(mine)), asOf: mine.map((b) => b.asOf).sort().at(-1)!, currencies: mine.map((b) => b.currency) };
   });
   const [thisMonth] = monthlySeries(month, 1, monthly);
-  const rate = savingsRate(thisMonth.income, thisMonth.expense);
+  const missingStatements = missingStatementProviders(statements, month);
+  const missingBalances = missingBalanceProviders(statements, balances);
+  const rate = missingStatements.length ? null : savingsRate(thisMonth.income, thisMonth.expense);
   const monthAgo = [...snapshots].reverse().find((s) => s.snapshotDate <= addDays(today, -30));
   const change = monthAgo ? nw.netWorthPhp - monthAgo.netWorthPhp : null;
 
@@ -90,24 +95,29 @@ export default async function HomePage() {
       <StatCards
         items={[
           {
-            label: "Net worth",
+            label: "Tracked net worth",
             value: <Money value={nw.netWorthPhp} />,
-            hint: change != null ? <><Money value={change} signed /> vs 30 days ago</> : "vs 30 days ago: —",
+            hint: <>
+              {missingBalances.length > 0 && <span className="mb-1 block">Excludes {missingBalances.map((p) => PROVIDER_META[p].name).join(" & ")} · balances missing</span>}
+              {change != null ? <><Money value={change} signed /> vs {dayLabel(monthAgo!.snapshotDate)}</> : "30-day history not available yet"}
+            </>,
             primary: true,
           },
           {
-            label: "Monthly income",
+            label: "Estimated monthly income",
             value: <Money value={income.total} />,
-            hint: payers.length ? `${payers.slice(0, 2).map((p) => p.name).join(", ")}${payers.length > 2 ? ` +${payers.length - 2} more` : ""} · last paid ${dayLabel(payers.map((p) => p.lastOn).sort().at(-1)!)}` : "Import a statement to see it",
+            hint: payers.length ? `Based on repeat payments · last paid ${dayLabel(payers.map((p) => p.lastOn).sort().at(-1)!)}` : income.total > 0 ? "Based on active income schedules" : "Import a statement to see it",
           },
-          { label: `In · ${monthLabel(month, "short")}`, value: <Money value={thisMonth.income} /> },
+          { label: `Recorded in · ${monthLabel(month, "short")}`, value: <Money value={thisMonth.income} />, hint: missingStatements.length ? "Provisional · awaiting statements" : "Month to date" },
           {
-            label: `Out · ${monthLabel(month, "short")}`,
+            label: `Recorded out · ${monthLabel(month, "short")}`,
             value: <Money value={thisMonth.expense} />,
-            hint: rate != null ? <>Saved <Pct value={rate} /></> : "Savings rate: —",
+            hint: missingStatements.length ? "Savings rate unavailable · incomplete coverage" : rate != null ? <>Saved <Pct value={rate} /></> : "Savings rate: —",
           },
         ]}
       />
+
+      <StatementCoverageNotice missing={missingStatements} month={month} />
 
       {needsYou.length > 0 && (
         <div className="mb-6">
@@ -147,7 +157,7 @@ export default async function HomePage() {
         <Panel
           title="Accounts"
           action={
-            connections.length + banks.length > 0 ? (
+            connections.length + banks.length + missingBalances.length > 0 ? (
               <Button asChild variant="ghost" size="sm">
                 <Link href="/admin/holdings">
                   Portfolio <ArrowRight />
@@ -162,7 +172,7 @@ export default async function HomePage() {
             )
           }
         >
-          {connections.length + banks.length === 0 ? (
+          {connections.length + banks.length + missingBalances.length === 0 ? (
             <EmptyState title="No accounts connected">Connect Binance or IBKR once and balances update by themselves every day. Wise comes in as statement CSVs.</EmptyState>
           ) : (
             <ItemGroup>
@@ -180,7 +190,7 @@ export default async function HomePage() {
                       <ItemContent>
                         <ItemTitle>
                           {PROVIDER_META[c.provider].name}
-                          {attention && <Badge variant="warning">Check</Badge>}
+                          {attention && <Badge variant="warning">{c.error ? "Sync failed" : c.historyError ? "History incomplete" : "Stale"}</Badge>}
                         </ItemTitle>
                         <ItemDescription>
                           {status}
@@ -204,6 +214,17 @@ export default async function HomePage() {
                     <ItemActions>
                       <span className="font-mono text-sm"><Money value={b.total.netWorthPhp} /></span>
                     </ItemActions>
+                  </Link>
+                </Item>
+              ))}
+              {missingBalances.map((provider) => (
+                <Item key={provider} size="sm" asChild>
+                  <Link href={`/admin/connections#${provider}`}>
+                    <ItemContent>
+                      <ItemTitle>{PROVIDER_META[provider].name}<Badge variant="warning">Balance missing</Badge></ItemTitle>
+                      <ItemDescription>Import a closing balance to include this account in tracked net worth.</ItemDescription>
+                    </ItemContent>
+                    <ItemActions><span className="font-mono text-sm">Unknown</span></ItemActions>
                   </Link>
                 </Item>
               ))}

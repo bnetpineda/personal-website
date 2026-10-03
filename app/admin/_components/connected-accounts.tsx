@@ -3,7 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { computeNetWorth, fxToPhp, type FxTable } from "@/lib/finance/calc";
+import { computeNetWorth, fxToPhp, knownCost, type FxTable } from "@/lib/finance/calc";
 import { SYNC_PROVIDERS, PROVIDER_META, isConnectionStale, type ConnectionView, type Provider } from "@/lib/finance/connections/types";
 import { dayLabel, monthLabel, timeAgo } from "@/lib/finance/dates";
 import type { StatementCoverage } from "@/lib/finance/imports/coverage";
@@ -47,7 +47,7 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
               : stale ? "Stale" : "Synced";
           const attention = Boolean(connection?.error || connection?.historyError || stale);
           return (
-            <Card key={provider}>
+            <Card key={provider} id={provider} className="scroll-mt-24">
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle>{meta.name}</CardTitle>
@@ -82,7 +82,7 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
             </Card>
           );
         })}
-        <Card>
+        <Card id="wise" className="scroll-mt-24">
           <CardHeader>
             <CardTitle>{PROVIDER_META.wise.name}</CardTitle>
             <CardDescription>{PROVIDER_META.wise.scope}</CardDescription>
@@ -95,7 +95,7 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
             <a href={PROVIDER_META.wise.docs} target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-4">How to download a Wise statement</a>
           </CardContent>
         </Card>
-        <Card>
+        <Card id="maribank" className="scroll-mt-24">
           <CardHeader>
             <CardTitle>{PROVIDER_META.maribank.name}</CardTitle>
             <CardDescription>{PROVIDER_META.maribank.scope}</CardDescription>
@@ -123,7 +123,7 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
                   <TableCell>{p.name}</TableCell><TableCell>{p.currency}</TableCell>
                   <TableCell className="text-right font-mono"><span className="group-data-[private=true]/shell:blur-sm">{formatQty(p.quantity)}</span></TableCell>
                   <TableCell className="text-right font-mono">{p.marketValue == null ? "Price unavailable" : <Money value={p.marketValue} currency={p.currency} />}</TableCell>
-                  <TableCell className="text-right font-mono">{p.costBasis == null ? "Unknown" : <Money value={p.costBasis} currency={p.currency} />}</TableCell>
+                  <TableCell className="text-right font-mono">{knownCost(p) == null ? "Unknown" : <Money value={knownCost(p)!} currency={p.currency} />}</TableCell>
                 </TableRow>)}</TableBody>
               </Table>
             )}

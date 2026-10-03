@@ -12,8 +12,8 @@ export default function Home() {
     <div className="site">
       <Hero />
       <MarqueeStrip items={MARQUEE_ITEMS} />
-      <About />
       <Projects />
+      <About />
       <Skills />
       <Contact />
       <Footer />

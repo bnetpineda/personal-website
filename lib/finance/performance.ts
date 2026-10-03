@@ -2,7 +2,7 @@ import { fxToPhp, isSmallHolding, knownCost, type FxTable } from "./calc";
 import { removeBinanceEarnReceipts } from "./connections/binance-positions";
 import type { ConnectedPosition, SyncProvider } from "./connections/types";
 import { todayManila } from "./dates";
-import type { HoldingCost } from "./imports/holding-costs";
+import { binanceHoldingRows, type HoldingCost } from "./imports/holding-costs";
 
 /*
  * Portfolio performance math. Pure (no I/O) and safe for client components — unit-tested with `bun test`.
@@ -30,6 +30,16 @@ export interface AccountTotals {
   pnlUsd: number | null;
   /** Currencies without an exchange rate; their positions are left out. */
   missingFx: string[];
+}
+
+/** Cost coverage for material investments. Cash and dust do not require a purchase basis. */
+export function profitLossCoverage(provider: SyncProvider, positions: readonly ConnectedPosition[], fx: FxTable, costs: readonly HoldingCost[] = []) {
+  const investments = (provider === "binance" ? binanceHoldingRows(positions) : positions)
+    .filter((p) => p.assetClass !== "cash" && p.marketValue !== 0 && !isSmallHolding(p.marketValue, p.currency, fx));
+  const missing = investments.filter((p) => provider === "binance"
+    ? !costs.some((c) => c.symbol === p.symbol && c.pnlEstimate != null)
+    : knownCost(p) == null).length;
+  return { known: investments.length - missing, missing };
 }
 
 /**

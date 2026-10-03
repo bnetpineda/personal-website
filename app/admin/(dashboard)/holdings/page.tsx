@@ -7,10 +7,10 @@ import { getConnections, getFx, getPortfolioSnapshots } from "@/lib/dal";
 import { allocation, computeNetWorth, fxToPhp, isSmallHolding, knownCost, type FxTable } from "@/lib/finance/calc";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
 import { isConnectionStale, PROVIDER_META, type ConnectionView, type SyncProvider } from "@/lib/finance/connections/types";
-import { addDays, dayLabel, timeAgo, todayManila } from "@/lib/finance/dates";
+import { addDays, dayLabel, dayRangeLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { getBinanceHoldingCosts } from "@/lib/finance/imports/dal";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
-import { accountTotals, changeSince, combineChanges, moverRows, snapshotDay, topMovers, withCurrent, type PortfolioPoint } from "@/lib/finance/performance";
+import { accountTotals, changeSince, combineChanges, moverRows, profitLossCoverage, snapshotDay, topMovers, withCurrent, type PortfolioPoint } from "@/lib/finance/performance";
 import { portfolioRows, savePortfolioRows } from "@/lib/finance/portfolio";
 import { AllocationChart } from "../../_components/charts";
 import { ConnectedValuationNotice } from "../../_components/connected-accounts";
@@ -80,14 +80,15 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
     if (!snapshot) return [];
     const costs = connection.provider === "binance" ? binanceCosts : [];
     const totals = accountTotals(connection.provider, snapshot.positions, fx, costs);
+    const coverage = profitLossCoverage(connection.provider, snapshot.positions, fx, costs);
     const saved = history
       .filter((h) => h.provider === connection.provider)
       .map((h): PortfolioPoint => ({ date: h.snapshotDate, valueUsd: h.valueUsd, pnlUsd: h.pnlUsd }));
     const points = withCurrent(saved, { date: snapshotDay(connection.provider, snapshot.asOf), valueUsd: totals.valueUsd, pnlUsd: totals.pnlUsd });
-    return [{ connection, costs, totals, points }];
+    return [{ connection, costs, totals, points, coverage }];
   });
 
-  const accounts: PortfolioAccount[] = tracked.map(({ connection, costs, totals, points }) => {
+  const accounts: PortfolioAccount[] = tracked.map(({ connection, costs, totals, points, coverage }) => {
     const { winners, losers } = topMovers(moverRows(connection.provider, connection.snapshot!.positions, fx, costs));
     const mover = (m: (typeof winners)[number]) => ({ symbol: m.symbol, pnl: toPage(m.pnlUsd), pnlPct: m.pnlPct });
     return {
@@ -108,6 +109,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       valueUsd: totals.valueUsd,
       pnl: totals.pnlUsd == null ? null : toPage(totals.pnlUsd),
       pnlPct: totals.pnlUsd != null && totals.costUsd ? totals.pnlUsd / totals.costUsd : null,
+      pnlPartial: coverage.missing > 0,
       points: points.map((p) => ({ date: p.date, value: toPage(p.valueUsd), pnl: p.pnlUsd == null ? null : toPage(p.pnlUsd) })),
       winners: winners.map(mover),
       losers: losers.map(mover),
@@ -119,7 +121,16 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
   const withCost = tracked.filter((a) => a.totals.pnlUsd != null);
   const pnlUsd = withCost.length ? withCost.reduce((sum, a) => sum + a.totals.pnlUsd!, 0) : null;
   const costUsd = withCost.reduce((sum, a) => sum + (a.totals.costUsd ?? 0), 0);
-  const month = combineChanges(tracked.map((a) => changeSince(a.points.map((p) => ({ date: p.date, value: p.valueUsd })), addDays(today, -30))));
+  const missingCosts = tracked.reduce((sum, a) => sum + a.coverage.missing, 0);
+  const estimatedPnl = withCost.some((a) => a.connection.provider === "binance");
+  const changes = tracked.flatMap((a) => {
+    const change = changeSince(a.points.map((p) => ({ date: p.date, value: p.valueUsd })), addDays(today, -30));
+    return change ? [{ change, to: a.points.at(-1)!.date }] : [];
+  });
+  const month = combineChanges(changes.map((a) => a.change));
+  const windows = new Set(changes.map((a) => `${a.change.from}|${a.to}`));
+  const periodHint = changes.length < tracked.length ? "Some accounts have no comparison history" : windows.size > 1
+    ? "Account date ranges differ · shown below" : changes.length ? dayRangeLabel(changes[0].change.from, changes[0].to) : "History starts today";
 
   // Visibility is independent of net-worth inclusion; pausing sync keeps the last positions visible.
   const positions = connections.flatMap((connection) =>
@@ -161,14 +172,17 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
             primary: true,
           },
           {
-            label: "Profit / loss",
+            label: missingCosts > 0 && pnlUsd != null ? "Partial profit / loss" : estimatedPnl ? "Estimated profit / loss" : "Profit / loss",
             value: pnlUsd == null ? "—" : <Money value={toPage(pnlUsd)} currency={currency} signed tone />,
-            hint: pnlUsd == null ? "Needs a cost basis" : <><Pct value={costUsd > 0 ? pnlUsd / costUsd : null} tone /> on <Money value={toPage(costUsd)} currency={currency} /> cost</>,
+            hint: pnlUsd == null ? "Needs a cost basis" : <>
+              <Pct value={costUsd > 0 ? pnlUsd / costUsd : null} tone /> on <Money value={toPage(costUsd)} currency={currency} /> known cost
+              {missingCosts > 0 && <span className="mt-1 block">Excludes {missingCosts} {missingCosts === 1 ? "holding" : "holdings"} without a cost basis</span>}
+            </>,
           },
           {
-            label: "Value · 30 days",
+            label: "Recent value change",
             value: month ? <Money value={toPage(month.change)} currency={currency} signed tone /> : "—",
-            hint: month ? <><Pct value={month.pct} tone /> since {dayLabel(month.from)}</> : "History starts today",
+            hint: month ? <><Pct value={month.pct} tone /><span className="mt-1 block">{periodHint}</span></> : "History starts today",
           },
         ]}
       />

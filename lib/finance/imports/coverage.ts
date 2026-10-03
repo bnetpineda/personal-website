@@ -1,5 +1,9 @@
 import type { Provider } from "../connections/types";
 import { addMonths } from "../dates";
+import type { StatementBalance } from "../statement-balances";
+
+export const STATEMENT_PROVIDERS = ["wise", "maribank"] as const;
+export type StatementProvider = (typeof STATEMENT_PROVIDERS)[number];
 
 export interface StatementCoverage {
   /** First and last month with imported activity ("YYYY-MM"). */
@@ -9,6 +13,19 @@ export interface StatementCoverage {
   importedAt: Date;
   /** Months between `from` and `to` with nothing imported: usually a statement not uploaded yet. */
   missing: string[];
+}
+
+/** Only banks already used in imports can leave a gap in the tracked cash flow. */
+export function missingStatementProviders(coverage: Partial<Record<Provider, StatementCoverage>>, month: string): StatementProvider[] {
+  return STATEMENT_PROVIDERS.filter((provider) => {
+    const bank = coverage[provider];
+    return bank != null && (month < bank.from || month > bank.to || bank.missing.includes(month));
+  });
+}
+
+/** An imported bank with no closing balance is omitted from tracked net worth, including when its activity is current. */
+export function missingBalanceProviders(coverage: Partial<Record<Provider, StatementCoverage>>, balances: readonly StatementBalance[]): StatementProvider[] {
+  return STATEMENT_PROVIDERS.filter((provider) => coverage[provider] != null && !balances.some((b) => b.provider === provider));
 }
 
 type MonthRow = { provider: Provider; month: string; entries: number; importedAt: Date | null };

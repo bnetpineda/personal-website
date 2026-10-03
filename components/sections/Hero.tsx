@@ -3,6 +3,7 @@ import { ArrowRight, Download } from "lucide-react";
 import { Reveal } from "@/components/ui/reveal";
 import { Typewriter } from "@/components/ui/typewriter";
 import { SocialRow } from "@/components/ui/social-row";
+import { Button } from "@/components/ui/button";
 import { SITE, TYPE_LINES, HERO_STATS, SOCIAL_LINKS } from "@/lib/constants";
 
 export function Hero() {
@@ -22,20 +23,23 @@ export function Hero() {
                 <br />
                 <span className="hl">endure</span>.
               </h1>
+              <p className="mb-6 max-w-xl font-sans text-lg text-foreground">
+                {SITE.role} building web and mobile apps with React, Next.js and TypeScript.
+              </p>
             </Reveal>
             <Reveal className="hero__type" delay={160}>
               <Typewriter lines={TYPE_LINES} />
             </Reveal>
-            <Reveal className="hero__cta" delay={220}>
-              <a className="btn btn--accent btn--lg" href="#work">
-                View work <ArrowRight size={18} />
-              </a>
-              <a className="btn btn--lg" href="#contact">
-                Get in touch
-              </a>
-              <a className="btn btn--ink btn--lg" href={SITE.resume} target="_blank" rel="noopener noreferrer">
-                <Download size={18} /> Resume
-              </a>
+            <Reveal className="mb-6 flex flex-wrap gap-3" delay={220}>
+              <Button asChild size="lg">
+                <a href="#work">View work <ArrowRight /></a>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <a href="#contact">Get in touch</a>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
+                <a href={SITE.resume} target="_blank" rel="noopener noreferrer"><Download /> Resume</a>
+              </Button>
             </Reveal>
             <Reveal className="hero__social" delay={280}>
               <SocialRow items={SOCIAL_LINKS.slice(0, 3)} />
@@ -54,7 +58,7 @@ export function Hero() {
             </div>
             <div className="stat-badge">
               <div className="v">
-                42.01<span style={{ fontSize: 14 }}>km</span>
+                42.01<span className="text-sm">km</span>
               </div>
               <div className="l">5h 42m · Leg 3</div>
             </div>

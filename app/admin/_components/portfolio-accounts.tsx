@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Swatch } from "@/components/ui/swatch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { SyncProvider } from "@/lib/finance/connections/types";
-import { addDays, dayLabel } from "@/lib/finance/dates";
+import { addDays, dayRangeLabel } from "@/lib/finance/dates";
 import { changeSince } from "@/lib/finance/performance";
 import { PortfolioChart, RANGES } from "./charts";
 import { EmptyState, Money, Pct } from "./ui";
@@ -27,6 +27,7 @@ export interface PortfolioAccount {
   valueUsd: number;
   pnl: number | null;
   pnlPct: number | null;
+  pnlPartial: boolean;
   /** Saved history ending in the live balances. */
   points: { date: string; value: number; pnl: number | null }[];
   winners: AccountMover[];
@@ -47,7 +48,7 @@ const label = "font-mono text-xs font-bold tracking-wider text-muted-foreground 
 
 /** Account cards with their charts; one range and one Value / P/L switch drive them all. */
 export function PortfolioAccounts({ accounts, currency, today }: { accounts: PortfolioAccount[]; currency: string; today: string }) {
-  const [range, setRange] = useState<string>("3M");
+  const [range, setRange] = useState<string>("1M");
   const [view, setView] = useState<View>("value");
   const days = RANGES.find((r) => r.value === range)?.days ?? 0;
   // "All" starts at the first saved day.
@@ -119,7 +120,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
 
         <dl className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex flex-col gap-1">
-            <dt className={label}>Profit / loss</dt>
+            <dt className={label}>{a.pnlPartial && a.pnl != null ? "Partial profit / loss" : a.provider === "binance" ? "Estimated profit / loss" : "Profit / loss"}</dt>
             <dd className="flex flex-wrap items-baseline gap-x-2 font-mono">
               {a.pnl == null ? (
                 <span className="text-muted-foreground">—</span>
@@ -134,7 +135,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
             </dd>
           </div>
           <div className="flex flex-col gap-1">
-            <dt className={label}>{change ? `${view === "pnl" ? "P/L since" : "Since"} ${dayLabel(change.from)}` : "Change"}</dt>
+            <dt className={label}>{view === "pnl" ? "P/L change" : "Value change"}</dt>
             <dd className="flex flex-wrap items-baseline gap-x-2 font-mono">
               {change ? (
                 <>
@@ -149,6 +150,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
                 <span className="text-muted-foreground">—</span>
               )}
             </dd>
+            {change && <dd className="text-xs text-muted-foreground">{dayRangeLabel(change.from, series.at(-1)!.date)}</dd>}
           </div>
         </dl>
 
