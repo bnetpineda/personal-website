@@ -29,6 +29,15 @@ test("changing totals, repeated pages and truncated responses reject the whole h
   await expect(fetchHistory(credentials, ioFor(() => ({ total: 2, rows: [rewards(1234567890000)] })), now)).rejects.toThrow("repeated");
   await expect(fetchHistory(credentials, ioFor(() => ({ total: 2, rows: [] })), now)).rejects.toThrow("incomplete");
 });
-test("IBKR history requires the separately configured query", async () => {
-  await expect(fetchHistory({ provider: "ibkr", token: "test-token", queryId: "123" })).rejects.toThrow("history Flex Query");
+test("IBKR history reads the last 30 days of the account's own query", async () => {
+  const io: ProviderIO = { json: unused, quotes: unused, pause: async () => {}, text: async (url) => {
+    if (url.pathname.endsWith("SendRequest")) {
+      expect(url.searchParams.get("q")).toBe("123");
+      expect(url.searchParams.get("p")).toBe("30");
+      return "<FlexStatementResponse><Status>Success</Status><ReferenceCode>999</ReferenceCode></FlexStatementResponse>";
+    }
+    return '<FlexQueryResponse><FlexStatements><FlexStatement accountId="TEST" fromDate="20260825" toDate="20260923"><CashTransactions></CashTransactions><Trades></Trades></FlexStatement></FlexStatements></FlexQueryResponse>';
+  } };
+  const result = await fetchHistory({ provider: "ibkr", token: "test-token", queryId: "123" }, io);
+  expect(result.coverage).toMatchObject({ from: "2026-08-25", to: "2026-09-23" });
 });

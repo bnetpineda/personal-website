@@ -10,7 +10,8 @@ import { accountConnections } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { sealCredentials } from "@/lib/finance/connections/crypto";
 import { syncAccount, syncAllAccounts } from "@/lib/finance/connections/service";
-import { credentialsSchema, syncProviderSchema, type SyncProvider } from "@/lib/finance/connections/types";
+import { credentialsSchema, expireAfterSchema, syncProviderSchema, type SyncProvider } from "@/lib/finance/connections/types";
+import { addDays, todayManila } from "@/lib/finance/dates";
 import type { FormState } from "@/lib/finance/schemas";
 import { ensureFx, snapshotQuietly } from "@/lib/finance/service";
 import { recordPortfolioQuietly } from "@/lib/finance/portfolio";
@@ -38,8 +39,8 @@ export async function saveConnection(_previous: FormState, data: FormData): Prom
   // Do not use invalid()/failure(formData): those helpers echo secrets to the client.
   if (!parsed.success) return { ok: false, message: "Check the connection details.", errors: z.flattenError(parsed.error).fieldErrors };
   const credentials = parsed.data;
-  const expiry = z.union([z.iso.date(), z.literal("")]).safeParse(data.get("credentialsExpireOn") ?? "");
-  if (!expiry.success) return { ok: false, message: "Check the credential expiry date." };
+  const expireAfter = expireAfterSchema.safeParse(data.get("credentialsExpireAfter") ?? "none");
+  if (!expireAfter.success) return { ok: false, message: "Check the credential expiry." };
   const db = getDb();
   try {
     const [current] = await db.select({ lastAttemptAt: accountConnections.lastAttemptAt }).from(accountConnections)
@@ -48,7 +49,7 @@ export async function saveConnection(_previous: FormState, data: FormData): Prom
       return { ok: false, message: "Wait one minute after the last sync before replacing credentials." };
     }
     const values = { encryptedCredentials: sealCredentials(credentials, env.sessionSecret()), enabled: true,
-      credentialsExpireOn: expiry.data || null, historySyncedAt: null, historyError: null, historyCoverage: null,
+      credentialsExpireOn: expireAfter.data === "none" ? null : addDays(todayManila(), expireAfter.data), historySyncedAt: null, historyError: null, historyCoverage: null,
       includeInNetWorth: false, snapshot: null, lastSyncedAt: null, lastAttemptAt: null, error: null, syncLease: null, leaseExpiresAt: null };
     await db.insert(accountConnections).values({ provider: credentials.provider, ...values })
       .onConflictDoUpdate({ target: accountConnections.provider, set: values });

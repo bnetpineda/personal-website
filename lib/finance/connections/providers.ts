@@ -83,15 +83,16 @@ async function binance(credentials: Extract<Credentials, { provider: "binance" }
   ] });
 }
 
-export async function fetchFlexReport(credentials: Extract<Credentials, { provider: "ibkr" }>, signal: AbortSignal, io: ProviderIO, queryId = credentials.queryId): Promise<string> {
-  const url = (endpoint: string, query: string) => new URL(`${FLEX}${endpoint}?${new URLSearchParams({ t: credentials.token, q: query, v: "3" })}`);
-  const request = flexResponse(await io.text(url("SendRequest", queryId), {}, signal));
+/** `days` asks for that many days up to today (Flex `p`, at most 365) instead of the query's saved period. */
+export async function fetchFlexReport(credentials: Extract<Credentials, { provider: "ibkr" }>, signal: AbortSignal, io: ProviderIO, days?: number): Promise<string> {
+  const url = (endpoint: string, params: Record<string, string>) => new URL(`${FLEX}${endpoint}?${new URLSearchParams({ t: credentials.token, ...params, v: "3" })}`);
+  const request = flexResponse(await io.text(url("SendRequest", { q: credentials.queryId, ...(days ? { p: String(days) } : {}) }), {}, signal));
   if (request.errorCode === "1012") throw new ConnectionError("Your IBKR Flex token has expired. Generate a new one in IBKR (Flex Web Service) and update this connection.");
   if (!request.reference) throw new ConnectionError(`IBKR could not generate the report (code ${request.errorCode ?? "unknown"}). Check the Flex token and query ID.`);
   // Bounded retries cover normal report generation without keeping a serverless job alive indefinitely.
   for (let attempt = 0; attempt < 4; attempt++) {
     await io.pause(attempt === 0 ? 1000 : 2000, signal);
-    const xml = await io.text(url("GetStatement", request.reference), {}, signal);
+    const xml = await io.text(url("GetStatement", { q: request.reference }), {}, signal);
     if (/<FlexQueryResponse(?:\s|>)/.test(xml)) return xml;
     const response = flexResponse(xml);
     if (response.errorCode !== "1019") {

@@ -64,7 +64,11 @@ describe("account API workflows", () => {
       ...baseIO, text: async (url, headers) => {
         expect(url.hostname).toBe("ndcdyn.interactivebrokers.com");
         expect(headers).toEqual({});
-        if (url.pathname.endsWith("SendRequest")) return '<FlexStatementResponse><Status>Success</Status><ReferenceCode>999</ReferenceCode><Url>https://untrusted.example/</Url></FlexStatementResponse>';
+        if (url.pathname.endsWith("SendRequest")) {
+          // Balances keep the query's own Last Business Day period.
+          expect(url.searchParams.has("p")).toBe(false);
+          return '<FlexStatementResponse><Status>Success</Status><ReferenceCode>999</ReferenceCode><Url>https://untrusted.example/</Url></FlexStatementResponse>';
+        }
         expect(url.searchParams.get("q")).toBe("999");
         return ++retrievals === 1 ? '<FlexStatementResponse><Status>Fail</Status><ErrorCode>1019</ErrorCode></FlexStatementResponse>' : flexFixture();
       },

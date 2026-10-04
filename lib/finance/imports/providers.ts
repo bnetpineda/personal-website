@@ -5,12 +5,15 @@ import type { Credentials } from "../connections/types";
 import { ImportError, uniqueEntries, type HistoryImport, type ImportEntry } from "./types";
 import { identifier, parseCapitalPage, parseIbkrHistory, parseRewardsPage } from "./provider-parsers";
 
+/** Each IBKR sync re-reads this many days of the account's query; entries already imported are skipped. */
+const IBKR_HISTORY_DAYS = 30;
+
 /** Rolling overlap repairs missed days and deduplicates by provider identity, not import time. */
 export async function fetchHistory(credentials: Credentials, io: ProviderIO = defaultIO, now = new Date(), range?: { from: string; to: string }, expectedAccount?: string): Promise<HistoryImport> {
   const signal = AbortSignal.timeout(45_000);
   if (credentials.provider === "ibkr") {
-    if (!credentials.historyQueryId) throw new ImportError("Add a history Flex Query ID to import IBKR transactions and earnings.");
-    return parseIbkrHistory(await fetchFlexReport(credentials, signal, io, credentials.historyQueryId));
+    // The balance query also carries Cash Transactions and Trades; history asks it for the last 30 days.
+    return parseIbkrHistory(await fetchFlexReport(credentials, signal, io, IBKR_HISTORY_DAYS));
   }
   const signed = await binanceReader(credentials, signal, io);
   const { uid } = z.object({ uid: identifier }).parse(await signed("/api/v3/account", { omitZeroBalances: "true" }));

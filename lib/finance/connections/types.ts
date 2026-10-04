@@ -42,12 +42,23 @@ export const PROVIDER_META = {
   },
 } as const;
 
+/** How long new credentials stay valid, like IBKR's "Should Expire After" list (6 hours to 1 year). */
+export const CREDENTIAL_LIFETIMES = [
+  { days: 7, label: "1 week" },
+  { days: 30, label: "1 month" },
+  { days: 90, label: "3 months" },
+  { days: 180, label: "6 months" },
+  { days: 365, label: "1 year" },
+] as const;
+/** The connect form's expiry choice: "none", or days from today until the credentials expire. */
+export const expireAfterSchema = z.union([z.literal("none"), z.coerce.number().int().min(1).max(365)]);
+
 const secret = z.string().trim().min(8, "Enter a valid credential").max(4096);
 const numericId = z.string().trim().regex(/^\d{1,30}$/, "Use the numeric ID from your account");
 export const credentialsSchema = z.discriminatedUnion("provider", [
   z.object({ provider: z.literal("binance"), apiKey: secret, apiSecret: secret }),
-  z.object({ provider: z.literal("ibkr"), token: secret, queryId: numericId,
-    historyQueryId: z.preprocess((v) => v === "" ? undefined : v, numericId.optional()) }),
+  // One query serves balances and history; an older saved history query ID is dropped.
+  z.object({ provider: z.literal("ibkr"), token: secret, queryId: numericId }),
 ]);
 export type Credentials = z.infer<typeof credentialsSchema>;
 

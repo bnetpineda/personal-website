@@ -193,7 +193,7 @@ function EmptyChart({ account: a, view }: { account: PortfolioAccount; view: Vie
       {view === "pnl"
         ? "P/L is saved every day; the chart starts with the next one."
         : a.provider === "ibkr"
-          ? "A point is saved after every statement. To load earlier days now, add Net Asset Value (NAV) in Base to your IBKR history query."
+          ? "A point is saved after every statement. To load earlier days now, add Net Asset Value (NAV) in Base to your IBKR Flex Query."
           : "A point is saved every day; the chart starts with the next one."}
     </EmptyState>
   );

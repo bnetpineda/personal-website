@@ -66,23 +66,26 @@ References: [Spot account](https://developers.binance.com/en/docs/catalog/core-t
 
 ## Interactive Brokers
 
-In IBKR Client Portal, enable Flex Web Service and generate a token. Create an **Activity Flex
+In IBKR Client Portal, enable Flex Web Service and generate a token. Create one **Activity Flex
 Query**, using **XML**, **Last Business Day**, and **yyyyMMdd** dates. Select:
 
 - Open Positions at **Summary** level, with Conid, Symbol, Description, Currency, Asset Category,
   Quantity, Position Value, Cost Basis Money, and Level of Detail.
 - Cash Report, with Currency and Ending Cash, including each currency's rows.
-
-Enter the Flex token and query ID in the dashboard. Tokens can expire; reconnect with a new
-token when needed. The server requests a report, then retrieves it with bounded retries.
-
-For automatic transactions and earnings, create a **second Activity Flex Query**, XML with
-**Last 30 Calendar Days** and **yyyyMMdd** dates. Enter its ID in **History Activity Flex Query ID**:
-
-- Cash Transactions: include all fields, particularly Transaction ID, Report Date, Currency,
+- Cash Transactions: **Detail** ticked (Summary rows only repeat its totals and are skipped; Summary
+  alone is rejected), with all fields, particularly Transaction ID, Report Date, Currency,
   Amount, Type and Description.
 - Trades: **Executions only**, with Trade ID, Trade Date, Symbol, Currency, Buy/Sell, Proceeds,
   Realized PNL, IB Commission, IB Commission Currency and Level of Detail.
+- Optionally, Net Asset Value (NAV) in Base, so Portfolio can chart days before tracking started.
+
+Enter the Flex token and query ID in the dashboard. Tokens expire: IBKR's **Should Expire After**
+defaults to 6 hours, so choose a longer lifetime (up to 1 year) when generating the token, then pick
+the same one under **Credentials expire after** for a reminder 7 days before it ends. Reconnect with
+a new token when needed. Each sync requests the same query twice: with its saved period (Last
+Business Day) for balances, and with the Flex Web Service `p` parameter set to 30 days for
+transactions and earnings. The server requests each report, then retrieves it with bounded
+retries. Re-reading the last 30 days skips entries already imported.
 
 Empty included sections are valid; missing sections, blank numeric fields and summary/lot
 trade rows fail the history import. History errors are separate from successfully updated balances.
@@ -354,8 +357,8 @@ Apply migration `0014_portfolio_snapshots` to production before deploying this v
 ## Private notifications
 
 The dashboard bell and `/admin/notifications` derive current alerts when the page is opened:
-failed/stale balance syncs, failed history imports, credential expiry within 7 days (a date supplied
-by the user), recurring bills within 3 days or overdue, debt due dates within 3 days, and expense
+failed/stale balance syncs, failed history imports, credential expiry within 7 days (from the
+lifetime chosen when connecting), recurring bills within 3 days or overdue, debt due dates within 3 days, and expense
 budgets at 85%/100%. The expiry reminder can be edited without re-entering credentials.
 Budget totals include posted transactions only. A recorded debt payment in the due month suppresses
 that debt's upcoming reminder; confirm payment adequacy with the lender's statement.

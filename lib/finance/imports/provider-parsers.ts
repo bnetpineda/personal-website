@@ -86,10 +86,13 @@ export function parseIbkrHistory(xml: string): HistoryImport {
     accounts.push(accountKey);
     from.push(date(s["@_fromDate"])); to.push(date(s["@_toDate"]));
     nav.push(...navPoints(s, accountKey, from.at(-1)!, to.at(-1)!));
-    if (s.CashTransactions === undefined || s.Trades === undefined) throw new ImportError("Add Cash Transactions and Trades (Executions) to the history Flex Query.");
+    if (s.CashTransactions === undefined || s.Trades === undefined) throw new ImportError("Add Cash Transactions and Trades (Executions) to the IBKR Flex Query.");
     const cash = s.CashTransactions === "" ? {} : record.parse(s.CashTransactions);
-    for (const raw of array(cash.CashTransaction)) {
-      const r = record.parse(raw);
+    const cashRows = array(cash.CashTransaction).map((raw) => record.parse(raw));
+    // Summary rows repeat the detail rows' totals without a transaction ID, so only Detail rows are read.
+    const detailRows = cashRows.filter((r) => r["@_levelOfDetail"] !== "SUMMARY");
+    if (cashRows.length && !detailRows.length) throw new ImportError("Tick Detail for Cash Transactions in the IBKR Flex Query.");
+    for (const r of detailRows) {
       const type = z.string().min(1).parse(r["@_type"]);
       const lower = type.toLowerCase();
       const kind: EntryKind = lower.includes("tax") ? "tax" : lower.includes("dividend") || lower.includes("payment in lieu") ? "dividend" :
@@ -104,7 +107,7 @@ export function parseIbkrHistory(xml: string): HistoryImport {
     const trades = s.Trades === "" ? {} : record.parse(s.Trades);
     for (const raw of array(trades.Trade)) {
       const r = record.parse(raw);
-      if (r["@_levelOfDetail"] !== "EXECUTION") throw new ImportError("Choose only Executions for Trades in the history Flex Query.");
+      if (r["@_levelOfDetail"] !== "EXECUTION") throw new ImportError("Choose only Executions for Trades in the IBKR Flex Query.");
       const externalId = `trade:${identifier.parse(r["@_tradeID"])}`;
       const base = { provider: "ibkr" as const, accountKey, occurredOn: date(r["@_tradeDate"]), currency: asset.parse(r["@_currency"]) };
       entries.push({ ...base, externalId, kind: "trade", amount: numeric.parse(r["@_proceeds"]),

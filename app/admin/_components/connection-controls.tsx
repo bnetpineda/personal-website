@@ -8,8 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/types";
+import { CREDENTIAL_LIFETIMES, PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/types";
 import type { FormState } from "@/lib/finance/schemas";
 import { disconnectAccount, saveConnection, saveConnectionExpiry, syncConnections, updateConnection } from "../_actions/connections";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
@@ -30,17 +31,16 @@ function ConnectionForm({ provider }: { provider: SyncProvider }) {
         </p>
       ) : (
         <div className="flex flex-col gap-3 text-sm text-muted-foreground">
-          <p>In IBKR, enable Flex Web Service and create an Activity Flex Query:</p>
+          <p>In IBKR, enable Flex Web Service and create one Activity Flex Query:</p>
           <ol className="list-decimal space-y-2 pl-5">
             <li>Choose XML, Last Business Day, and date format yyyyMMdd.</li>
             <li>Include Open Positions at Summary level: Conid, Symbol, Description, Currency, Asset Category, Quantity, Position Value, Cost Basis Money, and Level of Detail.</li>
             <li>Include Cash Report with Currency and Ending Cash, including rows for each currency.</li>
-            <li>For history, create a second XML Activity Flex Query covering Last 30 Calendar Days, with yyyyMMdd dates.</li>
-            <li>Include Cash Transactions with all fields, including Transaction ID, Report Date, Currency, Amount, Type and Description.</li>
+            <li>Include Cash Transactions with Detail ticked and all fields, including Transaction ID, Report Date, Currency, Amount, Type and Description.</li>
             <li>Include Trades at Executions level only: Trade ID, Trade Date, Symbol, Currency, Buy/Sell, Proceeds, Realized PNL, IB Commission, IB Commission Currency and Level of Detail.</li>
             <li>Optionally include Net Asset Value (NAV) in Base, so Portfolio can chart the days before tracking started.</li>
           </ol>
-          <p>Reports update after the trading day. Keep the token expiry date in mind.</p>
+          <p>Balances come from the last business day and history from the last 30 days. Reports update after the trading day. When you generate the token, change Should Expire After from IBKR&apos;s 6-hour default.</p>
         </div>
       )}
       <Button asChild variant="link" className="self-start">
@@ -54,11 +54,14 @@ function ConnectionForm({ provider }: { provider: SyncProvider }) {
               maxLength={field.secret ? 4096 : 30} required aria-invalid={Boolean(error(field.key))} disabled={pending} />
           </FormField>
         ))}
-        {provider === "ibkr" && <FormField id="ibkr-history-query" label="History Activity Flex Query ID (optional)" description="Use the separate 30-day query to import dividends, cash movements and trade results.">
-          <Input id="ibkr-history-query" name="historyQueryId" inputMode="numeric" maxLength={30} autoComplete="off" disabled={pending} />
-        </FormField>}
-        <FormField id={`${provider}-expires`} label="Credential expiry date (optional)" description="Saved reminders appear 7 days before this date. The provider does not supply this date automatically.">
-          <DatePicker id={`${provider}-expires`} name="credentialsExpireOn" disabled={pending} />
+        <FormField id={`${provider}-expires`} label="Credentials expire after" description="Choose what you picked when creating them. A reminder appears 7 days before they expire.">
+          <Select name="credentialsExpireAfter" defaultValue="none" disabled={pending}>
+            <SelectTrigger id={`${provider}-expires`}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No reminder</SelectItem>
+              {CREDENTIAL_LIFETIMES.map((lifetime) => <SelectItem key={lifetime.days} value={String(lifetime.days)}>{lifetime.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </FormField>
       </FieldGroup>
       <p className="text-sm text-muted-foreground">Credentials are encrypted on the server. This connection only reads your account.</p>

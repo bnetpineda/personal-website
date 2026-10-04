@@ -104,6 +104,11 @@ describe("provider history", () => {
     expect(result.entries[2].realizedPnl).toBe(9);
     expect(result.coverage.from).toBe("2026-09-01");
     expect(() => parseIbkrHistory(history('', '<Trade levelOfDetail="SUMMARY" />'))).toThrow("Executions");
+    // Summary rows (no transaction ID) are skipped next to Detail rows; Summary alone would import nothing.
+    const summary = '<CashTransaction transactionID="" reportDate="20260920" currency="USD" amount="12" type="Dividends" levelOfDetail="SUMMARY" />';
+    const detail = '<CashTransaction transactionID="1" reportDate="20260920" currency="USD" amount="12" type="Dividends" levelOfDetail="DETAIL" />';
+    expect(parseIbkrHistory(history(summary + detail)).entries.map((e) => e.externalId)).toEqual(["cash:1"]);
+    expect(() => parseIbkrHistory(history(summary))).toThrow("Tick Detail");
     expect(() => parseIbkrHistory(history('').replace('<Trades></Trades>', ''))).toThrow("Cash Transactions and Trades");
   });
   test("IBKR daily NAV is optional, read in the base currency, and never fails the history", () => {

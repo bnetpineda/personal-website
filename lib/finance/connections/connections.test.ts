@@ -3,7 +3,7 @@ import { computeNetWorth } from "../calc";
 import { openCredentials, sealCredentials } from "./crypto";
 import { flexFixture } from "./fixtures";
 import { assertReadOnlyBinance, flexResponse, parseBinanceBalances, parseEarnPage, parseIbkrStatement } from "./parsers";
-import { includedPositions, isConnectionStale, type ConnectedPosition, type Credentials } from "./types";
+import { credentialsSchema, expireAfterSchema, includedPositions, isConnectionStale, type ConnectedPosition, type Credentials } from "./types";
 
 describe("account credentials", () => {
   const secret = "only-a-test-encryption-secret-at-least-32-characters";
@@ -19,6 +19,15 @@ describe("account credentials", () => {
     parts[3] = (parts[3][0] === "A" ? "B" : "A") + parts[3].slice(1);
     expect(() => openCredentials(parts.join("."), "binance", secret)).toThrow();
     expect(() => sealCredentials(credentials, "short")).toThrow();
+  });
+  test("IBKR keeps one query ID and drops an older saved history query ID", () => {
+    const ibkr = { provider: "ibkr" as const, token: "test-flex-token", queryId: "123" };
+    expect(credentialsSchema.parse({ ...ibkr, historyQueryId: "456" })).toEqual(ibkr);
+  });
+  test("credential expiry is a lifetime of at most a year, or no reminder", () => {
+    expect(expireAfterSchema.parse("none")).toBe("none");
+    expect(expireAfterSchema.parse("365")).toBe(365);
+    for (const value of ["", "0", "366", "1.5"]) expect(expireAfterSchema.safeParse(value).success).toBe(false);
   });
 });
 
