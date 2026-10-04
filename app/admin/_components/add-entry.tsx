@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
@@ -18,15 +19,37 @@ export interface AddEntryProps {
   defaults: Record<CashFlowKind, CashFlowFormProps["defaults"]>;
 }
 
-/** Manual entry for the odd cash payment; synced accounts cover the rest. */
+const requestedKind = (value: string | null): CashFlowKind | null => (value === "expense" || value === "income" ? value : null);
+
+/**
+ * Manual entry for the odd cash payment; synced accounts cover the rest. `?add=expense` or
+ * `?add=income` (the ⌘K menu, from any page) opens it, then the parameter is dropped.
+ */
 export function AddEntry({ kind: initialKind, categories, accounts, suggestions, defaults }: AddEntryProps) {
-  const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState(initialKind);
+  const requested = useSearchParams().get("add");
+  const [open, setOpen] = useState(requestedKind(requested) != null);
+  const [kind, setKind] = useState(requestedKind(requested) ?? initialKind);
+  const [seen, setSeen] = useState(requested);
+  if (requested !== seen) {
+    setSeen(requested);
+    const asked = requestedKind(requested);
+    if (asked) {
+      setKind(asked);
+      setOpen(true);
+    }
+  }
+  useEffect(() => {
+    if (!requested) return;
+    const rest = new URLSearchParams(window.location.search);
+    rest.delete("add");
+    const query = rest.toString();
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+  }, [requested]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button>
+        <Button size="sm">
           <Plus /> Add
         </Button>
       </SheetTrigger>

@@ -200,12 +200,21 @@ export function RowActions<D>({
 export function EditableRow<D>({
   media,
   aside,
+  extra,
+  size = "sm",
   children,
   ...actions
-}: RowActionsProps<D> & { media?: ReactNode; aside?: ReactNode; children: ReactNode }) {
+}: RowActionsProps<D> & {
+  media?: ReactNode;
+  aside?: ReactNode;
+  /** Controls of their own next to the "…" menu (above the row's tap area), e.g. a category picker. */
+  extra?: ReactNode;
+  size?: "sm" | "xs";
+  children: ReactNode;
+}) {
   const [editing, setEditing] = useState(false);
   return (
-    <Item size="sm" variant="interactive">
+    <Item size={size} variant="interactive">
       <button
         type="button"
         onClick={() => setEditing(true)}
@@ -217,6 +226,7 @@ export function EditableRow<D>({
         {aside}
       </button>
       <ItemActions>
+        {extra}
         <RowActions {...actions} editOpen={editing} onEditOpenChange={setEditing} />
       </ItemActions>
     </Item>

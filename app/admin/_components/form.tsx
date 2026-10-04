@@ -22,6 +22,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { initialFormState, type FormState } from "@/lib/finance/schemas";
 
@@ -70,9 +71,12 @@ export function FormSheetContent({
         <SheetTitle>{title}</SheetTitle>
         <SheetDescription>{description ?? title}</SheetDescription>
       </SheetHeader>
-      <div className="flex-1 overflow-y-auto px-4 pb-8">
-        <FormSheetContext.Provider value={{ close: onClose }}>{children}</FormSheetContext.Provider>
-      </div>
+      {/* The house scrollbar (shows on hover), like the dashboard panels. */}
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-4 pb-8">
+          <FormSheetContext.Provider value={{ close: onClose }}>{children}</FormSheetContext.Provider>
+        </div>
+      </ScrollArea>
     </SheetContent>
   );
 }

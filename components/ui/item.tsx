@@ -45,6 +45,8 @@ const itemVariants = cva(
       size: {
         default: "gap-4 p-4",
         sm: "gap-2.5 px-4 py-3",
+        /** Dense lists in `Card size="sm"`: text lines up with the card title, hover bleeds into the padding. */
+        xs: "-mx-2 gap-2.5 px-2 py-2",
       },
     },
     defaultVariants: {
@@ -132,15 +134,31 @@ function ItemTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function ItemDescription({ className, ...props }: React.ComponentProps<"p">) {
+const itemDescriptionVariants = cva(
+  "text-sm leading-normal font-normal text-balance text-muted-foreground [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
+  {
+    variants: {
+      /** Lines shown before the text is cut with an ellipsis (1: dense feeds; pass `title` with the full text). */
+      clamp: {
+        1: "line-clamp-1",
+        2: "line-clamp-2",
+      },
+    },
+    defaultVariants: {
+      clamp: 2,
+    },
+  }
+)
+
+function ItemDescription({
+  className,
+  clamp,
+  ...props
+}: React.ComponentProps<"p"> & VariantProps<typeof itemDescriptionVariants>) {
   return (
     <p
       data-slot="item-description"
-      className={cn(
-        "line-clamp-2 text-sm leading-normal font-normal text-balance text-muted-foreground",
-        "[&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
-        className
-      )}
+      className={cn(itemDescriptionVariants({ clamp }), className)}
       {...props}
     />
   )

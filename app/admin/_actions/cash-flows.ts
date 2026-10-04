@@ -178,3 +178,26 @@ export async function restoreCashFlow(row: RestoreCashFlowInput): Promise<FormSt
   if (inserted.length === 0) return failure("It's already back.");
   return { ok: true, message: `Restored ${input.description}.` };
 }
+
+/**
+ * Moves one entry to another category of the same kind (the dashboard's quick category picker).
+ * Hands back the category it had, so the toast can offer "Undo".
+ */
+export async function setCashFlowCategory(id: string, categoryId: number, { undo = false }: { undo?: boolean } = {}): Promise<FormState & { previous?: number }> {
+  await requireAdmin();
+  const entryId = idSchema.safeParse(id);
+  if (!entryId.success || !Number.isInteger(categoryId) || categoryId <= 0) return failure("Unknown entry.");
+  const db = getDb();
+  const [[entry], [category]] = await Promise.all([
+    db.select({ kind: cashFlows.kind, categoryId: cashFlows.categoryId, description: cashFlows.description }).from(cashFlows).where(eq(cashFlows.id, entryId.data)).limit(1),
+    db.select().from(categories).where(eq(categories.id, categoryId)).limit(1),
+  ]);
+  if (!entry) return failure("That entry no longer exists.");
+  if (!category || category.kind !== entry.kind) return failure("Pick a category of the same type.");
+  if (entry.categoryId === category.id) return { ok: true, previous: entry.categoryId };
+  // Archived categories can't take entries, except the one an Undo puts back.
+  if (category.archived && !undo) return failure("That category is archived.");
+  await db.update(cashFlows).set({ categoryId: category.id, updatedAt: new Date() }).where(eq(cashFlows.id, entryId.data));
+  revalidatePath("/admin", "layout");
+  return { ok: true, message: `${entry.description} → ${category.name}`, previous: entry.categoryId };
+}

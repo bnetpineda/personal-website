@@ -64,6 +64,12 @@ export function dayLabel(day: string): string {
   );
 }
 
+/** "Feb 28": a day without its weekday, for tight spots. */
+export function shortDayLabel(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
 /** Inclusive calendar dates, with a year and shared month/year compressed for small screens. */
 export function dayRangeLabel(from: string, to: string): string {
   const date = (day: string) => {

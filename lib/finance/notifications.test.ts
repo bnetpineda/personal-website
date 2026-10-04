@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ConnectionView } from "./connections/types";
-import { buildNotifications } from "./notifications";
+import { buildNotifications, groupAlerts } from "./notifications";
 
 const now = new Date("2026-09-24T04:00:00Z");
 const connection: ConnectionView = { provider: "ibkr", enabled: true, includeInNetWorth: false, snapshot: null,
@@ -40,4 +40,18 @@ test("statement banks remind about a closed month, gaps, and a later start than 
   // Up to date and complete: nothing to say.
   expect(buildNotifications({ connections: [], budgets: [], bills: [], statements: {
     wise: { from: "2026-06", to: "2026-09", entries: 45, importedAt: at, missing: [] } } }, now)).toEqual([]);
+});
+
+test("an account's alerts group into one row; the rest stay single", () => {
+  const ibkr: ConnectionView = { ...connection, error: null, historyError: "Add a history Flex Query ID.", credentialsExpireOn: "2026-09-20" };
+  const alerts = buildNotifications({ connections: [ibkr], budgets: [{ id: 1, name: "Food", budget: 100, spent: 90 }], bills: [] }, now);
+  const groups = groupAlerts(alerts);
+  expect(groups.map((g) => g.key)).toEqual(["provider:ibkr", "budget:2026-09:1:85"]);
+  const [account, budget] = groups;
+  expect(account).toMatchObject({ provider: "ibkr", title: "IBKR", href: "/admin/connections#ibkr", types: ["sync", "history", "expiry"] });
+  expect(account.lines.map((l) => l.label)).toEqual(["Sync needs attention", "History needs attention", "Credential expired"]);
+  expect(account.keys).toHaveLength(3);
+  // The expired credential makes the whole account urgent.
+  expect(account.severity).toBe("destructive");
+  expect(budget).toMatchObject({ provider: null, title: "Food budget nearly used", lines: [{ label: null }] });
 });

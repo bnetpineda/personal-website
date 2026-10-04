@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { cn } from "@/lib/utils";
 import { Link2, RefreshCw, Unplug } from "lucide-react";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CREDENTIAL_LIFETIMES, PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/types";
 import type { FormState } from "@/lib/finance/schemas";
 import { disconnectAccount, saveConnection, saveConnectionExpiry, syncConnections, updateConnection } from "../_actions/connections";
@@ -94,7 +96,8 @@ export function ConnectAccountButton({ provider, connected = false }: { provider
   );
 }
 
-export function SyncConnectionsButton({ provider, disabled = false }: { provider?: SyncProvider; disabled?: boolean }) {
+/** `compact` (the dashboard header): an icon below 2xl, and the outcome is announced and toasted without a line under the button. */
+export function SyncConnectionsButton({ provider, disabled = false, compact = false }: { provider?: SyncProvider; disabled?: boolean; compact?: boolean }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const run = () => startTransition(async () => {
@@ -107,12 +110,44 @@ export function SyncConnectionsButton({ provider, disabled = false }: { provider
     }
   });
   return (
-    <div className="flex flex-col items-start gap-1">
-      <Button variant="outline" size="sm" onClick={run} disabled={pending || disabled}>
-        {pending ? <Spinner /> : <RefreshCw />}{pending ? "Syncing…" : provider ? "Sync now" : "Sync accounts"}
+    <div className={cn("flex flex-col items-start gap-1", compact && "relative")}>
+      <Button variant="outline" size="sm" onClick={run} disabled={pending || disabled} aria-label={compact ? (provider ? "Sync now" : "Sync accounts") : undefined}>
+        {pending ? <Spinner /> : <RefreshCw />}
+        <span className={cn(compact && "hidden 2xl:inline")}>{pending ? "Syncing…" : provider ? "Sync now" : "Sync accounts"}</span>
       </Button>
-      <span role="status" aria-live="polite" className="text-xs text-muted-foreground">{message}</span>
+      <span role="status" aria-live="polite" className={cn("text-xs text-muted-foreground", compact && "sr-only")}>{message}</span>
     </div>
+  );
+}
+
+/** One account's sync in place: an icon button (account rows) or a small "Sync now" (alerts). */
+export function SyncNowButton({ provider, label = false, disabled = false }: { provider: SyncProvider; label?: boolean; disabled?: boolean }) {
+  const [pending, startTransition] = useTransition();
+  const name = PROVIDER_META[provider].name;
+  const run = () => startTransition(async () => {
+    try {
+      notify(await syncConnections(provider));
+    } catch {
+      notify({ ok: false, message: `${name} sync failed. Try again.` });
+    }
+  });
+  if (label) {
+    return (
+      <Button variant="outline" size="xs" onClick={run} disabled={pending || disabled}>
+        {pending ? <Spinner /> : <RefreshCw />}
+        {pending ? "Syncing…" : "Sync now"}
+      </Button>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-sm" onClick={run} disabled={pending || disabled} aria-label={`Sync ${name} now`}>
+          {pending ? <Spinner /> : <RefreshCw />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Sync {name} now</TooltipContent>
+    </Tooltip>
   );
 }
 

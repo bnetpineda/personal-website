@@ -21,11 +21,11 @@ export function whenLabel(date: string, today: string): string {
 }
 
 /** Scheduled occurrences, signed (+ income / − expense) so a mixed list reads as cash flow. */
-export function OccurrenceList({ items, today }: { items: Occurrence<RecurringRow>[]; today: string }) {
+export function OccurrenceList({ items, today, size = "sm" }: { items: Occurrence<RecurringRow>[]; today: string; size?: "sm" | "xs" }) {
   return (
     <ItemGroup>
       {items.map(({ item: r, date }) => (
-        <Item key={`${r.id}-${date}`} size="sm">
+        <Item key={`${r.id}-${date}`} size={size}>
           <ItemMedia>
             <Swatch color={r.categoryColor} />
           </ItemMedia>
@@ -47,66 +47,72 @@ export function OccurrenceList({ items, today }: { items: Occurrence<RecurringRo
   );
 }
 
-/**
- * "Needs confirming": due occurrences of items that wait for confirmation, each with
- * Post / adjust / Skip, plus "Post all" when there's more than one.
- */
-export function DuePanel({
-  due,
-  today,
-  categories,
-  accounts,
-}: {
+interface DueProps {
   due: Occurrence<RecurringRow>[];
   today: string;
   categories: Record<CashFlowKind, FormCategory[]>;
   accounts: string[];
-}) {
-  if (due.length === 0) return null;
+}
+
+/** Due occurrences of items that wait for confirmation, each with Post / adjust / Skip. */
+export function DueList({ due, today, categories, accounts, size = "sm" }: DueProps & { size?: "sm" | "xs" }) {
   return (
-    <Panel
-      title={`Needs confirming · ${due.length}`}
-      action={due.length > 1 ? <PostAllButton occurrences={due.map(({ item, date }) => ({ id: item.id, on: date }))} /> : undefined}
-    >
-      <ItemGroup>
-        {due.map(({ item: r, date }) => (
-          <Item key={`${r.id}-${date}`} size="sm">
-            <ItemMedia>
-              <Swatch color={r.categoryColor} />
-            </ItemMedia>
-            <ItemContent>
-              <ItemTitle>{r.description}</ItemTitle>
-              <ItemDescription>
-                {whenLabel(date, today)} · <Money value={r.kind === "expense" ? -r.amount : r.amount} currency={r.currency} signed tone />
-              </ItemDescription>
-            </ItemContent>
-            <ItemActions>
-              <DueActions
-                name={r.description}
-                occurrence={{ id: r.id, on: date }}
-                onSkip={skipRecurring.bind(null, r.id, date)}
-                form={
-                  <CashFlowForm
-                    kind={r.kind}
-                    categories={categories[r.kind]}
-                    accounts={accounts}
-                    recurring={{ id: r.id, on: date }}
-                    defaults={{
-                      occurredOn: date,
-                      amount: r.amount,
-                      currency: r.currency,
-                      categoryId: r.categoryId,
-                      description: r.description,
-                      account: r.account,
-                      notes: r.notes,
-                    }}
-                  />
-                }
-              />
-            </ItemActions>
-          </Item>
-        ))}
-      </ItemGroup>
+    <ItemGroup>
+      {due.map(({ item: r, date }) => (
+        <Item key={`${r.id}-${date}`} size={size}>
+          <ItemMedia>
+            <Swatch color={r.categoryColor} />
+          </ItemMedia>
+          <ItemContent>
+            <ItemTitle>{r.description}</ItemTitle>
+            <ItemDescription>
+              {whenLabel(date, today)} · <Money value={r.kind === "expense" ? -r.amount : r.amount} currency={r.currency} signed tone />
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <DueActions
+              name={r.description}
+              occurrence={{ id: r.id, on: date }}
+              onSkip={skipRecurring.bind(null, r.id, date)}
+              form={
+                <CashFlowForm
+                  kind={r.kind}
+                  categories={categories[r.kind]}
+                  accounts={accounts}
+                  recurring={{ id: r.id, on: date }}
+                  defaults={{
+                    occurredOn: date,
+                    amount: r.amount,
+                    currency: r.currency,
+                    categoryId: r.categoryId,
+                    description: r.description,
+                    account: r.account,
+                    notes: r.notes,
+                  }}
+                />
+              }
+            />
+          </ItemActions>
+        </Item>
+      ))}
+    </ItemGroup>
+  );
+}
+
+/** Posts every due occurrence at its saved amount. */
+export function PostAllDue({ due }: { due: Occurrence<RecurringRow>[] }) {
+  return <PostAllButton occurrences={due.map(({ item, date }) => ({ id: item.id, on: date }))} />;
+}
+
+/**
+ * "Needs confirming": due occurrences of items that wait for confirmation, each with
+ * Post / adjust / Skip, plus "Post all" when there's more than one.
+ */
+export function DuePanel(props: DueProps) {
+  if (props.due.length === 0) return null;
+  return (
+    <Panel title={`Needs confirming · ${props.due.length}`} action={props.due.length > 1 ? <PostAllDue due={props.due} /> : undefined}>
+      <DueList {...props} />
     </Panel>
   );
 }

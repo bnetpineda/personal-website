@@ -167,7 +167,7 @@ export default async function RecurringPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Scheduled" title="Recurring" back={{ href: "/admin/settings", label: "Settings" }}>
+      <PageHeader eyebrow="Scheduled" title="Recurring" back={{ href: "/admin", label: "Overview" }}>
         {addButton("income")}
         {addButton("expense")}
       </PageHeader>

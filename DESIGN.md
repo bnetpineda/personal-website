@@ -38,10 +38,10 @@ switch automatically with the `.dark` class. Never use raw colors (`bg-red-500`,
 - **Type**: `font-display` (Archivo Black — titles, buttons, big numbers; uppercase) ·
   `font-sans` (Work Sans — body) · `font-mono` (Space Mono — labels, eyebrows, numbers in tables;
   uppercase + `tracking-wider` for labels). Use `tabular-nums` for amounts.
-- Custom utilities live in `globals.css` as `@utility`: `pb-safe` / `mb-safe` (fixed bottom bars and
-  floating buttons clear the iOS home indicator) and `pt-safe` (sticky headers clear the notch). They
-  only take effect because `app/admin/layout.tsx` sets `viewportFit: "cover"` for the installed app.
-  Don't add plain CSS classes for new UI.
+- Custom utilities live in `globals.css` as `@utility`: `pb-safe` / `mb-safe` (bottom edges and
+  floating buttons clear the iOS home indicator; admin `<main>` uses `mb-safe`, there is no footer) and `pt-safe`
+  (sticky headers clear the notch). They only take effect because `app/admin/layout.tsx` sets
+  `viewportFit: "cover"` for the installed app. Don't add plain CSS classes for new UI.
 
 ## 2. Components
 
@@ -49,9 +49,9 @@ Use the component that fits; don't rebuild it from `div`s.
 
 | Need | Use |
 | --- | --- |
-| Action | `Button` — `default` (lime), `outline` (paper), `secondary` (ink), `ghost`, `destructive`, `link`; sizes `xs sm default lg icon icon-sm …` |
+| Action | `Button` — `default` (lime), `outline` (paper), `secondary` (ink), `ghost`, `destructive`, `link`, `subtle` (body type, no caps: inline pickers in rows); sizes `xs sm default lg icon icon-sm …` |
 | Link that looks like a button | `<Button asChild><Link …/></Button>` |
-| Surface / KPI tile | `Card` (+ `variant="primary"` for the lime highlight), `CardHeader/Title/Description/Action/Content` |
+| Surface / KPI tile | `Card` (+ `variant="primary"` for the lime highlight, `variant="quiet"` + `size="sm"` for dense dashboard panels), `CardHeader/Title/Description/Action/Content` |
 | Form field | `Field` + `FieldLabel` + `Input`/`Select`/`Textarea` + `FieldError`/`FieldDescription`, grouped in `FieldGroup` |
 | Choice from a list | `Select` (gives a hidden native `<select name>` for FormData) |
 | Date | `DatePicker` — `Popover` + `Calendar`; submits `YYYY-MM-DD` under `name` (hidden input) |
@@ -60,7 +60,7 @@ Use the component that fits; don't rebuild it from `div`s.
 | Status label | `Badge` — `default outline secondary destructive success warning` |
 | Progress / budget / utilization | `Progress` — `variant` `default success warning destructive`, or `indicatorColor` for data colors |
 | Data color dot / color picker | `Swatch` / `SwatchPicker` (components/ui/swatch.tsx) |
-| Lists of records | `ItemGroup` + `Item` (`ItemMedia`, `ItemContent`, `ItemTitle`, `ItemDescription`, `ItemActions`) |
+| Lists of records | `ItemGroup` + `Item` (`ItemMedia`, `ItemContent`, `ItemTitle`, `ItemDescription`, `ItemActions`); in dense panels `Item size="xs"` and, for feeds, `ItemDescription clamp={1} title={fullText}` |
 | Tappable record (opens its edit sheet) | `EditableRow` (list) / `EditableTableRow` (table) / `EditableCardHeader` (card) in `app/admin/_components/row-actions.tsx` — `Item variant="interactive"` + a real `<button>` whose `after:` overlay covers the row |
 | Tables | `Table` inside `Card` (`className="gap-0 overflow-hidden py-0"`) |
 | Row actions | `DropdownMenu` → edit in `Sheet` (+ extra `sheets`/`actions`), destructive confirm in `AlertDialog` or delete-with-Undo (see `RowActions`) |
@@ -68,16 +68,24 @@ Use the component that fits; don't rebuild it from `div`s.
 | Keyboard hint | `Kbd` |
 | Checkbox | `Checkbox` inside `Field orientation="horizontal"` |
 | Create / edit forms | `Sheet` (right side) — `FormSheet` in admin |
-| Empty / zero state | `Empty` (`EmptyHeader`, `EmptyTitle`, `EmptyDescription`) |
+| Empty / zero state | `Empty` (`EmptyHeader`, `EmptyTitle`, `EmptyDescription`); `size="sm"` (or `EmptyState size="sm"`) inside dense panels |
 | Notices | `Alert` — `default warning destructive` |
 | Loading | `Skeleton`, `Spinner` |
+| Scrolling region (panel bodies) | `ScrollArea` — the house scrollbar shows on hover/scroll; `Panel fill` uses it (never the browser's own scrollbar) |
 | Hints on icon buttons | `Tooltip` (admin is wrapped in `TooltipProvider`) |
-| Charts (trend, allocation, breakdown) | `ChartContainer` + Recharts; series colors from `ChartConfig` (`var(--chart-N)`), per-row data colors via `<Cell fill>` |
+| Search / jump / run anything | `CommandDialog` (cmdk) — the admin's ⌘K / Ctrl+K `CommandMenu`, mounted once in `Shell` |
+| Explanation + fix next to a marker | `Popover` (e.g. `CoverageBadge`) |
+| Charts (trend, allocation, sparkline, tile mini bars) | `ChartContainer` + Recharts; series colors from `ChartConfig` (`var(--chart-N)`), per-row data colors via `<Cell fill>` |
 
-Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`,
-`Breakdown`, `Money`, `MonthPicker`, `FormField`, `FormSheet`, `RowActions`, the recurring
-`OccurrenceList` / `DuePanel` / `DueActions`, `EditableRow`, `AddEntry`, `BudgetsForm`, `PortfolioAccounts`, and the charts `PortfolioChart`, `CashFlowChart`,
-`AllocationChart`, `BreakdownChart`) — reuse them before writing new ones.
+Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`
+(`fill` = the dashboard's dense, self-scrolling panel), `Money`, `MonthPicker`, `FormField`,
+`FormSheet`, `RowActions`, the recurring `OccurrenceList` / `DueList` / `DuePanel` / `DueActions`,
+`EditableRow` (+ `extra` controls), `AddEntry`, `BudgetsForm`, `TeachList`, `PortfolioAccounts`,
+the dashboard's `KpiStrip` / `CoverageBadge` / `NeedsYou` / `AccountsPanel` (dashboard.tsx),
+`ActivityFeed`, `CategoryBreakdown`, `CategoryPicker`, `MonthNav`, `CommandMenu` (⌘K), the
+`AdminHeader` frame, `SyncNowButton`, and the charts `PortfolioChart`,
+`CashFlowChart` (+ `CashFlowLegend`), `AllocationChart`, `Sparkline`, `MiniBars`) — reuse them before writing
+new ones.
 
 ## 3. Rules (enforced — `design-system.lint.json`)
 
@@ -118,13 +126,38 @@ components without re-applying these (`--overwrite` replaces the house style).
 - **Destructive actions**: confirm in `AlertDialog`; never `window.confirm`. Exception: cheap,
   fully reversible deletes (single cash-flow entries) run straight away with an "Undo" toast
   (`RowActions onRestore`).
+- **Data credits**: "Crypto prices by CoinGecko · FX by Frankfurter" sits at the bottom of Portfolio, where
+  those prices show in detail (CoinGecko's free API asks for it); the admin has no footer.
 - **Toasts never show amounts** that weren't typed by the user — they aren't blurred by privacy mode.
-- **Keep it simple**: three tabs (Home, Activity, Settings). Synced accounts, recurring items and
-  AI filing do the data entry, so a new screen or panel has to earn its place; secondary pages
-  (Connections, Recurring, Portfolio, Earnings, History) hang off Home or Settings with a
-  `PageHeader back` link instead of joining the tab bar.
-- **Adding entries**: manual entry is the exception. One `AddEntry` sheet on Activity —
-  don't build other add forms for cash flows.
+- **One screen**: `/admin` (Overview) shows everything at once — net worth and the month's numbers
+  (`KpiStrip`: each tile carries a `MiniBars` of the months behind it, the month on show highlighted),
+  then spending by category, the month's activity, and accounts over the 12-month
+  trend. It renders its own `AdminHeader` (the month, its coverage badge, the Needs you bell, Sync,
+  Add); other pages get the shared one from `Shell`. From `xl` (1280px) it fills exactly one
+  viewport (`Shell` locks the height on `/admin`; under 800px tall it scrolls as a page) and each
+  `Panel fill` scrolls inside; in the right column Accounts keeps its content height (up to
+  `max-h-3/5`) and the chart takes the rest. Below `xl` it stacks, with Activity last. Synced
+  accounts, recurring items and AI filing do the data entry, so a new panel has to earn its place.
+  Deeper pages (Portfolio → Earnings/History, Connections, Recurring, Settings via the header gear,
+  all of them via ⌘K) hang off the Overview with a `PageHeader back` link; there is no tab bar.
+- **Quiet by default**: the headline tiles keep the hard border and offset shadow; panels are
+  `Card variant="quiet"` (via `Panel fill`). Things that need a decision live behind the header's
+  Needs you bell (a sheet): an account's alerts are grouped into one row (`groupAlerts`) with its fix
+  in place (`SyncNowButton`, statement import) and a warning icon, not a badge per row; the Accounts
+  panel shows no status badges at all (the bell covers sync failures, stale and missing balances). A month
+  without full statement coverage gets one marker next to the month (`CoverageBadge`, with upload
+  buttons) instead of a warning on every tile. Rows show how the importer filed them as an icon
+  (`filingNote`: AI, taught), not as text; inline pickers use `Button variant="subtle"`.
+- **Variable income**: pay that changes with hours isn't scheduled or forecast. "Income / month" is
+  each repeat payer's average month with everyone's lowest and highest month as the range
+  (`typicalIncome`) — plan on the low end.
+- **Filters**: Activity's type and category filters live in the URL but switch on the client
+  (`useDashboardFilters`: `history.pushState`, so Back undoes them) because the month's entries are
+  already on the page; month and search are links because they need new data. The category list
+  and the feed share the same filter.
+- **Adding entries**: manual entry is the exception. One `AddEntry` sheet in the Overview header
+  (⌘K → Add expense/income opens it from anywhere via `?add=`) — don't build other add forms for
+  cash flows. Changing just an entry's category goes through the row's `CategoryPicker`.
 - **Accessibility**: every control has a label (`FieldLabel htmlFor` or `aria-label` on icon
   buttons); status text uses `role="status"`; don't remove focus rings.
 - **Dark mode**: never hard-code light/dark values in app code — tokens flip automatically.

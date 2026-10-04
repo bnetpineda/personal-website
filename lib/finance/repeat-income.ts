@@ -28,6 +28,11 @@ export interface RepeatPayer {
   /** Average received per month, from the first to the last month it paid. */
   average: number;
   payments: number;
+  /** The smallest and largest month it paid (hourly work swings between them). */
+  low: number;
+  high: number;
+  /** What it paid each month (YYYY-MM → amount, in its currency). */
+  byMonth: Record<string, number>;
   lastOn: string;
   categoryName: string;
   categoryColor: string;
@@ -54,6 +59,8 @@ export function repeatPayers(entries: ReceivedIncome[]): RepeatPayer[] {
     const [previous, last] = paid.slice(-2);
     const latestMonth = group.filter((e) => monthIndex(e.occurredOn) === last).reduce((sum, e) => sum + e.amount, 0);
     const latest = group.reduce((a, b) => (b.occurredOn > a.occurredOn ? b : a));
+    const byMonth: Record<string, number> = {};
+    for (const e of group) byMonth[e.occurredOn.slice(0, 7)] = (byMonth[e.occurredOn.slice(0, 7)] ?? 0) + e.amount;
     payers.push({
       key,
       name: payerName(latest.description),
@@ -61,6 +68,9 @@ export function repeatPayers(entries: ReceivedIncome[]): RepeatPayer[] {
       monthly: latestMonth / (last - previous),
       average: group.reduce((sum, e) => sum + e.amount, 0) / (last - paid[0] + 1),
       payments: group.length,
+      low: Math.min(...Object.values(byMonth)),
+      high: Math.max(...Object.values(byMonth)),
+      byMonth,
       lastOn: latest.occurredOn,
       categoryName: latest.categoryName,
       categoryColor: latest.categoryColor,
@@ -83,4 +93,22 @@ export function monthlyIncome(fx: FxTable, schedules: Schedule[], payers: Repeat
       .map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency })),
     ...payers.map((p) => ({ amount: p.monthly, currency: p.currency })),
   ]);
+}
+
+/**
+ * What a month brings in when pay varies (hourly work), in PHP: each repeat payer's average month plus
+ * active income schedules, and the range from everyone's lowest month to everyone's highest. Plan
+ * spending on `low`; what comes in above it is room to save.
+ */
+export function typicalIncome(fx: FxTable, schedules: Schedule[], payers: RepeatPayer[]) {
+  const fixed = schedules.filter((r) => r.kind === "income" && !r.paused && r.nextOn != null)
+    .map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency }));
+  const sum = (pick: (p: RepeatPayer) => number) => sumInPhp(fx, [...fixed, ...payers.map((p) => ({ amount: pick(p), currency: p.currency }))]);
+  const average = sum((p) => p.average);
+  return { average: average.total, low: sum((p) => p.low).total, high: sum((p) => p.high).total, sources: fixed.length + payers.length, missing: average.missing };
+}
+
+/** Each month's pay from repeat payers, in PHP at today's rates: the months the typical figure is drawn from. */
+export function repeatIncomeByMonth(fx: FxTable, payers: RepeatPayer[], months: string[]): { month: string; value: number }[] {
+  return months.map((month) => ({ month, value: sumInPhp(fx, payers.map((p) => ({ amount: p.byMonth[month] ?? 0, currency: p.currency }))).total }));
 }

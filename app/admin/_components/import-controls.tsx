@@ -19,8 +19,10 @@ export function NativeAmount({ value, currency, crypto = false }: { value: numbe
 }
 
 /** Opens the file picker straight away. Picking or dropping several statements imports them all. */
-function ImportStatementsButton({ label, accept, pattern, empty, action }: {
+function ImportStatementsButton({ label, accept, pattern, empty, action, size = "sm" }: {
   label: string; accept: string; pattern: RegExp; empty: string; action: (data: FormData) => Promise<FormState>;
+  /** "xs" next to an alert on the dashboard. */
+  size?: "sm" | "xs";
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
@@ -39,19 +41,19 @@ function ImportStatementsButton({ label, accept, pattern, empty, action }: {
   };
   return <>
     <input ref={input} type="file" accept={accept} multiple hidden onChange={(e) => upload([...(e.target.files ?? [])])} />
-    <Button variant="outline" size="sm" disabled={pending} onClick={() => input.current?.click()}
+    <Button variant="outline" size={size} disabled={pending} onClick={() => input.current?.click()}
       onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (!pending) upload([...e.dataTransfer.files]); }}>
       {pending ? <><Spinner />Importing {count} {count === 1 ? "file" : "files"}…</> : <><FileUp />{label}</>}
     </Button>
   </>;
 }
 
-export function ImportWiseButton() {
-  return <ImportStatementsButton label="Import CSVs" accept=".csv,text/csv" pattern={/\.csv$/i} empty="Choose Wise statement CSV files." action={importWiseStatements} />;
+export function ImportWiseButton({ size }: { size?: "sm" | "xs" }) {
+  return <ImportStatementsButton size={size} label="Import CSVs" accept=".csv,text/csv" pattern={/\.csv$/i} empty="Choose Wise statement CSV files." action={importWiseStatements} />;
 }
 
-export function ImportMariBankButton() {
-  return <ImportStatementsButton label="Import PDFs" accept=".pdf,application/pdf" pattern={/\.pdf$/i} empty="Choose MariBank statement PDF files." action={importMariBankStatements} />;
+export function ImportMariBankButton({ size }: { size?: "sm" | "xs" }) {
+  return <ImportStatementsButton size={size} label="Import PDFs" accept=".pdf,application/pdf" pattern={/\.pdf$/i} empty="Choose MariBank statement PDF files." action={importMariBankStatements} />;
 }
 
 export function ImportAction({ action, children }: { action: () => Promise<FormState>; children: React.ReactNode }) {

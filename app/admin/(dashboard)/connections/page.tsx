@@ -12,7 +12,7 @@ export const maxDuration = 120;
 export default async function ConnectionsPage() {
   const [connections, fx, statements, balances] = await Promise.all([getConnections(), getFx(), getStatementImports(), getStatementBalances()]);
   return <>
-    <PageHeader eyebrow="Automatic tracking" title="Connections" back={{ href: "/admin/settings", label: "Settings" }}>
+    <PageHeader eyebrow="Automatic tracking" title="Connections" back={{ href: "/admin", label: "Overview" }}>
       <SyncConnectionsButton disabled={!connections.some((c) => c.enabled)} />
     </PageHeader>
     <p className="mb-6 max-w-3xl text-sm text-muted-foreground">

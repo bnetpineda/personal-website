@@ -28,7 +28,7 @@ const manifest: MetadataRoute.Manifest = {
   ],
   // Long-press the home-screen icon.
   shortcuts: [
-    { name: "Activity", url: "/admin/transactions" },
+    { name: "Connections", url: "/admin/connections" },
     { name: "Portfolio", url: "/admin/holdings" },
   ],
 };

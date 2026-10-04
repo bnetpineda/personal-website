@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Progress } from "@/components/ui/progress";
-import { Swatch } from "@/components/ui/swatch";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { addMonths, monthLabel } from "@/lib/finance/dates";
 import { formatMoney, formatPct } from "@/lib/finance/format";
+import { LinkIcon } from "./link-icon";
 
 /* Admin building blocks composed from components/ui. Server-safe (no hooks). */
 
@@ -132,22 +132,65 @@ export function StatCards({ items }: { items: Stat[] }) {
   );
 }
 
-/** Card with a title row and optional action (link/button) on the right. */
-export function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <Card className="min-w-0">
+/**
+ * Card with a title row and optional action (link/button) on the right; `toolbar` gets its own row
+ * under the title. `fill` is the dashboard's dense panel: on wide screens it takes the height of its
+ * grid cell and the body scrolls on its own (a `ScrollArea`, so the house scrollbar shows on hover)
+ * while the title and toolbar stay put; `scroll={false}` lets the body stretch instead (charts).
+ * `className` places the panel (grid area) through a wrapping <section>.
+ */
+export function Panel({
+  title,
+  action,
+  toolbar,
+  fill = false,
+  scroll = true,
+  id,
+  className,
+  children,
+}: {
+  title: ReactNode;
+  action?: ReactNode;
+  toolbar?: ReactNode;
+  fill?: boolean;
+  scroll?: boolean;
+  id?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const card = (
+    <Card id={className ? undefined : id} variant={fill ? "quiet" : "default"} size={fill ? "sm" : "default"} className={cn("min-w-0", fill && "h-full xl:min-h-0")}>
       <CardHeader className="flex flex-wrap items-center justify-between gap-3">
         <CardTitle>{title}</CardTitle>
-        {action}
+        {/* Wrapped, so an action made on the server and passed through a client component isn't a bare list child (React key warning). */}
+        {action && <div className="flex items-center gap-2">{action}</div>}
+        {toolbar && <div className="w-full">{toolbar}</div>}
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className={cn(fill && "xl:min-h-0 xl:flex-1")}>
+        {fill && scroll ? (
+          // The scroll area spans the card's padding, so the scrollbar sits at the card's edge.
+          <ScrollArea className="-mx-4 h-full">
+            <div className="px-4 py-0.5">{children}</div>
+          </ScrollArea>
+        ) : (
+          children
+        )}
+      </CardContent>
     </Card>
+  );
+  return className ? (
+    <section id={id} className={className}>
+      {card}
+    </section>
+  ) : (
+    card
   );
 }
 
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
+/** `size="sm"` in the dashboard's dense panels. */
+export function EmptyState({ title, size, children }: { title: string; size?: "default" | "sm"; children?: ReactNode }) {
   return (
-    <Empty>
+    <Empty size={size}>
       <EmptyHeader>
         <EmptyTitle>{title}</EmptyTitle>
         {children && <EmptyDescription>{children}</EmptyDescription>}
@@ -162,13 +205,17 @@ export function MonthPicker({ month, current, href }: { month: string; current: 
     <ButtonGroup aria-label="Month">
       <Button asChild variant="outline" size="icon">
         <Link href={href(addMonths(month, -1))} aria-label="Previous month">
-          <ChevronLeft />
+          <LinkIcon>
+            <ChevronLeft />
+          </LinkIcon>
         </Link>
       </Button>
       <ButtonGroupText aria-current="date">{monthLabel(month)}</ButtonGroupText>
       <Button asChild variant="outline" size="icon">
         <Link href={href(addMonths(month, 1))} aria-label="Next month">
-          <ChevronRight />
+          <LinkIcon>
+            <ChevronRight />
+          </LinkIcon>
         </Link>
       </Button>
       {month !== current && (
@@ -177,61 +224,5 @@ export function MonthPicker({ month, current, href }: { month: string; current: 
         </Button>
       )}
     </ButtonGroup>
-  );
-}
-
-export interface BreakdownRow {
-  key: string | number;
-  label: string;
-  color: string;
-  value: number;
-  /** With a budget the bar shows value/budget (amber ≥ 85%, red when over). */
-  budget?: number | null;
-  /** Drill-down link (e.g. that category's entries). */
-  href?: string;
-}
-
-/** Budget progress when a budget exists, otherwise share of the largest row. */
-export function Breakdown({ rows }: { rows: BreakdownRow[] }) {
-  const max = Math.max(...rows.map((r) => r.value), 0);
-  return (
-    <ul className="flex flex-col gap-4">
-      {rows.map((row) => {
-        const budget = row.budget != null && row.budget > 0 ? row.budget : null;
-        const ratio = budget ? row.value / budget : max > 0 ? row.value / max : 0;
-        const variant = budget ? (ratio > 1 ? "destructive" : ratio >= 0.85 ? "warning" : "default") : "default";
-        return (
-          <li key={row.key} className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="flex min-w-0 items-center gap-2">
-                <Swatch color={row.color} />
-                {row.href ? (
-                  <Link href={row.href} className="truncate underline-offset-4 hover:underline">
-                    {row.label}
-                  </Link>
-                ) : (
-                  <span className="truncate">{row.label}</span>
-                )}
-              </span>
-              <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                <Money value={row.value} />
-                {budget && (
-                  <>
-                    {" / "}
-                    <Money value={budget} />
-                  </>
-                )}
-              </span>
-            </div>
-            <Progress
-              aria-label={row.label}
-              value={Math.min(ratio, 1) * 100}
-              variant={variant}
-              indicatorColor={budget ? undefined : row.color}
-            />
-          </li>
-        );
-      })}
-    </ul>
   );
 }

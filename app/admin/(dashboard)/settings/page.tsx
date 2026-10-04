@@ -112,7 +112,7 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Setup" title="Settings" />
+      <PageHeader eyebrow="Setup" title="Settings" back={{ href: "/admin", label: "Overview" }} />
 
       <div className="mb-6">
         <Panel title="Automation">

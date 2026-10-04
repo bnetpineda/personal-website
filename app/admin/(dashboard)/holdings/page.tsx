@@ -153,7 +153,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PageHeader eyebrow="Investments" title="Portfolio" back={{ href: "/admin", label: "Home" }}>
+      <PageHeader eyebrow="Investments" title="Portfolio" back={{ href: "/admin", label: "Overview" }}>
         <Button asChild variant="outline" size="sm">
           <Link href="/admin/earnings">Earnings</Link>
         </Button>
@@ -254,6 +254,19 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       ) : (
         <HoldingsTable connections={connections} fx={fx} filter={filter} showSmall={showSmall} binanceCosts={binanceCosts} />
       )}
+
+      {/* Credit for the prices and rates behind these values (CoinGecko's free API asks for it where its prices show). */}
+      <p className="mt-8 font-mono text-xs text-muted-foreground">
+        Crypto prices by{" "}
+        <a className="underline underline-offset-4" href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer">
+          CoinGecko
+        </a>{" "}
+        · FX by{" "}
+        <a className="underline underline-offset-4" href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">
+          Frankfurter
+        </a>{" "}
+        (ECB)
+      </p>
     </>
   );
 }

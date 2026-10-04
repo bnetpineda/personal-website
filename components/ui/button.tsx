@@ -19,6 +19,9 @@ const buttonVariants = cva(
         ghost:
           "border-2 border-transparent hover:border-border hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        /** Quiet inline control in body type (e.g. a row's category picker): no border or caps until hovered. */
+        subtle:
+          "border-2 border-transparent font-sans font-normal tracking-normal normal-case text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

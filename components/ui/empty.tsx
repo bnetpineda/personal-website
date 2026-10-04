@@ -1,14 +1,32 @@
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
-function Empty({ className, ...props }: React.ComponentProps<"div">) {
+const emptyVariants = cva(
+  "group/empty flex min-w-0 flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border text-center text-balance",
+  {
+    variants: {
+      /** `sm`: inside dense dashboard panels. */
+      size: {
+        default: "gap-6 p-6 md:p-12",
+        sm: "gap-2 p-4",
+      },
+    },
+    defaultVariants: {
+      size: "default",
+    },
+  }
+)
+
+function Empty({
+  className,
+  size,
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof emptyVariants>) {
   return (
     <div
       data-slot="empty"
-      className={cn(
-        "flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-2 border-dashed border-border p-6 text-center text-balance md:p-12",
-        className
-      )}
+      data-size={size ?? "default"}
+      className={cn(emptyVariants({ size }), className)}
       {...props}
     />
   )
@@ -61,7 +79,7 @@ function EmptyTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty-title"
-      className={cn("text-lg font-medium tracking-tight", className)}
+      className={cn("text-lg font-medium tracking-tight group-data-[size=sm]/empty:text-base", className)}
       {...props}
     />
   )

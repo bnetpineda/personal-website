@@ -1,8 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, LabelList, Pie, PieChart, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, ReferenceLine, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 import {
   ChartContainer,
@@ -12,11 +11,11 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { budgetSegments } from "@/lib/finance/calc";
+import { Swatch } from "@/components/ui/swatch";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
 import { dayLabel } from "@/lib/finance/dates";
-import { formatMoney, formatPct } from "@/lib/finance/format";
-import { EmptyState, type BreakdownRow } from "./ui";
+import { formatMoney } from "@/lib/finance/format";
+import { EmptyState } from "./ui";
 
 const compact = (value: number) => formatMoney(value, "PHP", { compact: true });
 
@@ -71,13 +70,28 @@ const cashFlowConfig = {
   expense: { label: "Expenses", color: "var(--chart-3)" },
 } satisfies ChartConfig;
 
-export function CashFlowChart({ points }: { points: { label: string; income: number; expense: number }[] }) {
+/** The cash-flow colors as a compact key, for a panel header when the chart leaves out its own legend (`fill`). */
+export function CashFlowLegend() {
+  return (
+    <span className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
+      {(["income", "expense"] as const).map((key) => (
+        <span key={key} className="flex items-center gap-1.5">
+          <Swatch color={cashFlowConfig[key].color} size="sm" />
+          {cashFlowConfig[key].label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Monthly income vs. expenses. `fill`: takes the height of its panel on wide screens (the dashboard). */
+export function CashFlowChart({ points, fill = false }: { points: { label: string; income: number; expense: number }[]; fill?: boolean }) {
   if (points.every((p) => p.income === 0 && p.expense === 0)) {
     return <EmptyState title="No entries yet">Monthly income vs. expenses shows up here once you log some.</EmptyState>;
   }
   return (
-    <div className="transition group-data-[private=true]/shell:blur-sm">
-      <ChartContainer config={cashFlowConfig} className="aspect-auto h-64 w-full">
+    <div className={cn("transition group-data-[private=true]/shell:blur-sm", fill && "xl:h-full")}>
+      <ChartContainer config={cashFlowConfig} className={cn("aspect-auto w-full", fill ? "h-56 xl:h-full" : "h-64")}>
         <BarChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
@@ -85,7 +99,7 @@ export function CashFlowChart({ points }: { points: { label: string; income: num
           <ChartTooltip
             content={<ChartTooltipContent formatter={(value, name, item, index, payload) => moneyFormatter(value, name, item, index, payload, cashFlowConfig)} />}
           />
-          <ChartLegend content={<ChartLegendContent />} />
+          {!fill && <ChartLegend content={<ChartLegendContent />} />}
           <Bar dataKey="income" fill="var(--color-income)" radius={4} isAnimationActive={false} />
           <Bar dataKey="expense" fill="var(--color-expense)" radius={4} isAnimationActive={false} />
         </BarChart>
@@ -137,97 +151,87 @@ export function AllocationChart({ slices }: { slices: { assetClass: AssetClass; 
   );
 }
 
-const breakdownConfig = {
-  left: { label: "Budget left", color: "var(--muted)" },
-  over: { label: "Over budget", color: "var(--destructive)" },
-} satisfies ChartConfig;
-
-const truncate = (text: string, max = 14) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
-
 /**
- * Horizontal bars per category on one ₱ scale. With a budget, the bar continues as a
- * muted "budget left" track, and spending past the budget shows in red.
+ * A tiny trend line (no axes) for a stat tile, e.g. net worth over the last 90 days. Draws in the
+ * tile's text color, so it reads on the lime highlight card too; hover shows the day's value.
  */
-export function BreakdownChart({ rows, valueLabel }: { rows: BreakdownRow[]; valueLabel: string }) {
-  const router = useRouter();
-  const data = rows.map((row) => ({ ...row, key: String(row.key), ...budgetSegments(row.value, row.budget) }));
-  // Rows with an href drill down on click (the category chips above the list do the same by keyboard).
-  const open = (entry: unknown) => {
-    const href = (entry as { payload?: BreakdownRow })?.payload?.href;
-    if (href) router.push(href);
-  };
-  const clickable = rows.some((row) => row.href);
-  const budgeted = rows.some((row) => (row.budget ?? 0) > 0);
-  const n = rows.length;
-
+export function Sparkline({ points, label }: { points: { date: string; value: number }[]; label: string }) {
+  const config = { value: { label, color: "currentColor" } } satisfies ChartConfig;
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
-      <ChartContainer
-        config={breakdownConfig}
-        className={cn("aspect-auto w-full", n <= 3 && "h-32", n > 3 && n <= 6 && "h-56", n > 6 && n <= 10 && "h-80", n > 10 && "h-96")}
-      >
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 64, left: 0, bottom: 0 }}>
-          <XAxis type="number" hide />
-          <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={104} tickFormatter={(label: string) => truncate(label)} />
+      <ChartContainer config={config} className="aspect-auto h-10 w-full">
+        <AreaChart data={points} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+          <YAxis hide domain={["dataMin", "dataMax"]} />
           <ChartTooltip
             cursor={false}
             content={
               <ChartTooltipContent
-                formatter={(_value, _name, item) => {
-                  const row = item.payload as BreakdownRow;
-                  return (
-                    <div className="flex w-full flex-col gap-1.5">
-                      <TooltipRow label={valueLabel} value={formatMoney(row.value)} />
-                      {row.budget != null && row.budget > 0 && (
-                        <TooltipRow label="Budget" value={`${formatMoney(row.budget)} · ${formatPct(row.value / row.budget)}`} />
-                      )}
-                    </div>
-                  );
-                }}
+                labelFormatter={(_label, payload) => dayLabel(String(payload?.[0]?.payload?.date ?? ""))}
+                formatter={(value) => <TooltipRow label={label} value={formatMoney(Number(value))} />}
               />
             }
           />
-          {budgeted && <ChartLegend content={<ChartLegendContent />} />}
-          <Bar
-            dataKey="within"
-            stackId="a"
-            legendType="none"
-            stroke="var(--border)"
-            strokeWidth={2}
-            maxBarSize={24}
-            isAnimationActive={false}
-            onClick={open}
-            cursor={clickable ? "pointer" : undefined}
-          >
-            {data.map((d) => (
-              <Cell key={d.key} fill={d.color} />
-            ))}
-          </Bar>
-          <Bar
-            dataKey="left"
-            stackId="a"
-            onClick={open}
-            cursor={clickable ? "pointer" : undefined}
-            fill="var(--color-left)"
-            tooltipType="none"
-            stroke="var(--border)"
-            strokeWidth={2}
-            maxBarSize={24}
-            isAnimationActive={false}
+          <Area dataKey="value" type="monotone" fill="var(--color-value)" fillOpacity={0.15} stroke="var(--color-value)" strokeWidth={2} isAnimationActive={false} />
+        </AreaChart>
+      </ChartContainer>
+    </div>
+  );
+}
+
+export interface MiniBar {
+  /** Unique key, e.g. the month (YYYY-MM). */
+  key: string;
+  /** What the tooltip calls it ("Sep 2026"). */
+  label: string;
+  value: number;
+}
+
+/**
+ * A tile-sized bar chart (no axes) for a stat card: one bar per month, the month on show at full
+ * strength and the rest dimmed. `tone` colors each bar by sign (net: green up, red down);
+ * `reference` draws a dashed line, e.g. the typical month. Hover shows the month and amount.
+ */
+export function MiniBars({
+  points,
+  label,
+  color = "var(--chart-1)",
+  tone = false,
+  highlight,
+  reference,
+}: {
+  points: MiniBar[];
+  label: string;
+  color?: string;
+  tone?: boolean;
+  highlight?: string;
+  reference?: number;
+}) {
+  const config = { value: { label, color } } satisfies ChartConfig;
+  return (
+    <div className="transition group-data-[private=true]/shell:blur-sm">
+      <ChartContainer config={config} className="aspect-auto h-10 w-full">
+        <BarChart data={points} margin={{ top: 2, right: 0, left: 0, bottom: 0 }} barCategoryGap={2}>
+          {/* Zero stays on the scale, so a negative month hangs below it. */}
+          <YAxis hide domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]} />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                hideIndicator
+                labelFormatter={(_label, payload) => String(payload?.[0]?.payload?.label ?? "")}
+                formatter={(value) => <TooltipRow label={label} value={formatMoney(Number(value), "PHP", { signed: tone })} />}
+              />
+            }
           />
-          <Bar
-            dataKey="over"
-            stackId="a"
-            onClick={open}
-            cursor={clickable ? "pointer" : undefined}
-            fill="var(--color-over)"
-            tooltipType="none"
-            stroke="var(--border)"
-            strokeWidth={2}
-            maxBarSize={24}
-            isAnimationActive={false}
-          >
-            <LabelList dataKey="value" position="right" offset={8} className="fill-foreground font-mono" fontSize={12} formatter={(v) => compact(Number(v))} />
+          {reference != null && <ReferenceLine y={reference} stroke="currentColor" strokeOpacity={0.6} strokeDasharray="3 3" />}
+          <Bar dataKey="value" radius={2} isAnimationActive={false}>
+            {points.map((p) => (
+              <Cell
+                key={p.key}
+                fill={tone ? (p.value < 0 ? "var(--destructive)" : "var(--success)") : "var(--color-value)"}
+                fillOpacity={highlight == null || p.key === highlight ? 1 : 0.35}
+              />
+            ))}
           </Bar>
         </BarChart>
       </ChartContainer>

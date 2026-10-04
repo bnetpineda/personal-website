@@ -275,6 +275,16 @@ export async function getPortfolioSnapshots() {
   return getDb().select().from(portfolioSnapshots).orderBy(asc(portfolioSnapshots.snapshotDate));
 }
 
+/** Each investment account's latest saved balances (value, known cost and P/L), one row per account. */
+export async function getLatestPortfolioSnapshots() {
+  await requireAdmin();
+  return getDb()
+    .selectDistinctOn([portfolioSnapshots.provider])
+    .from(portfolioSnapshots)
+    .where(eq(portfolioSnapshots.source, "balances"))
+    .orderBy(portfolioSnapshots.provider, desc(portfolioSnapshots.snapshotDate));
+}
+
 /** Everything, for the JSON backup download. */
 export async function getExportData() {
   await requireAdmin();

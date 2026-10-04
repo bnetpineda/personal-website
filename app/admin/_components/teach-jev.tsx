@@ -11,7 +11,7 @@ import type { TeachGroup } from "@/lib/finance/imports/teach";
 import { teachPayee } from "../_actions/imports";
 import type { FormCategory } from "./cash-flow-form";
 import { notify } from "./form";
-import { Money, Panel } from "./ui";
+import { Money } from "./ui";
 
 const SHOWN = 6;
 
@@ -19,21 +19,15 @@ const SHOWN = 6;
  * Payees the model was not sure about, one row per payee. Choosing a category once files every past
  * payment, saves a rule for the next import, and becomes an example the model learns from.
  */
-export function TeachJev({ groups, categories }: { groups: TeachGroup[]; categories: Record<CashFlowKind, FormCategory[]> }) {
-  if (groups.length === 0) return null;
+export function TeachList({ groups, categories }: { groups: TeachGroup[]; categories: Record<CashFlowKind, FormCategory[]> }) {
   const more = groups.length - SHOWN;
   return (
-    <div className="mb-6">
-      <Panel title={`Teach Jev · ${groups.length} ${groups.length === 1 ? "payee" : "payees"}`}>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Jev wasn&apos;t sure about these, so they sit in Other. Pick a category once per payee: past payments move, and future ones are filed the same way.
-        </p>
-        <ItemGroup>
-          {groups.slice(0, SHOWN).map((group) => <TeachRow key={group.key} group={group} categories={categories[group.kind]} />)}
-        </ItemGroup>
-        {more > 0 && <p className="mt-4 text-sm text-muted-foreground">{more} more after these.</p>}
-      </Panel>
-    </div>
+    <>
+      <ItemGroup>
+        {groups.slice(0, SHOWN).map((group) => <TeachRow key={group.key} group={group} categories={categories[group.kind]} />)}
+      </ItemGroup>
+      {more > 0 && <p className="mt-2 text-sm text-muted-foreground">{more} more after these.</p>}
+    </>
   );
 }
 
@@ -47,7 +41,7 @@ function TeachRow({ group, categories }: { group: TeachGroup; categories: FormCa
     catch { notify({ ok: false, message: "Couldn't save that. Try again." }); }
   });
   return (
-    <Item size="sm">
+    <Item size="xs">
       <ItemContent>
         <ItemTitle>{group.payee}</ItemTitle>
         <ItemDescription>
