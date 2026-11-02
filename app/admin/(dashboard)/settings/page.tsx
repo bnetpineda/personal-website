@@ -40,7 +40,7 @@ export default async function SettingsPage() {
       title: "Connected accounts",
       description: connections.length
         ? `${connections.map((c) => PROVIDER_META[c.provider].name).join(", ")} · sync daily, import Wise CSVs`
-        : "Connect Binance or IBKR to track balances automatically, and import Wise CSVs",
+        : "Connect Binance, IBKR or Hyperliquid to track balances automatically, and import Wise CSVs",
     },
     {
       href: "/admin/recurring",
@@ -52,7 +52,7 @@ export default async function SettingsPage() {
       href: "/admin/holdings",
       icon: <Wallet />,
       title: "Portfolio",
-      description: "How Binance and IBKR are doing: value, P/L, best and worst holdings, earnings and history",
+      description: "How Binance, IBKR and Hyperliquid are doing: value, P/L, best and worst holdings, earnings and history",
     },
   ];
 

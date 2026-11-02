@@ -12,7 +12,7 @@ import { parseIbkrHistory } from "@/lib/finance/imports/provider-parsers";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { applyCategoryRules, ingestQuery } from "@/lib/finance/imports/service";
 import { ImportError, sameSource, sourceKey, type HistoryCoverage, type ImportEntry } from "@/lib/finance/imports/types";
-import { saveIbkrNav } from "@/lib/finance/portfolio";
+import { saveNav } from "@/lib/finance/portfolio";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
 
 function failure(error: unknown): FormState {
@@ -49,7 +49,7 @@ export async function importInvestmentReport(data: FormData): Promise<FormState>
         fromDate: parsed.coverage.from, toDate: parsed.coverage.to, entries: parsed.entries.length }).onConflictDoNothing(),
     ]);
     // Best effort, like on sync: the entries above are already saved.
-    const navDays = await saveIbkrNav(parsed.nav ?? []).catch((err) => { console.error("[admin] IBKR NAV save failed", err); return 0; });
+    const navDays = await saveNav("ibkr", parsed.nav ?? []).catch((err) => { console.error("[admin] IBKR NAV save failed", err); return 0; });
     await applyCategoryRules();
     const ai = await categorizeQuietly();
     revalidatePath("/admin", "layout");

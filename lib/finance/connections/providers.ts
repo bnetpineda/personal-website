@@ -5,11 +5,13 @@ import { z } from "zod";
 import { fetchCoinGeckoPrices } from "../prices";
 import { readJson, readText } from "./http";
 import { BINANCE_MISSING_PRICE_WARNING, removeBinanceEarnReceipts } from "./binance-positions";
+import { hyperliquidSnapshot } from "./hyperliquid";
 import { assertReadOnlyBinance, flexResponse, parseBinanceBalances, parseEarnPage, parseIbkrStatement } from "./parsers";
 import { ConnectionError, snapshotSchema, type ConnectedPosition, type ConnectionSnapshot, type Credentials } from "./types";
 
 const BINANCE = "https://api.binance.com";
 const FLEX = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/";
+const HYPERLIQUID = "https://api.hyperliquid.xyz/info";
 
 export interface ProviderIO {
   json: typeof readJson;
@@ -102,10 +104,49 @@ export async function fetchFlexReport(credentials: Extract<Credentials, { provid
   throw new ConnectionError("IBKR is still preparing the statement. Previous balances were kept; try syncing again shortly.");
 }
 
+/** One query against Hyperliquid's public info endpoint. It only reads, and a wallet address grants nothing else. */
+export type HyperliquidInfo = (body: Record<string, unknown>) => Promise<unknown>;
+export const hyperliquidReader = (signal: AbortSignal, io: ProviderIO): HyperliquidInfo => (body) => io.json(new URL(HYPERLIQUID), {}, signal, body);
+
+/** Time-range queries return a page at a time, and the next page starts at the last timestamp, so it can repeat rows. */
+export async function hyperliquidPages(info: HyperliquidInfo, query: Record<string, unknown>, startTime: number): Promise<unknown[]> {
+  const rows: unknown[] = [];
+  const seen = new Set<string>();
+  let start = startTime;
+  for (let page = 0; page < 25; page++) {
+    const batch = z.array(z.looseObject({ time: z.number().int().positive() })).parse(await info({ ...query, startTime: start }));
+    const fresh = batch.filter((row) => !seen.has(JSON.stringify(row)));
+    if (!fresh.length) return rows;
+    for (const row of fresh) seen.add(JSON.stringify(row));
+    rows.push(...fresh);
+    start = Math.max(start, ...fresh.map((row) => row.time));
+  }
+  throw new ConnectionError("This wallet has too much Hyperliquid activity to read in one sync. Previous balances were kept.");
+}
+
+async function hyperliquid(credentials: Extract<Credentials, { provider: "hyperliquid" }>, signal: AbortSignal, io: ProviderIO): Promise<ConnectionSnapshot> {
+  const info = hyperliquidReader(signal, io);
+  const user = credentials.address;
+  const { role } = z.object({ role: z.string() }).parse(await info({ type: "userRole", user }));
+  // An API (agent) wallet trades for an account but holds nothing, so it would read as an empty account.
+  if (role === "agent") throw new ConnectionError("This is a Hyperliquid API wallet. Connect the main wallet address instead.");
+  if (role === "missing") throw new ConnectionError("Hyperliquid has no account for this address. Check the wallet address.");
+  const dexes = z.array(z.object({ name: z.string().min(1) }).nullable()).parse(await info({ type: "perpDexs" }));
+  // Fail the whole snapshot if any part fails, so staked or lent coins never silently disappear.
+  const [abstraction, markets, spot, lending, staking, vaults, rewards, portfolio, fills, ...perps] = await Promise.all([
+    info({ type: "userAbstraction", user }), info({ type: "spotMetaAndAssetCtxs" }), info({ type: "spotClearinghouseState", user }),
+    info({ type: "borrowLendUserState", user }), info({ type: "delegatorSummary", user }), info({ type: "userVaultEquities", user }),
+    info({ type: "delegatorRewards", user }), info({ type: "portfolio", user }), hyperliquidPages(info, { type: "userFillsByTime", user }, 0),
+    ...dexes.map((dex) => info({ type: "clearinghouseState", user, ...(dex ? { dex: dex.name } : {}) })),
+  ]);
+  return hyperliquidSnapshot({ address: user, abstraction, markets, spot, perps, lending, staking, vaults, rewards, portfolio, fills });
+}
+
 export async function fetchAccountSnapshot(credentials: Credentials, io: ProviderIO = defaultIO): Promise<ConnectionSnapshot> {
   const signal = AbortSignal.timeout(45_000);
   switch (credentials.provider) {
     case "binance": return binance(credentials, signal, io);
     case "ibkr": return parseIbkrStatement(await fetchFlexReport(credentials, signal, io));
+    case "hyperliquid": return hyperliquid(credentials, signal, io);
   }
 }

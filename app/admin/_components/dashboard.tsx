@@ -117,7 +117,7 @@ export function CoverageBadge({ missing, month, current }: { missing: StatementP
 
 /** A group's fix, in place: sync a synced account, upload a bank's statements. Otherwise the row opens its page. */
 function AlertFix({ group }: { group: AlertGroup }) {
-  if (group.provider === "binance" || group.provider === "ibkr") return group.types.includes("sync") ? <SyncNowButton provider={group.provider} label /> : null;
+  if (group.provider === "binance" || group.provider === "ibkr" || group.provider === "hyperliquid") return group.types.includes("sync") ? <SyncNowButton provider={group.provider} label /> : null;
   if (!group.types.includes("statement")) return null;
   if (group.provider === "wise") return <ImportWiseButton size="xs" />;
   if (group.provider === "maribank") return <ImportMariBankButton size="xs" />;
@@ -285,7 +285,7 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
     >
       {rows.length === 0 ? (
         <EmptyState size="sm" title="No accounts connected">
-          Connect Binance or IBKR once and balances update by themselves every day. Wise and MariBank come in as statements.
+          Connect Binance, IBKR or Hyperliquid once and balances update by themselves every day. Wise and MariBank come in as statements.
         </EmptyState>
       ) : (
         <ItemGroup>

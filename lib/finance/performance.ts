@@ -10,7 +10,7 @@ import { binanceHoldingRows, type HoldingCost } from "./imports/holding-costs";
  * so a dollar history shows how the investments moved; pages convert it with today's rate.
  */
 
-/** `balances`: totalled from the synced positions; `nav`: IBKR's own daily net asset value, used to fill earlier days. */
+/** `balances`: totalled from the synced positions; `nav`: the provider's own daily value, used to fill earlier days. */
 export const PORTFOLIO_SOURCES = ["balances", "nav"] as const;
 export type PortfolioSource = (typeof PORTFOLIO_SOURCES)[number];
 
@@ -83,7 +83,7 @@ export function accountTotals(
   return { valueUsd: value, costUsd: costed ? cost : null, pnlUsd: costed ? pnl : null, missingFx: [...missing].sort() };
 }
 
-/** The day a balance snapshot describes: IBKR's statement date, or the Manila day Binance was read. */
+/** The day a balance snapshot describes: IBKR's statement date, or the Manila day a live account was read. */
 export function snapshotDay(provider: SyncProvider, asOf: string): string {
   return provider === "ibkr" ? asOf.slice(0, 10) : todayManila(new Date(asOf));
 }
@@ -171,7 +171,7 @@ export function topMovers(rows: readonly Mover[], count = 3): { winners: Mover[]
   };
 }
 
-/** One account's daily IBKR NAV, as reported in its base currency. */
+/** One account's value for a day as its provider reports it, in that account's base currency. */
 export interface NavPoint {
   accountKey: string;
   date: string;

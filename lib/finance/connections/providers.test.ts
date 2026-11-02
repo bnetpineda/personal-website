@@ -92,4 +92,45 @@ describe("account API workflows", () => {
       ...baseIO, text: async () => '<FlexStatementResponse><Status>Fail</Status><ErrorCode>1012</ErrorCode></FlexStatementResponse>',
     })).rejects.toThrow("Flex token has expired");
   });
+
+  const wallet = { provider: "hyperliquid" as const, address: "0x00000000000000000000000000000000000000aa" };
+  const emptyAccount = (body: Record<string, unknown>): unknown => {
+    switch (body.type) {
+      case "userRole": return { role: "user" };
+      case "perpDexs": return [null, { name: "xyz" }];
+      case "userAbstraction": return "default";
+      case "spotMetaAndAssetCtxs": return [{ tokens: [{ name: "USDC", index: 0 }], universe: [] }, []];
+      case "spotClearinghouseState": return { balances: [] };
+      case "borrowLendUserState": return { tokenToState: [] };
+      case "delegatorSummary": return { delegated: "0.0", undelegated: "0.0", totalPendingWithdrawal: "0.0" };
+      case "clearinghouseState": return { marginSummary: { accountValue: "0.0" }, assetPositions: [] };
+      case "portfolio": return [];
+      default: return [];
+    }
+  };
+  test("Hyperliquid reads every perp DEX and posts only public queries to the info endpoint", async () => {
+    const dexes: unknown[] = [];
+    const snapshot = await fetchAccountSnapshot(wallet, { ...baseIO, json: async (url, headers, _signal, body) => {
+      expect(url.href).toBe("https://api.hyperliquid.xyz/info");
+      expect(headers).toEqual({});
+      const query = body as Record<string, unknown>;
+      if (query.type === "clearinghouseState") dexes.push(query.dex);
+      return emptyAccount(query);
+    } });
+    expect(dexes).toEqual([undefined, "xyz"]);
+    expect(snapshot.accountKey).toBe(`address:${wallet.address}`);
+    expect(snapshot.positions).toEqual([]);
+  });
+  test("a Hyperliquid API wallet or unknown address is refused instead of reading as an empty account", async () => {
+    const asRole = (role: string) => ({ ...baseIO, json: async (_url: URL, _headers?: Record<string, string>, _signal?: AbortSignal, body?: unknown) =>
+      (body as Record<string, unknown>).type === "userRole" ? { role } : emptyAccount(body as Record<string, unknown>) });
+    await expect(fetchAccountSnapshot(wallet, asRole("agent"))).rejects.toThrow("API wallet");
+    await expect(fetchAccountSnapshot(wallet, asRole("missing"))).rejects.toThrow("no account");
+  });
+  test("a failed Hyperliquid query rejects the snapshot so staked coins never silently disappear", async () => {
+    await expect(fetchAccountSnapshot(wallet, { ...baseIO, json: async (_url, _headers, _signal, body) => {
+      if ((body as Record<string, unknown>).type === "delegatorSummary") throw new Error("Staking unavailable");
+      return emptyAccount(body as Record<string, unknown>);
+    } })).rejects.toThrow("Staking unavailable");
+  });
 });

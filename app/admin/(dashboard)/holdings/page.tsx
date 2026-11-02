@@ -24,11 +24,11 @@ export const metadata: Metadata = {
 };
 export const maxDuration = 120;
 
-const ACCOUNT_COLOR: Record<SyncProvider, string> = { binance: ASSET_CLASS_META.crypto.color, ibkr: ASSET_CLASS_META.stock.color };
+const ACCOUNT_COLOR: Record<SyncProvider, string> = { binance: ASSET_CLASS_META.crypto.color, ibkr: ASSET_CLASS_META.stock.color, hyperliquid: "var(--chart-7)" };
 
 /** "Crypto", or the biggest non-cash asset classes an account holds ("Stocks & ETFs"). */
 function holds(connection: ConnectionView, fx: FxTable): string {
-  if (connection.provider === "binance") return ASSET_CLASS_META.crypto.plural;
+  if (connection.provider !== "ibkr") return ASSET_CLASS_META.crypto.plural;
   const { byClass } = computeNetWorth([], [], fx, connection.snapshot?.positions ?? []);
   const classes = (Object.entries(byClass) as [AssetClass, number][]).filter(([c]) => c !== "cash").sort((a, b) => b[1] - a[1]);
   return classes.length ? classes.slice(0, 2).map(([c]) => ASSET_CLASS_META[c].plural).join(" & ") : ASSET_CLASS_META.cash.plural;
@@ -46,12 +46,18 @@ function costNote(connection: ConnectionView, fx: FxTable, costs: readonly Holdi
       : { text: "P/L is estimated from your imported Spot buys; tap a coin below for how.", href: "/admin/history?provider=binance", link: "Purchase history" };
   }
   const missing = positions.filter((p) => p.assetClass !== "cash" && knownCost(p) == null).length;
+  if (connection.provider === "hyperliquid") {
+    const history = { href: "/admin/history?provider=hyperliquid", link: "Trade history" };
+    return missing
+      ? { text: `P/L leaves out ${missing} ${missing === 1 ? "holding" : "holdings"} that did not come from this wallet's USDC spot buys.`, ...history }
+      : { text: "P/L is estimated from this wallet's spot buys and staking rewards.", ...history };
+  }
   if (!missing) return null;
   const text = missing === 1 ? "1 holding has no cost basis in the IBKR report, so it is left out of P/L." : `${missing} holdings have no cost basis in the IBKR report, so they are left out of P/L.`;
   return { text, href: "/admin/connections", link: "Check the report" };
 }
 
-/** Binance and IBKR together: how each account is doing, then everything they hold. */
+/** Every investment account together: how each one is doing, then everything they hold. */
 export default async function PortfolioPage({ searchParams }: { searchParams: Promise<{ class?: string; small?: string }> }) {
   const params = await searchParams;
   const showSmall = params.small === "1";
@@ -122,7 +128,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
   const pnlUsd = withCost.length ? withCost.reduce((sum, a) => sum + a.totals.pnlUsd!, 0) : null;
   const costUsd = withCost.reduce((sum, a) => sum + (a.totals.costUsd ?? 0), 0);
   const missingCosts = tracked.reduce((sum, a) => sum + a.coverage.missing, 0);
-  const estimatedPnl = withCost.some((a) => a.connection.provider === "binance");
+  const estimatedPnl = withCost.some((a) => a.connection.provider !== "ibkr");
   const changes = tracked.flatMap((a) => {
     const change = changeSince(a.points.map((p) => ({ date: p.date, value: p.valueUsd })), addDays(today, -30));
     return change ? [{ change, to: a.points.at(-1)!.date }] : [];
@@ -193,7 +199,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       {accounts.length === 0 ? (
         <div className="mb-6">
           <EmptyState title="No accounts yet">
-            <Link href="/admin/connections" className="underline underline-offset-4">Connect Binance or IBKR</Link> and their performance shows up here after the first sync.
+            <Link href="/admin/connections" className="underline underline-offset-4">Connect Binance, IBKR or Hyperliquid</Link> and their performance shows up here after the first sync.
           </EmptyState>
         </div>
       ) : (
@@ -249,7 +255,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
 
       {visible.filter((p) => !filter || p.assetClass === filter).length === 0 ? (
         <EmptyState title={positions.length > 0 ? "No holdings match these filters" : "No holdings yet"}>
-          {positions.length > 0 ? "Show small balances or choose All." : "Connect Binance or IBKR and your positions appear here after the first sync."}
+          {positions.length > 0 ? "Show small balances or choose All." : "Connect Binance, IBKR or Hyperliquid and your positions appear here after the first sync."}
         </EmptyState>
       ) : (
         <HoldingsTable connections={connections} fx={fx} filter={filter} showSmall={showSmall} binanceCosts={binanceCosts} />

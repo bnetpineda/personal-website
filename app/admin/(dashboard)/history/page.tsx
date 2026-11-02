@@ -11,7 +11,7 @@ import { EmptyState, PageHeader } from "../../_components/ui";
 
 export const maxDuration = 120;
 export default async function InvestmentHistoryPage({ searchParams }: { searchParams: Promise<{ provider?: string; page?: string }> }) {
-  const params = await searchParams, provider = params.provider === "ibkr" || params.provider === "binance" ? params.provider : "all";
+  const params = await searchParams, provider = params.provider === "ibkr" || params.provider === "binance" || params.provider === "hyperliquid" ? params.provider : "all";
   const page = /^\d{1,5}$/.test(params.page ?? "") ? Number(params.page) : 0;
   const data = await getInvestmentHistory(provider, page), href = (p: string, n = 0) => `/admin/history?provider=${p}&page=${n}`;
   return <>
@@ -41,12 +41,12 @@ export default async function InvestmentHistoryPage({ searchParams }: { searchPa
           <TableCell>{f.unmatched ? "Incomplete purchase history" : <NativeAmount value={f.realized} currency={f.quoteAsset} crypto />}</TableCell></TableRow>)}
       </TableBody></Table>
     </CardContent></Card>}
-    <div className="mb-4 flex flex-wrap gap-2">{["all", "binance", "ibkr"].map((p) => <Button key={p} asChild size="sm" variant={provider === p ? "default" : "outline"}><Link href={href(p)}>{p === "all" ? "All investment activity" : p.toUpperCase()}</Link></Button>)}</div>
+    <div className="mb-4 flex flex-wrap gap-2">{["all", "binance", "ibkr", "hyperliquid"].map((p) => <Button key={p} asChild size="sm" variant={provider === p ? "default" : "outline"}><Link href={href(p)}>{p === "all" ? "All investment activity" : p.toUpperCase()}</Link></Button>)}</div>
     {!data.entries.length ? <EmptyState title="No history in this view">Import a report or continue a connected account’s history.</EmptyState> : <Card className="mb-4 gap-0 overflow-hidden py-0"><Table>
       <TableHeader><TableRow><TableHead>Activity</TableHead><TableHead>Trade details</TableHead><TableHead>Native amount</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>
         {data.entries.map((e) => <TableRow key={e.id}><TableCell>{e.description}<br /><span className="text-xs text-muted-foreground">{e.occurredOn} · {e.provider.toUpperCase()} · {e.kind}</span></TableCell>
           <TableCell>{e.trade ? <><NativeAmount value={e.trade.quantity} currency={e.trade.baseAsset} crypto /><br /><span className="text-xs">@ <NativeAmount value={e.trade.price} currency={e.trade.quoteAsset} crypto /></span></> : "—"}</TableCell>
-          <TableCell><NativeAmount value={e.amount} currency={e.currency} crypto={e.provider === "binance"} /></TableCell><TableCell><Badge variant="outline">{e.status}</Badge></TableCell></TableRow>)}
+          <TableCell><NativeAmount value={e.amount} currency={e.currency} crypto={e.provider !== "ibkr"} /></TableCell><TableCell><Badge variant="outline">{e.status}</Badge></TableCell></TableRow>)}
       </TableBody></Table></Card>}
     <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{data.total} entries · page {page + 1}</p><div className="flex gap-2">
       {page > 0 && <Button asChild variant="outline" size="sm"><Link href={href(provider, page - 1)}>Previous</Link></Button>}{(page + 1) * 50 < data.total && <Button asChild variant="outline" size="sm"><Link href={href(provider, page + 1)}>Next</Link></Button>}

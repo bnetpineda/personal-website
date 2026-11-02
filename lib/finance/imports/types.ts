@@ -32,7 +32,7 @@ export const importEntrySchema = z.object({
 }).refine((r) => r.amount !== 0 || r.kind === "trade", "Empty transaction amount");
 export type ImportEntry = z.output<typeof importEntrySchema>;
 export interface HistoryCoverage { from: string; to: string; description: string }
-/** `nav`: IBKR's daily net asset value, when the report includes Net Asset Value (NAV) in Base. */
+/** `nav`: the provider's own value per day: IBKR's NAV when the report includes it, Hyperliquid's account value. */
 export interface HistoryImport { entries: ImportEntry[]; coverage: HistoryCoverage; accounts?: string[]; nav?: NavPoint[] }
 export class ImportError extends Error {}
 

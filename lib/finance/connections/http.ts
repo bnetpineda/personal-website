@@ -1,17 +1,20 @@
 import "server-only";
-import { get } from "node:https";
+import { request as send } from "node:https";
 import { ConnectionError } from "./types";
 
-const HOSTS = new Set(["api.binance.com", "ndcdyn.interactivebrokers.com"]);
+const HOSTS = new Set(["api.binance.com", "ndcdyn.interactivebrokers.com", "api.hyperliquid.xyz"]);
+/** Hyperliquid's public read queries are POSTs. Nothing else may send a body, its /exchange endpoint included. */
+const POST_URL = "https://api.hyperliquid.xyz/info";
 
-/** GET-only, fixed hosts, no redirects, bounded time/body. URLs with tokens are never logged. */
-export function readText(url: URL, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<string> {
-  if (url.protocol !== "https:" || !HOSTS.has(url.hostname) || url.port || url.username || url.password) {
+/** Reads only: fixed hosts, no redirects, bounded time/body. URLs with tokens are never logged. */
+export function readText(url: URL, headers: Record<string, string> = {}, signal?: AbortSignal, body?: unknown): Promise<string> {
+  if (url.protocol !== "https:" || !HOSTS.has(url.hostname) || url.port || url.username || url.password || (body !== undefined && url.href !== POST_URL)) {
     throw new ConnectionError("Unsupported account API address.");
   }
   return new Promise((resolve, reject) => {
-    const request = get(url, {
-      headers: { accept: "application/json, application/xml, text/plain", "User-Agent": "PersonalFinanceDashboard/1.0", ...headers },
+    const request = send(url, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { accept: "application/json, application/xml, text/plain", "User-Agent": "PersonalFinanceDashboard/1.0", ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
     }, (response) => {
       const status = response.statusCode ?? 0;
@@ -40,12 +43,13 @@ export function readText(url: URL, headers: Record<string, string> = {}, signal?
       response.on("error", () => reject(new ConnectionError("The account response was interrupted. Try again.")));
     });
     request.on("error", () => reject(new ConnectionError("The account provider could not be reached in time. Try again.")));
+    request.end(body === undefined ? undefined : JSON.stringify(body));
   });
 }
 
-export async function readJson(url: URL, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<unknown> {
+export async function readJson(url: URL, headers: Record<string, string> = {}, signal?: AbortSignal, body?: unknown): Promise<unknown> {
   try {
-    return JSON.parse(await readText(url, headers, signal));
+    return JSON.parse(await readText(url, headers, signal, body));
   } catch (error) {
     if (error instanceof ConnectionError) throw error;
     throw new ConnectionError("The account provider returned an unreadable response. Previous balances were kept.");

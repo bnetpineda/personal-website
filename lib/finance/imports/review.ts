@@ -5,7 +5,7 @@ import { daysBetween } from "../dates";
 import type { ImportEntry } from "./types";
 
 export function canPost(entry: Pick<ImportEntry, "provider" | "currency" | "kind" | "amount">) {
-  return entry.provider !== "binance" && entry.kind !== "trade" && entry.amount !== 0 &&
+  return entry.provider !== "binance" && entry.provider !== "hyperliquid" && entry.kind !== "trade" && entry.amount !== 0 &&
     (CURRENCIES as readonly string[]).includes(entry.currency) && Math.abs(entry.amount) >= 0.005;
 }
 

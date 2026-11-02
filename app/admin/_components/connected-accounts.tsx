@@ -75,8 +75,10 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
                 {connection ? <>
                   <SyncConnectionsButton provider={provider} disabled={!connection.enabled || connection.syncing} />
                   <ConnectionSettings provider={provider} enabled={connection.enabled} included={connection.includeInNetWorth} hasSnapshot={Boolean(snapshot)} />
-                  <p className="text-xs text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ?? "No reminder set"}</p>
-                  <CredentialExpiryButton provider={provider} expiresOn={connection.credentialsExpireOn} />
+                  {provider !== "hyperliquid" && <>
+                    <p className="text-xs text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ?? "No reminder set"}</p>
+                    <CredentialExpiryButton provider={provider} expiresOn={connection.credentialsExpireOn} />
+                  </>}
                 </> : <ConnectAccountButton provider={provider} />}
               </CardContent>
             </Card>

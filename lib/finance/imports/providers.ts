@@ -1,12 +1,14 @@
 import "server-only";
 import { z } from "zod";
-import { binanceReader, defaultIO, fetchFlexReport, type ProviderIO } from "../connections/providers";
+import { binanceReader, defaultIO, fetchFlexReport, hyperliquidPages, hyperliquidReader, type ProviderIO } from "../connections/providers";
 import type { Credentials } from "../connections/types";
 import { ImportError, uniqueEntries, type HistoryImport, type ImportEntry } from "./types";
-import { identifier, parseCapitalPage, parseIbkrHistory, parseRewardsPage } from "./provider-parsers";
+import { identifier, parseCapitalPage, parseHyperliquidHistory, parseIbkrHistory, parseRewardsPage } from "./provider-parsers";
 
 /** Each IBKR sync re-reads this many days of the account's query; entries already imported are skipped. */
 const IBKR_HISTORY_DAYS = 30;
+/** Fills and funding per sync, whole UTC days so a funding day is never read half finished. Duplicates are skipped. */
+const HYPERLIQUID_HISTORY_DAYS = 30;
 
 /** Rolling overlap repairs missed days and deduplicates by provider identity, not import time. */
 export async function fetchHistory(credentials: Credentials, io: ProviderIO = defaultIO, now = new Date(), range?: { from: string; to: string }, expectedAccount?: string): Promise<HistoryImport> {
@@ -14,6 +16,16 @@ export async function fetchHistory(credentials: Credentials, io: ProviderIO = de
   if (credentials.provider === "ibkr") {
     // The balance query also carries Cash Transactions and Trades; history asks it for the last 30 days.
     return parseIbkrHistory(await fetchFlexReport(credentials, signal, io, IBKR_HISTORY_DAYS));
+  }
+  if (credentials.provider === "hyperliquid") {
+    const info = hyperliquidReader(signal, io), user = credentials.address;
+    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const from = today - HYPERLIQUID_HISTORY_DAYS * 86_400_000;
+    const [markets, fills, funding, ledger, rewards, portfolio] = await Promise.all([
+      info({ type: "spotMetaAndAssetCtxs" }), hyperliquidPages(info, { type: "userFillsByTime", user }, from), hyperliquidPages(info, { type: "userFunding", user }, from),
+      hyperliquidPages(info, { type: "userNonFundingLedgerUpdates", user }, 0), info({ type: "delegatorRewards", user }), info({ type: "portfolio", user }),
+    ]);
+    return parseHyperliquidHistory({ address: user, markets, fills, funding, ledger, rewards, portfolio }, from, today);
   }
   const signed = await binanceReader(credentials, signal, io);
   const { uid } = z.object({ uid: identifier }).parse(await signed("/api/v3/account", { omitZeroBalances: "true" }));

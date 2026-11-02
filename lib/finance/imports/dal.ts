@@ -28,7 +28,7 @@ export async function getEarnings(month: string | null) {
     // Matched movements between two investment accounts are not new invested capital.
     amount: sql<number>`coalesce(sum(case when ${e.status} = 'transfer' and ${e.transferId} is not null and exists(
       select 1 from imported_entries partner where partner.transfer_id = ${e.transferId} and partner.id <> ${e.id}
-        and partner.provider in ('binance','ibkr')) then 0 else ${e.amount} end), 0)`.mapWith(Number),
+        and partner.provider in ('binance','ibkr','hyperliquid')) then 0 else ${e.amount} end), 0)`.mapWith(Number),
     realizedPnl: sql<number | null>`sum(${e.realizedPnl})`.mapWith(Number),
   }).from(e).where(filter)
     .groupBy(e.provider, e.currency, e.kind, e.status);
@@ -36,16 +36,16 @@ export async function getEarnings(month: string | null) {
   return { rows: earnings.rows, postedCash: earnings.postedCash };
 }
 
-export async function getInvestmentHistory(provider: "binance" | "ibkr" | "all", page: number) {
+export async function getInvestmentHistory(provider: "binance" | "ibkr" | "hyperliquid" | "all", page: number) {
   await requireAdmin();
-  const db = getDb(), filter = provider === "all" ? sql`${importedEntries.provider} in ('binance','ibkr')` : eq(importedEntries.provider, provider);
+  const db = getDb(), filter = provider === "all" ? sql`${importedEntries.provider} in ('binance','ibkr','hyperliquid')` : eq(importedEntries.provider, provider);
   const [jobs, reports, entries, totals, coverage] = await Promise.all([
     db.select().from(investmentSyncs).orderBy(asc(investmentSyncs.scope)),
     db.select().from(investmentReports).orderBy(desc(investmentReports.createdAt)).limit(100),
     db.select().from(importedEntries).where(filter).orderBy(desc(importedEntries.occurredOn), desc(importedEntries.createdAt), asc(importedEntries.id)).limit(50).offset(page * 50),
     db.select({ total: count() }).from(importedEntries).where(filter),
     db.select({ provider: importedEntries.provider, total: count(), from: sql<string>`min(${importedEntries.occurredOn})`, to: sql<string>`max(${importedEntries.occurredOn})` })
-      .from(importedEntries).where(sql`${importedEntries.provider} in ('binance','ibkr')`).groupBy(importedEntries.provider),
+      .from(importedEntries).where(sql`${importedEntries.provider} in ('binance','ibkr','hyperliquid')`).groupBy(importedEntries.provider),
   ]);
-  return { jobs, reports, entries, total: totals[0].total, coverage, fifo: provider === "ibkr" ? [] : await readAllSpotFifo() };
+  return { jobs, reports, entries, total: totals[0].total, coverage, fifo: provider === "ibkr" || provider === "hyperliquid" ? [] : await readAllSpotFifo() };
 }

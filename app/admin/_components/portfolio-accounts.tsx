@@ -120,7 +120,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
 
         <dl className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex flex-col gap-1">
-            <dt className={label}>{a.pnlPartial && a.pnl != null ? "Partial profit / loss" : a.provider === "binance" ? "Estimated profit / loss" : "Profit / loss"}</dt>
+            <dt className={label}>{a.pnlPartial && a.pnl != null ? "Partial profit / loss" : a.provider === "ibkr" ? "Profit / loss" : "Estimated profit / loss"}</dt>
             <dd className="flex flex-wrap items-baseline gap-x-2 font-mono">
               {a.pnl == null ? (
                 <span className="text-muted-foreground">—</span>
@@ -184,7 +184,9 @@ function EmptyChart({ account: a, view }: { account: PortfolioAccount; view: Vie
   if (view === "pnl" && a.pnl == null) {
     return (
       <EmptyState title="No P/L yet">
-        {a.provider === "binance" ? "Import your Spot purchases on History to estimate it." : "The IBKR report has no cost basis for these holdings."}
+        {a.provider === "binance" ? "Import your Spot purchases on History to estimate it."
+          : a.provider === "hyperliquid" ? "These coins did not come from this wallet's USDC spot buys, so their cost is unknown."
+            : "The IBKR report has no cost basis for these holdings."}
       </EmptyState>
     );
   }

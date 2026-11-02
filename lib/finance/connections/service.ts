@@ -11,7 +11,7 @@ import { ConnectionError, type ConnectionView, type SyncProvider, type SyncResul
 import { fetchHistory } from "../imports/providers";
 import { ingestEntries } from "../imports/service";
 import { ImportError, type HistoryCoverage } from "../imports/types";
-import { saveIbkrNav } from "../portfolio";
+import { saveNav } from "../portfolio";
 
 /* Shared by authenticated Server Actions/DAL and the secret-protected daily cron. */
 export async function loadConnectionViews(): Promise<ConnectionView[]> {
@@ -62,8 +62,8 @@ export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
       const history = await fetchHistory(credentials);
       await ingestEntries(history.entries, { provider, id: lease });
       historyCoverage = history.coverage;
-      // Best effort: IBKR's daily NAV only fills earlier days of the Portfolio chart.
-      if (history.nav?.length) await saveIbkrNav(history.nav).catch((err) => console.error("[admin] IBKR NAV save failed", err));
+      // Best effort: a provider's own daily value only fills earlier days of the Portfolio chart.
+      if (history.nav?.length) await saveNav(provider, history.nav).catch((err) => console.error("[admin] NAV save failed", err));
     } catch (error) {
       historyError = error instanceof ImportError || error instanceof ConnectionError ? error.message : "Transaction history could not sync. Check report fields and retry; earlier imports were kept.";
     }

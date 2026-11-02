@@ -3,7 +3,7 @@ import { ASSET_CLASSES } from "../constants";
 import { removeBinanceEarnReceipts } from "./binance-positions";
 
 /** Where imported activity comes from. Wise and MariBank arrive only as uploaded statements. */
-export const PROVIDERS = ["wise", "binance", "ibkr", "maribank"] as const;
+export const PROVIDERS = ["wise", "binance", "ibkr", "maribank", "hyperliquid"] as const;
 export const providerSchema = z.enum(PROVIDERS);
 export type Provider = z.infer<typeof providerSchema>;
 
@@ -12,7 +12,7 @@ export const BANK_PROVIDERS: readonly Provider[] = ["wise", "maribank"];
 export const isBank = (provider: Provider) => BANK_PROVIDERS.includes(provider);
 
 /** Accounts that sync through an API. Wise personal tokens cannot, so Wise is not one of them. */
-export const SYNC_PROVIDERS = ["binance", "ibkr"] as const;
+export const SYNC_PROVIDERS = ["binance", "ibkr", "hyperliquid"] as const;
 export const syncProviderSchema = z.enum(SYNC_PROVIDERS);
 export type SyncProvider = z.infer<typeof syncProviderSchema>;
 
@@ -40,6 +40,12 @@ export const PROVIDER_META = {
     scope: "Daily statement · not live quotes",
     docs: "https://www.interactivebrokers.com/docs/web-api/flex-web-service/client-portal-configuration/create-a-flex-query",
   },
+  hyperliquid: {
+    name: "Hyperliquid",
+    description: "Spot, perps, staking, lending and vaults for one wallet address.",
+    scope: "Wallet address · read only",
+    docs: "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint",
+  },
 } as const;
 
 /** How long new credentials stay valid, like IBKR's "Should Expire After" list (6 hours to 1 year). */
@@ -59,6 +65,8 @@ export const credentialsSchema = z.discriminatedUnion("provider", [
   z.object({ provider: z.literal("binance"), apiKey: secret, apiSecret: secret }),
   // One query serves balances and history; an older saved history query ID is dropped.
   z.object({ provider: z.literal("ibkr"), token: secret, queryId: numericId }),
+  // An address only reads public account data and never expires. It can't move funds.
+  z.object({ provider: z.literal("hyperliquid"), address: z.string().trim().regex(/^0x[0-9a-fA-F]{40}$/, "Enter a wallet address: 0x and 40 letters or numbers").toLowerCase() }),
 ]);
 export type Credentials = z.infer<typeof credentialsSchema>;
 

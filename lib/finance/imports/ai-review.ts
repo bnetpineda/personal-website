@@ -135,7 +135,7 @@ export function routineDecision(entry: Entry, categories: CategoryOption[], acco
     return { id: entry.id, decision: "ignore", reason: "Card check of 1.00" };
   if (TRANSFER_KINDS.includes(entry.kind) && paysAccountHolder(entry.description, accountHolder))
     return { id: entry.id, decision: "transfer", reason: "Payment to the account holder" };
-  if ((entry.provider === "binance" || entry.provider === "ibkr") && entry.kind === "transfer")
+  if ((entry.provider === "binance" || entry.provider === "ibkr" || entry.provider === "hyperliquid") && entry.kind === "transfer")
     return { id: entry.id, decision: "transfer", reason: "Deposit or withdrawal between accounts" };
   const target = entry.kind === "fee" ? { kind: "expense" as const, name: "Fees & charges" }
     : entry.kind === "tax" ? { kind: "expense" as const, name: "Taxes" }
@@ -148,7 +148,7 @@ export function routineDecision(entry: Entry, categories: CategoryOption[], acco
   return { id: entry.id, decision: "post", categoryId: category.id, reason: `${label} posted to ${category.name}` };
 }
 
-const INSTRUCTIONS = `You categorize one person's financial activity imported from Wise (multi-currency money account), MariBank (Philippine savings bank), Interactive Brokers (IBKR, stock broker) and Binance (crypto exchange).
+const INSTRUCTIONS = `You categorize one person's financial activity imported from Wise (multi-currency money account), MariBank (Philippine savings bank), Interactive Brokers (IBKR, stock broker), Binance and Hyperliquid (crypto exchanges).
 accountHolder is that person. Money sent to or received from them, including a longer legal name that contains their first and last name, is a transfer between their own accounts.
 For each entry return exactly one decision, using only a decision listed in that entry's "allowed":
 - "post": a real income or expense for the personal budget. Pick categoryId from the categories whose kind matches the entry's direction (positive amount = income, negative = expense). Use that category's "about" text. Pay from an employer is Salary. Pay from a client is Freelance. Business is revenue of a business the account holder owns.

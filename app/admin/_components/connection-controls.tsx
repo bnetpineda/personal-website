@@ -20,9 +20,12 @@ import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form"
 function ConnectionForm({ provider }: { provider: SyncProvider }) {
   const { state, pending, onSubmit, formKey, error } = useFormAction(saveConnection);
   const name = PROVIDER_META[provider].name;
+  const wallet = provider === "hyperliquid";
   const fields = provider === "binance"
-    ? [{ key: "apiKey", label: "API key", secret: true }, { key: "apiSecret", label: "Secret key", secret: true }]
-    : [{ key: "token", label: "Flex Web Service token", secret: true }, { key: "queryId", label: "Activity Flex Query ID", secret: false }];
+    ? [{ key: "apiKey", label: "API key", secret: true, maxLength: 4096 }, { key: "apiSecret", label: "Secret key", secret: true, maxLength: 4096 }]
+    : wallet
+      ? [{ key: "address", label: "Wallet address", secret: false, maxLength: 42 }]
+      : [{ key: "token", label: "Flex Web Service token", secret: true, maxLength: 4096 }, { key: "queryId", label: "Activity Flex Query ID", secret: false, maxLength: 30, numeric: true }];
   return (
     <form key={formKey} onSubmit={(event) => { if (pending) event.preventDefault(); else onSubmit(event); }} className="flex flex-col gap-6">
       <input type="hidden" name="provider" value={provider} />
@@ -30,6 +33,11 @@ function ConnectionForm({ provider }: { provider: SyncProvider }) {
         <p className="text-sm text-muted-foreground">
           Create a system-generated HMAC API key with Enable Reading only. Disable trading, transfers and withdrawals.
           Spot and Simple Earn Flexible/Locked are included; other wallets and Earn products are outside this connection.
+        </p>
+      ) : wallet ? (
+        <p className="text-sm text-muted-foreground">
+          Paste the address of the wallet you trade with: your main wallet, not an API wallet. Spot, perps, staking, lending
+          and vaults are included; tokens on HyperEVM or other chains are outside this connection.
         </p>
       ) : (
         <div className="flex flex-col gap-3 text-sm text-muted-foreground">
@@ -52,11 +60,11 @@ function ConnectionForm({ provider }: { provider: SyncProvider }) {
         {fields.map((field) => (
           <FormField key={field.key} id={`${provider}-${field.key}`} label={field.label} error={error(field.key)}>
             <Input id={`${provider}-${field.key}`} name={field.key} type={field.secret ? "password" : "text"}
-              inputMode={field.secret ? "text" : "numeric"} autoComplete="off" spellCheck={false}
-              maxLength={field.secret ? 4096 : 30} required aria-invalid={Boolean(error(field.key))} disabled={pending} />
+              inputMode={field.numeric ? "numeric" : "text"} autoComplete="off" spellCheck={false}
+              maxLength={field.maxLength} required aria-invalid={Boolean(error(field.key))} disabled={pending} />
           </FormField>
         ))}
-        <FormField id={`${provider}-expires`} label="Credentials expire after" description="Choose what you picked when creating them. A reminder appears 7 days before they expire.">
+        {!wallet && <FormField id={`${provider}-expires`} label="Credentials expire after" description="Choose what you picked when creating them. A reminder appears 7 days before they expire.">
           <Select name="credentialsExpireAfter" defaultValue="none" disabled={pending}>
             <SelectTrigger id={`${provider}-expires`}><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -64,9 +72,9 @@ function ConnectionForm({ provider }: { provider: SyncProvider }) {
               {CREDENTIAL_LIFETIMES.map((lifetime) => <SelectItem key={lifetime.days} value={String(lifetime.days)}>{lifetime.label}</SelectItem>)}
             </SelectContent>
           </Select>
-        </FormField>
+        </FormField>}
       </FieldGroup>
-      <p className="text-sm text-muted-foreground">Credentials are encrypted on the server. This connection only reads your account.</p>
+      <p className="text-sm text-muted-foreground">{wallet ? "An address can only read public account data. Never paste a private key or seed phrase here." : "Credentials are encrypted on the server. This connection only reads your account."}</p>
       <FormFooter state={state} pending={pending}>{pending ? "Connecting…" : "Save & sync"}</FormFooter>
     </form>
   );

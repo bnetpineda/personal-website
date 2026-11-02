@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { accountValueHistory, parseFills, parseStakingRewards, spotMarkets } from "../connections/hyperliquid";
 import { parseFlexXml } from "../connections/parsers";
 import { todayManila } from "../dates";
 import type { NavPoint } from "../performance";
@@ -53,6 +54,82 @@ export function parseCapitalPage(body: unknown, kind: "deposit" | "withdraw", ac
     }
   }
   return entries;
+}
+
+/** Keeps amounts that are sums or products stable between imports, so a re-read never looks like a changed record. */
+const units = (value: number) => Number(value.toFixed(8));
+/** Ledger rows with money moving in or out, or earned. Moves within the account (spot to perps, staking, vaults) are not activity. */
+const ledgerSchema = z.object({ time: z.number().int().positive(), hash: z.string().min(1), delta: z.looseObject({ type: z.string().min(1) }) });
+const moved = z.object({ user: z.string().optional(), destination: z.string().optional(), token: z.string().optional(), amount: numeric.optional(), usdc: numeric.optional(),
+  fee: numeric.optional(), feeToken: z.string().optional() });
+
+function ledgerEntries(body: unknown, address: string, accountKey: string): ImportEntry[] {
+  return z.array(ledgerSchema).parse(body).flatMap(({ time, hash, delta }) => {
+    const base = { provider: "hyperliquid" as const, accountKey, occurredOn: todayManila(new Date(time)), realizedPnl: null };
+    const externalId = `ledger:${time}:${hash}:${delta.type}`;
+    const row = moved.parse(delta);
+    const amount = row.amount ?? row.usdc ?? 0;
+    const token = asset.safeParse(row.token ?? "USDC");
+    if (!token.success) return [];
+    const currency = token.data;
+    const transfer = (signed: number): ImportEntry => ({ ...base, externalId, kind: "transfer", amount: signed, currency, description: `Hyperliquid ${signed > 0 ? "deposit" : "withdrawal"} · ${currency}` });
+    const fee = (): ImportEntry[] => row.fee ? [{ ...base, externalId: `${externalId}:fee`, kind: "fee", amount: -row.fee, currency: asset.safeParse(row.feeToken).data ?? currency, description: `Hyperliquid withdrawal fee · ${currency}` }] : [];
+    switch (delta.type) {
+      case "deposit": return amount ? [transfer(amount)] : [];
+      case "withdraw": return amount ? [transfer(-amount), ...fee()] : [];
+      case "send": case "spotTransfer": case "internalTransfer": case "subAccountTransfer": {
+        const received = row.destination?.toLowerCase() === address, sent = row.user?.toLowerCase() === address;
+        if (!amount || received === sent) return [];
+        return received ? [transfer(amount)] : [transfer(-amount), ...fee()];
+      }
+      case "rewardsClaim": return amount ? [{ ...base, externalId, kind: "reward", amount, currency, description: `Hyperliquid rewards · ${currency}` }] : [];
+      case "borrowLend": {
+        const lend = z.object({ operation: z.string().min(1), interestAmount: numeric }).parse(delta);
+        const signed = ["borrow", "repay"].includes(lend.operation) ? -lend.interestAmount : lend.interestAmount;
+        return signed ? [{ ...base, externalId, kind: "interest", amount: signed, currency, description: `Hyperliquid lending interest · ${currency}` }] : [];
+      }
+      default: return [];
+    }
+  });
+}
+
+export function parseHyperliquidHistory(input: { address: string; markets: unknown; fills: unknown; funding: unknown; ledger: unknown; rewards: unknown; portfolio: unknown }, from: number, today: number): HistoryImport {
+  const accountKey = `address:${input.address}`;
+  const base = { provider: "hyperliquid" as const, accountKey };
+  const { pairs } = spotMarkets(input.markets);
+  const entries: ImportEntry[] = ledgerEntries(input.ledger, input.address, accountKey);
+  for (const r of parseStakingRewards(input.rewards)) {
+    if (r.totalAmount) entries.push({ ...base, externalId: `staking:${r.source}:${r.time}`, occurredOn: todayManila(new Date(r.time)), kind: "reward", amount: r.totalAmount, currency: "HYPE", description: "Hyperliquid staking reward · HYPE", realizedPnl: null });
+  }
+  for (const f of parseFills(input.fills)) {
+    const pair = pairs.get(f.coin);
+    const externalId = `fill:${f.tid}:${f.side}`;
+    const dated = { ...base, occurredOn: todayManila(new Date(f.time)) };
+    const label = `${f.dir} ${f.sz} ${pair?.base ?? f.coin} @ ${f.px}`.slice(0, 200);
+    // Spot trades swap coins for their quote; a perp's size never changes hands, only what it closes for.
+    const amount = pair ? units((f.side === "A" ? 1 : -1) * f.sz * f.px) : f.closedPnl;
+    entries.push({ ...dated, externalId, kind: "trade", amount, currency: pair ? asset.safeParse(pair.quote).data ?? "USDC" : "USDC", description: label, realizedPnl: f.closedPnl || null });
+    const feeToken = asset.safeParse(f.feeToken);
+    if (f.fee && feeToken.success) entries.push({ ...dated, externalId: `${externalId}:fee`, kind: "fee", amount: -f.fee, currency: feeToken.data, description: `Trade fee · ${pair?.base ?? f.coin}`.slice(0, 200), realizedPnl: null });
+  }
+  // Funding settles hourly, so each coin gets one line per finished UTC day: a day still running would change later.
+  const funding = new Map<string, { coin: string; day: string; amount: number }>();
+  const fundingRows = z.array(z.object({ time: z.number().int().positive(), delta: z.object({ coin: z.string().min(1), usdc: numeric }) })).parse(input.funding);
+  for (const { time, delta } of fundingRows) {
+    if (time < from || time >= today) continue;
+    const day = new Date(time).toISOString().slice(0, 10), key = `${delta.coin}:${day}`;
+    funding.set(key, { coin: delta.coin, day, amount: (funding.get(key)?.amount ?? 0) + delta.usdc });
+  }
+  for (const [key, { coin, day, amount }] of funding) {
+    if (units(amount)) entries.push({ ...base, externalId: `funding:${key}`, occurredOn: day, kind: "interest", amount: units(amount), currency: "USDC", description: `Perp funding · ${coin}`.slice(0, 200), realizedPnl: null });
+  }
+  // The days before the first deposit say nothing, so the chart starts where the account does.
+  const history = accountValueHistory(input.portfolio);
+  const first = history.findIndex((h) => h.value !== 0);
+  const days = new Map(first < 0 ? [] : history.slice(first).map((h) => [todayManila(new Date(h.time)), h.value]));
+  const nav: NavPoint[] = [...days].map(([date, value]) => ({ accountKey, date, value, currency: "USD" }));
+  return { entries: uniqueEntries(entries), accounts: [accountKey], nav, coverage: { from: new Date(from).toISOString().slice(0, 10), to: new Date(today).toISOString().slice(0, 10),
+    description: "Hyperliquid fills and perp funding for this range, plus every deposit, withdrawal, reward and lending interest record available. Realized P/L is as Hyperliquid reports it, before trade fees. Moves within the account are not listed." } };
 }
 
 const navRow = z.object({ "@_reportDate": isoDay, "@_total": numeric, "@_currency": z.string().optional() });

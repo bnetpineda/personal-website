@@ -89,15 +89,16 @@ export async function recordPortfolioQuietly(): Promise<void> {
 }
 
 /**
- * IBKR's reported daily NAV fills the days before balances were recorded. It never replaces a recorded day,
- * so the chart keeps one way of valuing each day. Returns how many days were added.
+ * The value a provider itself reports per day (IBKR's NAV, Hyperliquid's account value) fills the days before
+ * balances were recorded. It never replaces a recorded day, so the chart keeps one way of valuing each day.
+ * Returns how many days were added.
  */
-export async function saveIbkrNav(points: readonly NavPoint[]): Promise<number> {
+export async function saveNav(provider: SyncProvider, points: readonly NavPoint[]): Promise<number> {
   if (!points.length) return 0;
   const days = navTotals(points, await loadFxTable());
   if (!days.length) return 0;
   const added = await getDb().insert(portfolioSnapshots)
-    .values(days.map((d) => ({ provider: "ibkr" as const, snapshotDate: d.date, valueUsd: round2(d.valueUsd), source: "nav" as const })))
+    .values(days.map((d) => ({ provider, snapshotDate: d.date, valueUsd: round2(d.valueUsd), source: "nav" as const })))
     .onConflictDoNothing()
     .returning({ date: portfolioSnapshots.snapshotDate });
   return added.length;

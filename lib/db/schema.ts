@@ -225,9 +225,9 @@ export const netWorthSnapshots = pgTable("net_worth_snapshots", {
 });
 
 /**
- * Each investment account's value per day, in US dollars (see lib/finance/performance.ts). Binance rows are
- * dated by the Manila day its balances were read, IBKR rows by statement date. Every connected account is
- * recorded, whether or not it counts in net worth.
+ * Each investment account's value per day, in US dollars (see lib/finance/performance.ts). Binance and
+ * Hyperliquid rows are dated by the Manila day their balances were read, IBKR rows by statement date. Every
+ * connected account is recorded, whether or not it counts in net worth.
  */
 export const portfolioSnapshots = pgTable("portfolio_snapshots", {
   provider: text("provider").$type<SyncProvider>().notNull(),
@@ -240,7 +240,7 @@ export const portfolioSnapshots = pgTable("portfolio_snapshots", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.provider, t.snapshotDate] }),
-  check("portfolio_snapshots_provider", sql`${t.provider} in ('binance', 'ibkr')`),
+  check("portfolio_snapshots_provider", sql`${t.provider} in ('binance', 'ibkr', 'hyperliquid')`),
   check("portfolio_snapshots_source", sql`${t.source} in ('balances', 'nav')`),
 ]);
 
@@ -276,7 +276,7 @@ export const accountConnections = pgTable("account_connections", {
   syncLease: uuid("sync_lease"),
   leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
   ...timestamps,
-}, (t) => [check("account_connections_provider", sql`${t.provider} in ('binance', 'ibkr')`)]);
+}, (t) => [check("account_connections_provider", sql`${t.provider} in ('binance', 'ibkr', 'hyperliquid')`)]);
 
 /** Immutable source amounts. Review decisions survive repeated imports and deleted cash-flow entries. */
 /**
@@ -324,7 +324,7 @@ export const importedEntries = pgTable("imported_entries", {
   index("imported_entries_status_date_idx").on(t.status, t.occurredOn),
   index("imported_entries_transfer_idx").on(t.transferId),
   index("imported_entries_binance_trades_idx").on(t.accountKey, t.updatedAt).where(sql`${t.provider} = 'binance' and ${t.trade} is not null`),
-  check("imported_entries_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr', 'maribank')`),
+  check("imported_entries_provider", sql`${t.provider} in ('wise', 'binance', 'ibkr', 'maribank', 'hyperliquid')`),
   check("imported_entries_kind", sql`${t.kind} in ('payment','transfer','reward','dividend','interest','fee','tax','trade','other')`),
   check("imported_entries_status", sql`${t.status} in ('pending','posted','ignored','transfer','reviewed')`),
   check("imported_entries_categorized_by", sql`${t.categorizedBy} is null or ${t.categorizedBy} in ('rule','ai','manual')`),

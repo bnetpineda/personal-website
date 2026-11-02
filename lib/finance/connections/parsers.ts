@@ -4,7 +4,7 @@ import type { AssetClass } from "../constants";
 import { ConnectionError, snapshotSchema, type ConnectedPosition, type ConnectionSnapshot } from "./types";
 
 // Empty/missing numeric fields must never silently become zero.
-const number = z.union([z.number(), z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/)])
+export const number = z.union([z.number(), z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/)])
   .transform(Number).pipe(z.number().finite());
 const id = z.union([z.string().min(1), z.number().int().safe()]).transform(String);
 const currency = z.string().regex(/^[A-Z]{3}$/);

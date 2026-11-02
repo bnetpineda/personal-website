@@ -1,7 +1,7 @@
 # Private account connections
 
 Open **Settings → Manage connections** (`/admin/connections`). Connections are protected by
-the existing admin login. **Portfolio** (`/admin/holdings`) shows how Binance and IBKR are doing
+the existing admin login. **Portfolio** (`/admin/holdings`) shows how Binance, IBKR and Hyperliquid are doing
 (see [Portfolio performance](#portfolio-performance)) above every saved position, with asset-class
 filters. Use **Sync accounts**
 or an account's **Sync now** to update connected quantities and values; **Refresh prices** updates
@@ -102,6 +102,46 @@ accrued interest. ETF classification follows the asset category supplied in the 
 ETF reported as STK appears as stock.
 
 Reference: [IBKR Flex Web Service](https://www.interactivebrokers.com/docs/web-api/flex-web-service/using-flex-web-service).
+
+## Hyperliquid
+
+Enter your main wallet address. Hyperliquid's info API is public, so there is no key, no permission to
+check and nothing that expires; an address can read an account but never move funds. An API (agent)
+wallet holds nothing, so it is refused rather than shown as an empty account. Apply migration
+`0015_hyperliquid_provider` before connecting.
+
+A sync reads spot balances, lending, staking, vaults and perps on every perp DEX. Spot balances alone
+would miss most of an account: coins lent or staked leave them. A failure in any part rejects the whole
+snapshot and keeps the previous one. Tokens on HyperEVM or other chains are outside this connection.
+
+- **Values** use Hyperliquid's USDC spot markets (the busiest one per token, crossed through another quote
+  token if it has no USDC market), counting 1 USDC as US$1. A token without a market stays visible and
+  unvalued. USDC is cash; vault equity is a fund.
+- **Perps** count as the margin behind the position (size × entry ÷ leverage) plus unrealized P/L, never
+  their full size, so P/L % reads as return on margin. The rest of the perp account is **Perp margin**.
+  A unified or portfolio-margin account keeps all its USDC in the spot balance, so the margin is taken
+  out of that row instead and nothing counts twice.
+- **Cost** is an average from the wallet's USDC spot fills, net of fees paid in the coin; staking rewards
+  are units that cost nothing. It follows a coin's units across spot, lending and staking. A coin holding
+  more than 1% beyond those units came from elsewhere, so its cost is unknown and it stays out of P/L
+  rather than showing as profit; the same goes for coins traded outside USDC markets or sold beyond what
+  was bought. Hyperliquid keeps the latest 10,000 fills, and a wallet at that limit gets no estimates.
+- **Cross-check.** Each sync compares the total with Hyperliquid's own account value and warns on
+  Connections if they differ by more than 1% (minimum US$1).
+
+**History.** Each sync imports 30 whole UTC days of fills and perp funding, and every deposit,
+withdrawal, reward and lending interest record available. Re-reading skips what is already saved.
+Spot fills are trades in their quote token; a perp fill's amount is what it closed for, since its size
+never changes hands. Realized P/L is as reported, before trade fees, which are separate lines. Funding is
+one Interest line per coin per finished UTC day, so a running day never changes a saved record. Moves
+within the account (spot to perps, staking, lending, vaults) are not activity. Entries are never posted to
+Transactions: deposits and withdrawals are transfers, and rewards, fees and interest stay in the
+earnings ledger, without asking AI.
+
+**Earlier days.** Hyperliquid's own account value fills the Portfolio chart back to the first funded
+day, the same way IBKR's NAV does; it never replaces a recorded day.
+
+Reference: [Info endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint).
 
 ## Wise
 
@@ -332,15 +372,15 @@ card says when it does not):
   while history is shorter than the range, the change starts at the first saved day and says so.
 - Allocation by asset class, then the holdings table, whose P/L column shows the percentage too.
 
-P/L uses IBKR's reported cost basis and Binance's Spot purchase estimates (see above). A cost basis of
+P/L uses IBKR's reported cost basis and Binance's and Hyperliquid's purchase estimates (see above). A cost basis of
 0 on a position that is still held is treated as unknown, never as 100% profit, here, in net worth's
 unrealized total and on Earnings. Each card says what its P/L leaves out and where to fill the gap.
 
 **History.** `portfolio_snapshots` keeps one row per account per day: its value and, where known, the
-cost and unrealized P/L of its holdings. Rows are in US dollars, since both accounts value holdings in
+cost and unrealized P/L of its holdings. Rows are in US dollars, since the accounts value holdings in
 dollars, and pages convert them with today's USD→PHP rate, so the charts show how the investments
-moved rather than the peso. Binance rows are dated by the Manila day its balances were read, IBKR rows
-by statement date. The daily cron records every connected account after refreshing FX; so do manual
+moved rather than the peso. Binance and Hyperliquid rows are dated by the Manila day their balances were
+read, IBKR rows by statement date. The daily cron records every connected account after refreshing FX; so do manual
 syncs and opening Portfolio. An account holding a currency without an exchange rate is skipped for
 that day rather than recorded short. Disconnecting an account keeps its history.
 
@@ -382,8 +422,10 @@ Pausing automatic sync retains saved balances and the inclusion setting. Disconn
 credentials and current balances; it does not delete historical net-worth snapshots or revoke
 the provider's token. Imported transaction history and its review decisions are also retained.
 
-The account clients only make GET requests to fixed provider hosts, refuse redirects, enforce
-timeouts and response-size limits, and never log request URLs or raw provider errors. IBKR's
+The account clients only make GET requests to fixed provider hosts, plus POST queries to Hyperliquid's
+read-only `/info` endpoint (its API has no GET; nothing else may send a body, its `/exchange` endpoint
+included). They refuse redirects, enforce timeouts and response-size limits, and never log request URLs
+or raw provider errors. IBKR's
 token-in-query API uses Node HTTPS directly to avoid Next's fetch URL instrumentation.
 
 ## Verification
