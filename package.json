@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "ux:score": "bun scripts/ux-scorecard.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "admin:setup": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/admin-setup.mjs"

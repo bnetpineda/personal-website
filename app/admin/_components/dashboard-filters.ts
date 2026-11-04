@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { dashboardHref, type DashboardParams } from "./nav";
+import { dashboardHref, dashboardMonthHref, type DashboardParams } from "./nav";
 
 /**
  * The dashboard's Activity filters, kept in the URL. Type and category switch on the client (the
@@ -18,8 +18,9 @@ export function useDashboardFilters() {
 
   /** Dashboard URL with some filters changed and the rest kept. */
   const hrefWith = (next: Partial<DashboardParams>) => dashboardHref({ ...current, ...next });
+  const monthHref = (month: string, thisMonth: string) => dashboardMonthHref(current, month, thisMonth);
   /** Changes type/category in place: a history entry (Back undoes it) without a server request. */
   const set = (next: Partial<Pick<DashboardParams, "kind" | "category">>) => window.history.pushState(null, "", hrefWith(next));
 
-  return { kind, category, q: current.q, month: current.month, hrefWith, set };
+  return { kind, category, q: current.q, month: current.month, hrefWith, monthHref, set };
 }

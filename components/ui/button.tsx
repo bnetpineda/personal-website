@@ -33,6 +33,10 @@ const buttonVariants = cva(
         "icon-sm": "size-8",
         "icon-lg": "size-10",
       },
+      /** Opt in where dense controls need a comfortable target on touchscreens. */
+      touch: {
+        true: "pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+      },
     },
     defaultVariants: {
       variant: "default",
@@ -45,6 +49,7 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  touch,
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> &
@@ -58,7 +63,7 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, size, touch, className }))}
       {...props}
     />
   )

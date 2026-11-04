@@ -37,21 +37,24 @@ function ButtonGroup({
   )
 }
 
+const buttonGroupTextVariants = cva(
+  "flex items-center gap-2 rounded-md border-2 border-border bg-card font-mono text-xs font-bold tracking-wider uppercase [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
+  { variants: { size: { default: "px-4", sm: "px-2" } }, defaultVariants: { size: "default" } }
+)
+
 function ButtonGroupText({
   className,
+  size,
   asChild = false,
   ...props
-}: React.ComponentProps<"div"> & {
+}: React.ComponentProps<"div"> & VariantProps<typeof buttonGroupTextVariants> & {
   asChild?: boolean
 }) {
   const Comp = asChild ? Slot.Root : "div"
 
   return (
     <Comp
-      className={cn(
-        "flex items-center gap-2 rounded-md border-2 border-border bg-card px-4 font-mono text-xs font-bold tracking-wider uppercase [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
-        className
-      )}
+      className={cn(buttonGroupTextVariants({ size }), className)}
       {...props}
     />
   )

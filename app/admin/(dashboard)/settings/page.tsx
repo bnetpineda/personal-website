@@ -23,10 +23,11 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
+  const month = currentMonth();
   const [categories, usage, spent, rules, connections, recurring] = await Promise.all([
     getCategories(),
     getCategoryUsage(),
-    getCategoryTotals("expense", currentMonth()),
+    getCategoryTotals("expense", month),
     getCategoryRules(),
     getConnections(),
     getRecurring(),
@@ -141,8 +142,8 @@ export default async function SettingsPage() {
           action={
             <div className="flex items-center gap-2">
               <FormSheet
-                title="Monthly budgets"
-                description="Per expense category, in PHP. Leave blank for no budget."
+                title="Monthly budget defaults"
+                description="These category defaults apply across all months. Amounts are in PHP; leave blank for no budget."
                 trigger={
                   <Button variant="ghost" size="sm">
                     <SlidersHorizontal /> Budgets
@@ -150,6 +151,7 @@ export default async function SettingsPage() {
                 }
               >
                 <BudgetsForm
+                  month={month}
                   categories={categories
                     .filter((c) => c.kind === "expense" && !c.archived)
                     .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, spent: spent.get(c.id) ?? 0 }))}

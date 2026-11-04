@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
 import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -26,6 +26,7 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import type { FormState } from "@/lib/finance/schemas";
 import { FormSheetContent, notify } from "./form";
+import { captureRowFocus, restoreRowFocus, type RowFocusReturn } from "./row-focus";
 
 type Action = () => Promise<FormState | void>;
 
@@ -49,6 +50,8 @@ export interface RowActionsProps<D = unknown> {
   /** Controlled edit sheet — lets EditableRow open it when the row is tapped. */
   editOpen?: boolean;
   onEditOpenChange?: (open: boolean) => void;
+  /** Shared with the editable row so direct edits return to the row, not its menu. */
+  returnFocusRef?: RefObject<RowFocusReturn | null>;
   sheets?: RowSheet[];
   /** Extra menu items (e.g. Pause/Resume), shown after the sheets. */
   actions?: { label: string; icon: ReactNode; run: Action }[];
@@ -73,6 +76,7 @@ export function RowActions<D>({
   editForm,
   editOpen,
   onEditOpenChange,
+  returnFocusRef: providedReturnFocusRef,
   sheets = [],
   actions,
   archived,
@@ -88,6 +92,17 @@ export function RowActions<D>({
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
+  const localReturnFocusRef = useRef<RowFocusReturn | null>(null);
+  const returnFocusRef = providedReturnFocusRef ?? localReturnFocusRef;
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const openingOverlayRef = useRef(false);
+
+  const openFromMenu = (open: () => void) => {
+    returnFocusRef.current = captureRowFocus(menuTriggerRef.current);
+    openingOverlayRef.current = true;
+    open();
+  };
+  const onCloseAutoFocus = (event: Event) => restoreRowFocus(returnFocusRef.current, event);
 
   const run = (action: Action, after?: () => void) =>
     startTransition(async () => {
@@ -113,18 +128,27 @@ export function RowActions<D>({
     <>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${name}`} disabled={pending}>
+          <Button ref={menuTriggerRef} data-row-focus variant="ghost" size="icon-sm" touch aria-label={`Actions for ${name}`} disabled={pending}>
             {pending ? <Spinner /> : <MoreHorizontal />}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent
+          align="end"
+          onCloseAutoFocus={(event) => {
+            // The sheet/confirmation owns initial focus when a menu item opens it.
+            if (openingOverlayRef.current) {
+              event.preventDefault();
+              openingOverlayRef.current = false;
+            }
+          }}
+        >
           {editForm && (
-            <DropdownMenuItem onSelect={() => setEditing(true)}>
+            <DropdownMenuItem onSelect={() => openFromMenu(() => setEditing(true))}>
               {editIcon} {editLabel}
             </DropdownMenuItem>
           )}
           {sheets.map((s) => (
-            <DropdownMenuItem key={s.label} onSelect={() => setOpenSheet(s.label)}>
+            <DropdownMenuItem key={s.label} onSelect={() => openFromMenu(() => setOpenSheet(s.label))}>
               {s.icon} {s.label}
             </DropdownMenuItem>
           ))}
@@ -141,7 +165,7 @@ export function RowActions<D>({
           {onDelete && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => (onRestore ? deleteNow() : setConfirming(true))}>
+              <DropdownMenuItem variant="destructive" onSelect={() => (onRestore ? deleteNow() : openFromMenu(() => setConfirming(true)))}>
                 <Trash2 /> Delete
               </DropdownMenuItem>
             </>
@@ -151,7 +175,7 @@ export function RowActions<D>({
 
       {editForm && (
         <Sheet open={editing} onOpenChange={setEditing}>
-          <FormSheetContent title={editTitle ?? `Edit ${name}`} description={editDescription} onClose={() => setEditing(false)}>
+          <FormSheetContent title={editTitle ?? `Edit ${name}`} description={editDescription} onClose={() => setEditing(false)} onCloseAutoFocus={onCloseAutoFocus}>
             {editForm}
           </FormSheetContent>
         </Sheet>
@@ -159,7 +183,7 @@ export function RowActions<D>({
 
       {sheets.map((s) => (
         <Sheet key={s.label} open={openSheet === s.label} onOpenChange={(open) => setOpenSheet(open ? s.label : null)}>
-          <FormSheetContent title={s.title} description={s.description} onClose={() => setOpenSheet(null)}>
+          <FormSheetContent title={s.title} description={s.description} onClose={() => setOpenSheet(null)} onCloseAutoFocus={onCloseAutoFocus}>
             {s.content}
           </FormSheetContent>
         </Sheet>
@@ -173,7 +197,7 @@ export function RowActions<D>({
             if (!open) setError(undefined);
           }}
         >
-          <AlertDialogContent>
+          <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete {name}?</AlertDialogTitle>
               <AlertDialogDescription>{error ?? deleteWarning}</AlertDialogDescription>
@@ -203,6 +227,7 @@ export function EditableRow<D>({
   extra,
   size = "sm",
   children,
+  returnFocusRef: providedReturnFocusRef,
   ...actions
 }: RowActionsProps<D> & {
   media?: ReactNode;
@@ -213,11 +238,17 @@ export function EditableRow<D>({
   children: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
+  const localReturnFocusRef = useRef<RowFocusReturn | null>(null);
+  const returnFocusRef = providedReturnFocusRef ?? localReturnFocusRef;
   return (
     <Item size={size} variant="interactive">
       <button
         type="button"
-        onClick={() => setEditing(true)}
+        data-row-focus
+        onClick={(event) => {
+          returnFocusRef.current = captureRowFocus(event.currentTarget);
+          setEditing(true);
+        }}
         className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring"
       >
         <span className="sr-only">{actions.editLabel ?? "Edit"}:</span>
@@ -227,7 +258,7 @@ export function EditableRow<D>({
       </button>
       <ItemActions>
         {extra}
-        <RowActions {...actions} editOpen={editing} onEditOpenChange={setEditing} />
+        <RowActions {...actions} editOpen={editing} onEditOpenChange={setEditing} returnFocusRef={returnFocusRef} />
       </ItemActions>
     </Item>
   );
@@ -237,15 +268,22 @@ export function EditableRow<D>({
 export function EditableCardHeader<D>({
   title,
   description,
+  returnFocusRef: providedReturnFocusRef,
   ...actions
 }: RowActionsProps<D> & { title: ReactNode; description?: ReactNode }) {
   const [editing, setEditing] = useState(false);
+  const localReturnFocusRef = useRef<RowFocusReturn | null>(null);
+  const returnFocusRef = providedReturnFocusRef ?? localReturnFocusRef;
   return (
     <CardHeader>
       <CardTitle>
         <button
           type="button"
-          onClick={() => setEditing(true)}
+          data-row-focus
+          onClick={(event) => {
+            returnFocusRef.current = captureRowFocus(event.currentTarget);
+            setEditing(true);
+          }}
           className="rounded-sm text-left uppercase underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="sr-only">{actions.editLabel ?? "Edit"}: </span>
@@ -254,7 +292,7 @@ export function EditableCardHeader<D>({
       </CardTitle>
       {description && <CardDescription>{description}</CardDescription>}
       <CardAction>
-        <RowActions {...actions} editOpen={editing} onEditOpenChange={setEditing} />
+        <RowActions {...actions} editOpen={editing} onEditOpenChange={setEditing} returnFocusRef={returnFocusRef} />
       </CardAction>
     </CardHeader>
   );
@@ -267,15 +305,22 @@ export function EditableCardHeader<D>({
 export function EditableTableRow<D>({
   lead,
   children,
+  returnFocusRef: providedReturnFocusRef,
   ...actions
 }: RowActionsProps<D> & { lead: ReactNode; children: ReactNode }) {
   const [editing, setEditing] = useState(false);
+  const localReturnFocusRef = useRef<RowFocusReturn | null>(null);
+  const returnFocusRef = providedReturnFocusRef ?? localReturnFocusRef;
   return (
     <TableRow className="relative">
       <TableCell>
         <button
           type="button"
-          onClick={() => setEditing(true)}
+          data-row-focus
+          onClick={(event) => {
+            returnFocusRef.current = captureRowFocus(event.currentTarget);
+            setEditing(true);
+          }}
           className="text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
         >
           <span className="sr-only">{actions.editLabel ?? "Edit"}: </span>
@@ -285,7 +330,7 @@ export function EditableTableRow<D>({
       {children}
       <TableCell className="text-right">
         <div className="relative z-10">
-          <RowActions {...actions} editOpen={editing} onEditOpenChange={setEditing} />
+          <RowActions {...actions} editOpen={editing} onEditOpenChange={setEditing} returnFocusRef={returnFocusRef} />
         </div>
       </TableCell>
     </TableRow>

@@ -3,8 +3,8 @@
 import { useDashboardFilters } from "./dashboard-filters";
 import { MonthPicker } from "./ui";
 
-/** The dashboard's month stepper; keeps the type, category and search already in the URL. */
+/** Choosing a month exits all-time search; the shared type and category filters stay put. */
 export function MonthNav({ month, current }: { month: string; current: string }) {
-  const { hrefWith } = useDashboardFilters();
-  return <MonthPicker month={month} current={current} href={(m) => hrefWith({ month: m === current ? null : m })} />;
+  const { monthHref } = useDashboardFilters();
+  return <MonthPicker compact month={month} current={current} href={(m) => monthHref(m, current)} />;
 }

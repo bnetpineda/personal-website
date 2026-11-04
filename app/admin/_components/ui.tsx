@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { addMonths, monthLabel } from "@/lib/finance/dates";
 import { formatMoney, formatPct } from "@/lib/finance/format";
@@ -145,6 +145,7 @@ export function Panel({
   toolbar,
   fill = false,
   scroll = true,
+  focusableHeading = false,
   id,
   className,
   children,
@@ -154,14 +155,20 @@ export function Panel({
   toolbar?: ReactNode;
   fill?: boolean;
   scroll?: boolean;
+  /** Lets a filter move keyboard focus to the panel's heading (`id` is required). */
+  focusableHeading?: boolean;
   id?: string;
   className?: string;
   children: ReactNode;
 }) {
+  const headingId = id ? `${id}-heading` : undefined;
+  const label = { "aria-labelledby": headingId, "aria-label": headingId ? undefined : typeof title === "string" ? title : undefined };
   const card = (
-    <Card id={className ? undefined : id} variant={fill ? "quiet" : "default"} size={fill ? "sm" : "default"} className={cn("min-w-0", fill && "h-full xl:min-h-0")}>
+    <Card id={className ? undefined : id} role={className ? undefined : "region"} {...(className ? {} : label)} variant={fill ? "quiet" : "default"} size={fill ? "sm" : "default"} className={cn("min-w-0", fill && "h-full xl:min-h-0")}>
       <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-        <CardTitle>{title}</CardTitle>
+        <CardTitle>
+          <h2 id={headingId} tabIndex={focusableHeading ? -1 : undefined} className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">{title}</h2>
+        </CardTitle>
         {/* Wrapped, so an action made on the server and passed through a client component isn't a bare list child (React key warning). */}
         {action && <div className="flex items-center gap-2">{action}</div>}
         {toolbar && <div className="w-full">{toolbar}</div>}
@@ -179,7 +186,7 @@ export function Panel({
     </Card>
   );
   return className ? (
-    <section id={id} className={className}>
+    <section id={id} {...label} className={className}>
       {card}
     </section>
   ) : (
@@ -188,41 +195,43 @@ export function Panel({
 }
 
 /** `size="sm"` in the dashboard's dense panels. */
-export function EmptyState({ title, size, children }: { title: string; size?: "default" | "sm"; children?: ReactNode }) {
+export function EmptyState({ title, size, children, action }: { title: string; size?: "default" | "sm"; children?: ReactNode; action?: ReactNode }) {
   return (
     <Empty size={size}>
       <EmptyHeader>
         <EmptyTitle>{title}</EmptyTitle>
         {children && <EmptyDescription>{children}</EmptyDescription>}
       </EmptyHeader>
+      {action && <EmptyContent>{action}</EmptyContent>}
     </Empty>
   );
 }
 
 /** Month stepper. `href` builds the link for a month (so other filters are kept). */
-export function MonthPicker({ month, current, href }: { month: string; current: string; href: (month: string) => string }) {
+export function MonthPicker({ month, current, href, compact = false }: { month: string; current: string; href: (month: string) => string; compact?: boolean }) {
   return (
+    <div className="flex items-center gap-2">
     <ButtonGroup aria-label="Month">
-      <Button asChild variant="outline" size="icon">
+      <Button asChild variant="outline" size="icon-sm" touch>
         <Link href={href(addMonths(month, -1))} aria-label="Previous month">
           <LinkIcon>
             <ChevronLeft />
           </LinkIcon>
         </Link>
       </Button>
-      <ButtonGroupText aria-current="date">{monthLabel(month)}</ButtonGroupText>
-      <Button asChild variant="outline" size="icon">
+      <ButtonGroupText size="sm" aria-current="date"><span className="sm:hidden">{monthLabel(month, "short")}</span><span className="hidden sm:inline">{monthLabel(month)}</span></ButtonGroupText>
+      <Button asChild variant="outline" size="icon-sm" touch>
         <Link href={href(addMonths(month, 1))} aria-label="Next month">
           <LinkIcon>
             <ChevronRight />
           </LinkIcon>
         </Link>
       </Button>
-      {month !== current && (
-        <Button asChild variant="outline">
-          <Link href={href(current)}>Today</Link>
-        </Button>
-      )}
     </ButtonGroup>
+      {month !== current && (
+        compact ? <Button asChild variant="outline" size="sm" touch className="hidden sm:inline-flex"><Link href={href(current)}>This month</Link></Button>
+          : <Button asChild variant="outline" size="sm" touch><Link href={href(current)}>This month</Link></Button>
+      )}
+    </div>
   );
 }

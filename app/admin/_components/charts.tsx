@@ -30,7 +30,7 @@ function TooltipRow({ label, value }: { label: ReactNode; value: string }) {
 
 function moneyFormatter(value: unknown, name: unknown, item: { color?: string }, _index: number, payload: unknown, config: ChartConfig) {
   const key = String(name);
-  return <TooltipRow label={config[key]?.label ?? key} value={formatMoney(Number(value))} />;
+  return <TooltipRow label={config[key]?.label ?? key} value={value == null ? "No recorded data" : formatMoney(Number(value))} />;
 }
 
 export const RANGES = [
@@ -46,7 +46,7 @@ export function PortfolioChart({ points, label, color, currency }: { points: { d
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={config} className="aspect-auto h-48 w-full">
-        <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <AreaChart aria-label={`${label} history`} data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} tickFormatter={(d: string) => d.slice(5)} />
           <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(v: number) => formatMoney(v, currency, { compact: true })} domain={["auto", "auto"]} />
@@ -85,19 +85,25 @@ export function CashFlowLegend() {
 }
 
 /** Monthly income vs. expenses. `fill`: takes the height of its panel on wide screens (the dashboard). */
-export function CashFlowChart({ points, fill = false }: { points: { label: string; income: number; expense: number }[]; fill?: boolean }) {
-  if (points.every((p) => p.income === 0 && p.expense === 0)) {
-    return <EmptyState title="No entries yet">Monthly income vs. expenses shows up here once you log some.</EmptyState>;
+export function CashFlowChart({ points, fill = false }: { points: { label: string; income: number | null; expense: number | null; incomplete?: boolean }[]; fill?: boolean }) {
+  if (points.every((p) => (p.income ?? 0) === 0 && (p.expense ?? 0) === 0)) {
+    return <EmptyState title="No recorded cash flow">Only recorded income and spending are charted. Missing data is not a zero total.</EmptyState>;
   }
   return (
     <div className={cn("transition group-data-[private=true]/shell:blur-sm", fill && "xl:h-full")}>
       <ChartContainer config={cashFlowConfig} className={cn("aspect-auto w-full", fill ? "h-56 xl:h-full" : "h-64")}>
-        <BarChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <BarChart aria-label="Recorded monthly income and spending" data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
           <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={compact} />
           <ChartTooltip
-            content={<ChartTooltipContent formatter={(value, name, item, index, payload) => moneyFormatter(value, name, item, index, payload, cashFlowConfig)} />}
+            filterNull={false}
+            content={
+              <ChartTooltipContent
+                labelFormatter={(label, payload) => `${label}${payload?.[0]?.payload?.incomplete ? " · incomplete records" : ""}`}
+                formatter={(value, name, item, index, payload) => moneyFormatter(value, name, item, index, payload, cashFlowConfig)}
+              />
+            }
           />
           {!fill && <ChartLegend content={<ChartLegendContent />} />}
           <Bar dataKey="income" fill="var(--color-income)" radius={4} isAnimationActive={false} />
@@ -119,7 +125,7 @@ export function AllocationChart({ slices }: { slices: { assetClass: AssetClass; 
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={allocationConfig} className="mx-auto aspect-square h-56">
-        <PieChart>
+        <PieChart aria-label="Asset allocation">
           <ChartTooltip
             cursor={false}
             content={
@@ -160,7 +166,7 @@ export function Sparkline({ points, label }: { points: { date: string; value: nu
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={config} className="aspect-auto h-10 w-full">
-        <AreaChart data={points} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+        <AreaChart aria-label={`${label} history`} data={points} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
           <YAxis hide domain={["dataMin", "dataMax"]} />
           <ChartTooltip
             cursor={false}
@@ -183,7 +189,9 @@ export interface MiniBar {
   key: string;
   /** What the tooltip calls it ("Sep 2026"). */
   label: string;
-  value: number;
+  /** null is a gap in the records, not a zero-height bar. */
+  value: number | null;
+  incomplete?: boolean;
 }
 
 /**
@@ -206,20 +214,22 @@ export function MiniBars({
   highlight?: string;
   reference?: number;
 }) {
+  if (points.every((p) => p.value == null)) return null;
   const config = { value: { label, color } } satisfies ChartConfig;
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={config} className="aspect-auto h-10 w-full">
-        <BarChart data={points} margin={{ top: 2, right: 0, left: 0, bottom: 0 }} barCategoryGap={2}>
+        <BarChart aria-label={`${label} history`} data={points} margin={{ top: 2, right: 0, left: 0, bottom: 0 }} barCategoryGap={2}>
           {/* Zero stays on the scale, so a negative month hangs below it. */}
           <YAxis hide domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]} />
           <ChartTooltip
             cursor={false}
+            filterNull={false}
             content={
               <ChartTooltipContent
                 hideIndicator
-                labelFormatter={(_label, payload) => String(payload?.[0]?.payload?.label ?? "")}
-                formatter={(value) => <TooltipRow label={label} value={formatMoney(Number(value), "PHP", { signed: tone })} />}
+                labelFormatter={(_label, payload) => `${payload?.[0]?.payload?.label ?? ""}${payload?.[0]?.payload?.incomplete ? " · incomplete records" : ""}`}
+                formatter={(value) => <TooltipRow label={label} value={value == null ? "No recorded data" : formatMoney(Number(value), "PHP", { signed: tone })} />}
               />
             }
           />
@@ -228,7 +238,7 @@ export function MiniBars({
             {points.map((p) => (
               <Cell
                 key={p.key}
-                fill={tone ? (p.value < 0 ? "var(--destructive)" : "var(--success)") : "var(--color-value)"}
+                fill={tone ? (p.value != null && p.value < 0 ? "var(--destructive)" : "var(--success)") : "var(--color-value)"}
                 fillOpacity={highlight == null || p.key === highlight ? 1 : 0.35}
               />
             ))}

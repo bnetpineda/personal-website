@@ -73,6 +73,7 @@ Use the component that fits; don't rebuild it from `div`s.
 | Loading | `Skeleton`, `Spinner` |
 | Scrolling region (panel bodies) | `ScrollArea` — the house scrollbar shows on hover/scroll; `Panel fill` uses it (never the browser's own scrollbar) |
 | Hints on icon buttons | `Tooltip` (admin is wrapped in `TooltipProvider`) |
+| Dense controls on a touchscreen | `Button touch` opts into 44px coarse-pointer targets without changing desktop density |
 | Search / jump / run anything | `CommandDialog` (cmdk) — the admin's ⌘K / Ctrl+K `CommandMenu`, mounted once in `Shell` |
 | Explanation + fix next to a marker | `Popover` (e.g. `CoverageBadge`) |
 | Charts (trend, allocation, sparkline, tile mini bars) | `ChartContainer` + Recharts; series colors from `ChartConfig` (`var(--chart-N)`), per-row data colors via `<Cell fill>` |
@@ -119,7 +120,9 @@ components without re-applying these (`--overwrite` replaces the house style).
 ## 4. Patterns
 
 - **Money**: always `<Money value currency tone? signed?>` — formats with `Intl` and blurs in
-  privacy mode (`group-data-[private=true]/shell:blur-sm`).
+  privacy mode (`group-data-[private=true]/shell:blur-sm`). Portals do not inherit the shell's CSS
+  ancestor: read-only amounts in a sheet need a live privacy boundary inside the portal, as in
+  `CashFlowHistoryDetails` (`group/shell` + `data-private` from `useAdminUi().privacy.hidden`).
 - **Forms**: Server Action + `useFormAction` (admin) → errors from the returned `FormState`,
   `aria-invalid` on the control, message in `FieldError`. Success closes the sheet, resets, and
   toasts the message; pass `undo` to add an "Undo" button (e.g. a new entry).
@@ -130,13 +133,16 @@ components without re-applying these (`--overwrite` replaces the house style).
   those prices show in detail (CoinGecko's free API asks for it); the admin has no footer.
 - **Toasts never show amounts** that weren't typed by the user — they aren't blurred by privacy mode.
 - **One screen**: `/admin` (Overview) shows everything at once — net worth and the month's numbers
-  (`KpiStrip`: each tile carries a `MiniBars` of the months behind it, the month on show highlighted),
-  then spending by category, the month's activity, and accounts over the 12-month
-  trend. It renders its own `AdminHeader` (the month, its coverage badge, the Needs you bell, Sync,
+  (`KpiStrip`: desktop tiles carry `MiniBars` with history captions; phones show a compact net-worth
+  hero, one recorded-month card, then a separate income estimate without mini charts),
+  then categories, the month's activity, accounts, and 12-month cash-flow history.
+  It renders its own `AdminHeader` (the month, its coverage badge, the Needs you bell, Sync,
   Add); other pages get the shared one from `Shell`. From `xl` (1280px) it fills exactly one
   viewport (`Shell` locks the height on `/admin`; under 800px tall it scrolls as a page) and each
-  `Panel fill` scrolls inside; in the right column Accounts keeps its content height (up to
-  `max-h-3/5`) and the chart takes the rest. Below `xl` it stacks, with Activity last. Synced
+  `Panel fill` scrolls inside; populated months keep Activity and the chart full-height, with
+  categories above Accounts in the left column so chart headers cannot squeeze the plot away.
+  Empty months give Accounts the full right column and history a wide second row. Below `xl` it
+  stacks in DOM order: categories, Activity, accounts, history. Synced
   accounts, recurring items and AI filing do the data entry, so a new panel has to earn its place.
   Deeper pages (Portfolio → Earnings/History, Connections, Recurring, Settings via the header gear,
   all of them via ⌘K) hang off the Overview with a `PageHeader back` link; there is no tab bar.
@@ -144,20 +150,42 @@ components without re-applying these (`--overwrite` replaces the house style).
   `Card variant="quiet"` (via `Panel fill`). Things that need a decision live behind the header's
   Needs you bell (a sheet): an account's alerts are grouped into one row (`groupAlerts`) with its fix
   in place (`SyncNowButton`, statement import) and a warning icon, not a badge per row; the Accounts
-  panel shows no status badges at all (the bell covers sync failures, stale and missing balances). A month
-  without full statement coverage gets one marker next to the month (`CoverageBadge`, with upload
-  buttons) instead of a warning on every tile. Rows show how the importer filed them as an icon
+  panel shows no status badges: exclusions are persistent text beside the amount, and statement balances
+  carry their as-of dates and a stale marker. A month without full statement coverage gets a clear
+  "Statements missing" marker (`CoverageBadge`, with upload buttons), shown beside the month on
+  desktop and in the recorded-month card on phones. Other panels use concise recorded-only context,
+  not repeated provider paragraphs. Empty amounts are unknown (`—`), not zero; a net needs both sides, and charts keep
+  unknown months as gaps (`dashboardMonth`). Rows show how the importer filed them as an icon
   (`filingNote`: AI, taught), not as text; inline pickers use `Button variant="subtle"`.
-- **Variable income**: pay that changes with hours isn't scheduled or forecast. "Income / month" is
-  each repeat payer's average month with everyone's lowest and highest month as the range
-  (`typicalIncome`) — plan on the low end.
+- **Variable income**: pay that changes with hours isn't scheduled or forecast. "Estimated income / mo"
+  is each repeat payer's historical average plus active income schedules, with everyone's lowest and
+  highest paid month as the estimated range (`typicalIncome`), not the selected month's actual earnings.
+  Estimate/net-worth explanations use touch-accessible popovers. Cash-flow history has a read-only
+  Details sheet as an alternative to hovering chart bars.
 - **Filters**: Activity's type and category filters live in the URL but switch on the client
   (`useDashboardFilters`: `history.pushState`, so Back undoes them) because the month's entries are
-  already on the page; month and search are links because they need new data. The category list
-  and the feed share the same filter.
+  already on the page; month and search are links because they need new data. Category tabs and
+  Activity share All/Spending/Income state; clearing a category retains its type. Choosing a month
+  exits all-time search while keeping type/category. Search is labelled all months and offers an
+  explicit return to the selected month. Empty states link to a month with records, not a blind prior month.
 - **Adding entries**: manual entry is the exception. One `AddEntry` sheet in the Overview header
   (⌘K → Add expense/income opens it from anywhere via `?add=`) — don't build other add forms for
   cash flows. Changing just an entry's category goes through the row's `CategoryPicker`.
+- **Write scope**: new entries still default to today; a date outside the viewed month gets a visible
+  explanation. Budgets are category-level monthly defaults across all months, not historical overrides.
 - **Accessibility**: every control has a label (`FieldLabel htmlFor` or `aria-label` on icon
-  buttons); status text uses `role="status"`; don't remove focus rings.
+  buttons); status text uses `role="status"`; don't remove focus rings. Panels have semantic headings
+  and named regions. Category jumps move focus to Activity and respect reduced motion. Controlled
+  row overlays and command dialogs restore the invoking control unless navigation took focus elsewhere.
+  Mobile navigation stays visible; secondary utilities sit in More.
 - **Dark mode**: never hard-code light/dark values in app code — tokens flip automatically.
+
+## 5. UX council acceptance
+
+`ux-scorecard.json` records 20 checks with evidence: data clarity, navigation, mobile usability,
+accessibility, and hierarchy/recovery (four checks × 0.5 = 2 points each). `bun run ux:score` computes
+the result; acceptance requires at least 9/10, at least 1.5 in every area, and no blocking defects.
+Critical data-trust, primary-navigation, filter-scope and keyboard-restoration checks must pass.
+Unknown checks earn no points. Browser checks and independent council review support the score;
+unit tests verify behavior and prevent missing evidence, duplicate checks or blockers from being ignored.
+This is a scoped product review, not a WCAG certification or a substitute for real-device testing.

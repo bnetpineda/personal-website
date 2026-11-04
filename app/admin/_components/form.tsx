@@ -6,6 +6,7 @@ import {
   useActionState,
   useContext,
   useState,
+  type ComponentProps,
   type FormEvent,
   type ReactElement,
   type ReactNode,
@@ -58,15 +59,18 @@ export function FormSheetContent({
   title,
   description,
   onClose,
+  onCloseAutoFocus,
   children,
 }: {
   title: string;
   description?: string;
   onClose: () => void;
+  /** Controlled overlays without a SheetTrigger can restore their own invoking control. */
+  onCloseAutoFocus?: ComponentProps<typeof SheetContent>["onCloseAutoFocus"];
   children: ReactNode;
 }) {
   return (
-    <SheetContent>
+    <SheetContent onCloseAutoFocus={onCloseAutoFocus}>
       <SheetHeader>
         <SheetTitle>{title}</SheetTitle>
         <SheetDescription>{description ?? title}</SheetDescription>

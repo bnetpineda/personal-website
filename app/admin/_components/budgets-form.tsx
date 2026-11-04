@@ -4,6 +4,7 @@ import { useId } from "react";
 import { FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { formatMoney } from "@/lib/finance/format";
+import { monthLabel } from "@/lib/finance/dates";
 import { updateBudgets } from "../_actions/categories";
 import { FormField, FormFooter, useFormAction } from "./form";
 import { EmptyState } from "./ui";
@@ -17,7 +18,7 @@ export interface BudgetRowDTO {
 }
 
 /** Every expense category's monthly budget in one form (blank = no budget). */
-export function BudgetsForm({ categories }: { categories: BudgetRowDTO[] }) {
+export function BudgetsForm({ categories, month }: { categories: BudgetRowDTO[]; month: string }) {
   const { state, pending, onSubmit, formKey, error } = useFormAction(updateBudgets);
   const uid = useId();
 
@@ -36,7 +37,7 @@ export function BudgetsForm({ categories }: { categories: BudgetRowDTO[] }) {
               id={`${uid}-${c.id}`}
               label={`${c.name} (PHP)`}
               error={error(name)}
-              description={c.spent > 0 ? `${formatMoney(c.spent)} spent this month` : "Nothing spent this month"}
+              description={c.spent > 0 ? `${formatMoney(c.spent)} recorded in ${monthLabel(month, "short")}` : `No spending recorded in ${monthLabel(month, "short")}`}
             >
               <Input
                 id={`${uid}-${c.id}`}

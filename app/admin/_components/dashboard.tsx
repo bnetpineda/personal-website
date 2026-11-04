@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Bell, Link2, OctagonAlert, TriangleAlert } from "lucide-react";
+import { ArrowRight, Bell, Info, Link2, OctagonAlert, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import type { RecurringRow } from "@/lib/dal";
@@ -28,34 +28,80 @@ import { EmptyState, Money, Panel, Pct } from "./ui";
 
 export interface Kpi {
   label: string;
+  shortLabel?: string;
   value: ReactNode;
   hint?: ReactNode;
+  compactHint?: ReactNode;
+  unknown?: boolean;
   /** A mini chart under the numbers (MiniBars). */
   chart?: ReactNode;
+  historyLabel?: string;
+  detail?: ReactNode;
 }
 
 /**
  * The headline numbers. Net worth leads (lime, with its trend line); the month's money in and out
- * follow, each with a mini chart of its months. Phones: net worth across, then two by two.
+ * follow, each with a mini chart of its months. Phones prioritize actuals in one compact card;
+ * the estimate is separate and the decorative mini histories stay on larger screens.
  */
-export function KpiStrip({ netWorth, trend, items }: { netWorth: Kpi; trend?: ReactNode; items: Kpi[] }) {
+export function KpiStrip({ netWorth, trend, estimate, period, coverage, items }: { netWorth: Kpi; trend?: ReactNode; estimate: Kpi; period: string; coverage?: ReactNode; items: Kpi[] }) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
       <div className="col-span-2 md:col-span-4 xl:col-span-2">
         <Card size="sm" variant="primary" className="h-full">
           <CardContent className="flex h-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <KpiText kpi={netWorth} lead />
-            {trend && <div className="min-w-0 sm:w-2/5 sm:shrink-0">{trend}</div>}
+            {trend && <div className="hidden min-w-0 sm:block sm:w-2/5 sm:shrink-0">{trend}</div>}
+          </CardContent>
+        </Card>
+      </div>
+      <div className="col-span-2 sm:hidden">
+        <Card size="sm" role="group" aria-label={`Recorded totals for ${period}`}>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-2"><CardTitle className="text-sm">{period} · recorded</CardTitle>{coverage}</CardHeader>
+          <CardContent>
+            <dl className="flex flex-col divide-y divide-border/25">
+              {items.map((kpi) => (
+                <div key={kpi.label} className="flex items-center justify-between gap-4 py-2">
+                  <div className="min-w-0">
+                    <dt className="text-sm font-medium">{kpi.shortLabel ?? kpi.label}</dt>
+                  </div>
+                  <dd className="shrink-0 font-display text-lg tabular-nums">{kpi.value}</dd>
+                </div>
+              ))}
+            </dl>
+            {items.some((kpi) => kpi.unknown) && <p className="mt-2 text-xs text-muted-foreground">— means missing records, not zero.</p>}
+          </CardContent>
+        </Card>
+      </div>
+      <div className="col-span-2 sm:hidden">
+        <Card size="sm">
+          <CardContent className="relative pr-16">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-mono text-xs tracking-wider text-muted-foreground uppercase">Income estimate</p>
+              <p className="shrink-0 font-display text-base tabular-nums">{estimate.value}</p>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{estimate.compactHint ?? estimate.hint}</div>
+            <div className="absolute top-3 right-3"><KpiInfo kpi={estimate} /></div>
+          </CardContent>
+        </Card>
+      </div>
+      <div className="hidden sm:col-span-1 sm:block">
+        <Card size="sm" className="h-full">
+          <CardContent className="flex h-full flex-col justify-between gap-2">
+            <KpiText kpi={estimate} />
+            {estimate.chart && <div className="hidden sm:block">{estimate.chart}<p className="mt-1 font-mono text-xs text-muted-foreground">{estimate.historyLabel}</p></div>}
           </CardContent>
         </Card>
       </div>
       {items.map((kpi) => (
-        <Card key={kpi.label} size="sm" className="h-full">
-          <CardContent className="flex h-full flex-col justify-between gap-2">
-            <KpiText kpi={kpi} />
-            {kpi.chart}
-          </CardContent>
-        </Card>
+        <div key={kpi.label} className="hidden sm:block">
+          <Card size="sm" className="h-full">
+            <CardContent className="flex h-full flex-col justify-between gap-2">
+              <KpiText kpi={kpi} />
+              {kpi.chart && <div>{kpi.chart}<p className="mt-1 font-mono text-xs text-muted-foreground">{kpi.historyLabel}</p></div>}
+            </CardContent>
+          </Card>
+        </div>
       ))}
     </div>
   );
@@ -64,11 +110,30 @@ export function KpiStrip({ netWorth, trend, items }: { netWorth: Kpi; trend?: Re
 /** `lead`: the net worth figure, a size up from the rest. */
 function KpiText({ kpi, lead = false }: { kpi: Kpi; lead?: boolean }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <p className="font-mono text-xs tracking-wider uppercase opacity-70">{kpi.label}</p>
+    <div className={cn("relative flex min-w-0 flex-col gap-1", lead && kpi.detail && "pr-12")}>
+      <div className="flex items-start justify-between gap-1">
+        <p className="font-mono text-xs tracking-wider uppercase opacity-70">{kpi.label}</p>
+        {!lead && <KpiInfo kpi={kpi} />}
+      </div>
+      {lead && <div className="absolute top-0 right-0"><KpiInfo kpi={kpi} /></div>}
       <p className={cn("font-display whitespace-nowrap tabular-nums", lead ? "text-2xl 2xl:text-3xl" : "text-base sm:text-xl 2xl:text-2xl")}>{kpi.value}</p>
-      {kpi.hint != null && <div className="flex min-w-0 flex-col font-mono text-xs">{kpi.hint}</div>}
+      {kpi.hint != null && <div className="flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground group-data-[variant=primary]/card:text-primary-foreground/80">{kpi.hint}</div>}
     </div>
+  );
+}
+
+function KpiInfo({ kpi }: { kpi: Kpi }) {
+  if (!kpi.detail) return null;
+  return (
+    <Popover>
+      <Button asChild variant="ghost" size="icon-xs" touch>
+        <PopoverTrigger aria-label={`About ${kpi.label.toLowerCase()}`}><Info /></PopoverTrigger>
+      </Button>
+      <PopoverContent aria-label={`About ${kpi.label.toLowerCase()}`} align="start" className="w-80">
+        <PopoverHeader><PopoverTitle>{kpi.label}</PopoverTitle></PopoverHeader>
+        <div className="mt-3 flex flex-col gap-2 text-sm">{kpi.detail}</div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -87,26 +152,21 @@ function StatementUploads({ providers }: { providers: StatementProvider[] }) {
 
 /**
  * The month's one coverage marker, next to the month: which banks' statements don't reach it yet,
- * with their upload buttons. A closed month is "Provisional"; the running month is just in progress.
+ * with their upload buttons. Missing records must not read as a genuine zero month.
  */
 export function CoverageBadge({ missing, month, current }: { missing: StatementProvider[]; month: string; current: string }) {
   if (!missing.length) return null;
   const names = missing.map((p) => PROVIDER_META[p].name).join(" and ");
-  const running = month >= current;
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Badge asChild variant={running ? "outline" : "warning"}>
-          <button type="button">{running ? "In progress" : "Provisional"}</button>
-        </Badge>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80">
+      <Badge asChild variant={month > current ? "outline" : "warning"}>
+        <PopoverTrigger>Statements missing</PopoverTrigger>
+      </Badge>
+      <PopoverContent aria-label={`Statement coverage for ${monthLabel(month)}`} align="start" className="w-80">
         <PopoverHeader>
-          <PopoverTitle>{running ? `${monthLabel(month)} so far` : `${monthLabel(month)} is provisional`}</PopoverTitle>
+          <PopoverTitle>{monthLabel(month)} · incomplete records</PopoverTitle>
           <PopoverDescription>
-            {running
-              ? `${names} statements fill in this month as you upload them. Until then the totals count what's recorded, and savings rate and comparisons wait.`
-              : `${names} statements don't cover this month yet, so its totals count only what's recorded, and savings rate and comparisons wait.`}
+            {names} statements don&apos;t cover this month yet. A dash means no recorded data, not zero. Any amounts shown count only recorded entries; net, savings rate and comparisons wait for enough data.
           </PopoverDescription>
         </PopoverHeader>
         <StatementUploads providers={missing} />
@@ -195,9 +255,9 @@ export function NeedsYou(props: InboxProps) {
       title={count ? `Needs you · ${count}` : "Needs you"}
       description={count ? "Alerts with their fixes, recurring items to confirm and payees to teach Jev." : "Nothing needs you right now."}
       trigger={
-        <Button variant={count ? (urgent ? "destructive" : "outline") : "ghost"} size="sm" aria-label={count ? `Needs you: ${count}` : "Needs you: all caught up"}>
+        <Button variant={count ? (urgent ? "destructive" : "outline") : "ghost"} size="sm" touch className="relative" aria-label={count ? `Needs you: ${count}` : "Needs you: all caught up"}>
           <Bell />
-          {count > 0 && count}
+          {count > 0 && <><Badge variant={urgent ? "destructive" : "default"} className="absolute -top-1 -right-1 sm:hidden">{count}</Badge><span className="hidden sm:inline">{count}</span></>}
         </Button>
       }
     >
@@ -252,6 +312,9 @@ export interface AccountRow {
   name: string;
   href: string;
   description: string;
+  /** Inclusion is shown separately from sync status, so it cannot be hidden by truncation. */
+  inNetWorth: boolean;
+  stale?: boolean;
   /** PHP; null when it isn't known yet. */
   value: number | null;
   /** Investment accounts: profit/loss on known cost. */
@@ -296,8 +359,9 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
                   <Link href={row.href} className="outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring">
                     {row.name}
                   </Link>
+                  {row.stale && <TriangleAlert aria-label="Stale balance" className="size-3 text-warning" />}
                 </ItemTitle>
-                <ItemDescription clamp={1} title={row.description}>
+                <ItemDescription clamp={2} title={row.description}>
                   {row.description}
                 </ItemDescription>
               </ItemContent>
@@ -305,6 +369,7 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
                 {/* Clicks on the amount fall through to the row's link. */}
                 <span className="pointer-events-none flex flex-col items-end font-mono text-sm">
                   {row.value == null ? <span className="text-muted-foreground">Unknown</span> : <Money value={row.value} />}
+                  {!row.inNetWorth && <span className="text-xs text-muted-foreground" title="Excluded from tracked net worth">Excluded</span>}
                   {row.pnlPct != null && (
                     <span className="text-xs">
                       <Pct value={row.pnlPct} tone /> P/L

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -16,6 +16,7 @@ import {
   History,
   House,
   Link2,
+  Menu,
   Moon,
   RefreshCw,
   Repeat,
@@ -58,19 +59,20 @@ function useModifierLabel() {
   return useSyncExternalStore(noSubscribe, () => (/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"), () => "Ctrl");
 }
 
-/** Opens the menu from the header. Phones skip it: the Overview's own search and panels cover them. */
+/** One discoverable navigation and search entry point at every breakpoint. */
 export function CommandButton({ onOpen }: { onOpen: () => void }) {
   const modifier = useModifierLabel();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline" size="sm" onClick={onOpen} aria-label="Search and commands" aria-keyshortcuts="Control+K Meta+K" className="hidden sm:inline-flex">
-          <Search />
+        <Button variant="outline" size="sm" touch data-command-trigger onClick={onOpen} aria-label="Open navigation and search" aria-keyshortcuts="Control+K Meta+K">
+          <Menu className="sm:hidden" />
+          <Search className="hidden sm:block" />
           <span className="hidden 2xl:inline">Search</span>
           <Kbd className="hidden 2xl:inline-flex">{modifier} K</Kbd>
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Search entries, jump to a page or run an action</TooltipContent>
+      <TooltipContent>Navigate, search entries or run an action</TooltipContent>
     </Tooltip>
   );
 }
@@ -94,6 +96,8 @@ export function CommandMenu({
   const { resolvedTheme, setTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [, startTransition] = useTransition();
+  const opener = useRef<{ element: HTMLElement | null; href: string } | null>(null);
+  const skipFocusReturn = useRef(false);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -111,7 +115,8 @@ export function CommandMenu({
   const term = query.trim();
 
   /** Closes the menu, then does the thing. */
-  const run = (action: () => void) => {
+  const run = (action: () => void, navigates = false) => {
+    skipFocusReturn.current = navigates;
     onOpenChange(false);
     setQuery("");
     action();
@@ -129,7 +134,7 @@ export function CommandMenu({
     if (onOverview) window.history.pushState(null, "", href);
     else router.push(href);
   };
-  const goToMonth = (m: string) => router.push(overviewWith({ month: m === current ? null : m }));
+  const goToMonth = (m: string) => router.push(overviewWith({ month: m === current ? null : m, q: null }));
   const sync = () =>
     startTransition(async () => {
       const id = toast.loading("Syncing accounts…");
@@ -152,40 +157,53 @@ export function CommandMenu({
       }}
       title="Search and commands"
       description="Search entries, jump to a page or run an action."
+      onOpenAutoFocus={() => {
+        opener.current = { element: document.activeElement instanceof HTMLElement ? document.activeElement : null, href: window.location.href };
+        skipFocusReturn.current = false;
+      }}
+      onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        const target = opener.current;
+        if (skipFocusReturn.current || !target || target.href !== window.location.href) return;
+        const active = document.activeElement;
+        if (active && active !== document.body && active !== target.element && !(event.target as HTMLElement)?.contains(active)) return;
+        const element = target.element?.isConnected && target.element !== document.body ? target.element : document.querySelector<HTMLElement>("[data-command-trigger]");
+        element?.focus({ preventScroll: true });
+      }}
     >
-      <CommandInput value={query} onValueChange={setQuery} placeholder="Search entries or type a command…" />
+      <CommandInput aria-label="Search pages, entries and commands" value={query} onValueChange={setQuery} placeholder="Search entries or type a command…" />
       <CommandList>
         <CommandEmpty>Nothing matches. Press Enter on “Search entries” to look through every month.</CommandEmpty>
         {term && (
           <CommandGroup heading="Entries">
-            <CommandItem value={`search entries ${term}`} onSelect={() => run(() => router.push(dashboardHref({ q: term })))}>
+            <CommandItem value={`search entries ${term}`} onSelect={() => run(() => router.push(dashboardHref({ q: term })), true)}>
               <Search />
               Search entries for “{term}”
             </CommandItem>
           </CommandGroup>
         )}
         <CommandGroup heading="Add">
-          <CommandItem value="add expense" keywords={["new", "spend", "cash"]} onSelect={() => run(() => addEntry("expense"))}>
+          <CommandItem value="add expense" keywords={["new", "spend", "cash"]} onSelect={() => run(() => addEntry("expense"), true)}>
             <ArrowUpRight />
             Add expense
           </CommandItem>
-          <CommandItem value="add income" keywords={["new", "receive"]} onSelect={() => run(() => addEntry("income"))}>
+          <CommandItem value="add income" keywords={["new", "receive"]} onSelect={() => run(() => addEntry("income"), true)}>
             <ArrowDownLeft />
             Add income
           </CommandItem>
         </CommandGroup>
         {onOverview && (
           <CommandGroup heading="Month">
-            <CommandItem value={`previous month ${monthLabel(addMonths(month, -1))}`} onSelect={() => run(() => goToMonth(addMonths(month, -1)))}>
+            <CommandItem value={`previous month ${monthLabel(addMonths(month, -1))}`} onSelect={() => run(() => goToMonth(addMonths(month, -1)), true)}>
               <ChevronLeft />
               {monthLabel(addMonths(month, -1))}
             </CommandItem>
-            <CommandItem value={`next month ${monthLabel(addMonths(month, 1))}`} onSelect={() => run(() => goToMonth(addMonths(month, 1)))}>
+            <CommandItem value={`next month ${monthLabel(addMonths(month, 1))}`} onSelect={() => run(() => goToMonth(addMonths(month, 1)), true)}>
               <ChevronRight />
               {monthLabel(addMonths(month, 1))}
             </CommandItem>
             {month !== current && (
-              <CommandItem value="this month today" onSelect={() => run(() => goToMonth(current))}>
+              <CommandItem value="this month today" onSelect={() => run(() => goToMonth(current), true)}>
                 <CalendarDays />
                 Back to {monthLabel(current)}
               </CommandItem>
@@ -194,7 +212,7 @@ export function CommandMenu({
         )}
         <CommandGroup heading="Go to">
           {PAGES.filter((p) => p.href !== pathname).map(({ href, label, icon: Icon }) => (
-            <CommandItem key={href} value={`go to ${label}`} onSelect={() => run(() => router.push(href))}>
+            <CommandItem key={href} value={`go to ${label}`} onSelect={() => run(() => router.push(href), true)}>
               <Icon />
               {label}
             </CommandItem>

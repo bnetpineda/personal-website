@@ -1,0 +1,49 @@
+{
+  "name": "Finance dashboard UI/UX council",
+  "scope": "/admin and shared admin controls",
+  "target": 9,
+  "maximum": 10,
+  "pointsPerCheck": 0.5,
+  "minimumPerArea": 1.5,
+  "requiredChecks": ["D1", "D2", "D3", "D4", "N1", "N2", "N4", "A4"],
+  "baseline": { "score": 5.5, "verification": "Provisional source-only council review before UI/UX improvements" },
+  "preview": { "url": "http://localhost:4101/admin", "buildId": "fE4Yiq55PHZ8uWUZhyw9V", "date": "2026-11-04" },
+  "council": [
+    { "role": "Jester: skeptical source review", "reviewSession": "ses_e59fe91d7ffeTUxTgqiGQYdrzl" },
+    { "role": "Accessibility and interaction review", "reviewSession": "ses_e59fe91aaffexA6hKNpN2LHT7H" },
+    { "role": "Visual and responsive review", "reviewSession": "ses_e59fe91a7ffeDqRqEOIRe7O9M5" }
+  ],
+  "validation": {
+    "tests": { "passed": 256, "skipped": 5, "failed": 0 },
+    "lint": "pass",
+    "typecheck": "pass",
+    "productionBuild": "pass",
+    "console": "BrowserOS neo tab 372: no errors or warnings after production navigation, 1280px-to-360px resize and mobile reload; emulation reset.",
+    "privacy": "Independent browser review, tab 373, desktop and mobile: 21/21 historical monetary spans use blur(8px) when hidden, 0/21 when shown; mounted Show/Hide commands, reopening and hidden-preference reload all pass. Original amounts-visible preference restored."
+  },
+  "verification": "Independent source, accessibility and visual reviews completed on the optimized local preview. Desktop checks covered 1280x800 and 1440x900; mobile checks covered November and September at 360x800 and 390x844. Real mobile keyboard and submitted-form announcement checks remain unverified and earn no points.",
+  "blockers": [],
+  "caveats": ["At 1280x800, Accounts initially shows one complete row and part of the next. Its final row is fully reachable by internal scrolling, with no page overflow; a clearer more-accounts affordance remains a non-blocking improvement."],
+  "checks": [
+    { "id": "D1", "criterion": "Unknown amounts stay dashes/chart gaps and net requires both sides", "status": "pass", "evidence": ["Visual council confirmed November dashes. Independent final accessibility review, tab 373: November Details shows No data in all three amount cells on desktop and mobile; seven positive historical rows remain present. lib/finance/dashboard.test.ts verifies chart gaps, genuine covered zeros and unknown net when either side is missing."] },
+    { "id": "D2", "criterion": "Estimated income is distinguishable from actual earnings", "status": "pass", "evidence": ["Independent visual council: separate income-estimate card at 360px/390px; emulated tap opens methodology, selected-month distinction and limitations."] },
+    { "id": "D3", "criterion": "Exclusions, statement dates and stale balances remain visible", "status": "pass", "evidence": ["Independent visual council: stale/as-of dates and excluded account labels remain visible on desktop and stacked mobile."] },
+    { "id": "D4", "criterion": "Viewing period versus new-entry and global-budget write scope is explicit", "status": "pass", "evidence": ["Independent keyboard council: September Add still selects today in November and displays the outside-view warning; cancelled without saving. Budgets explicitly apply across all months and hints name September; cancelled."] },
+    { "id": "N1", "criterion": "Visible navigation exposes primary destinations at every breakpoint", "status": "pass", "evidence": ["Independent keyboard council: phone, intermediate and desktop navigation visible; clean 390px trigger measured 44x44px and opened with an emulated tap."] },
+    { "id": "N2", "criterion": "Category tabs, Activity type controls and selected categories agree", "status": "pass", "evidence": ["Independent keyboard council: Spent selected Spending and 7 entries; category selection narrowed to 1 matching entry with the correct chip."] },
+    { "id": "N3", "criterion": "URL state and browser Back restore filters", "status": "pass", "evidence": ["Independent keyboard council: Back removed category=8 and restored 7 expenses; another Back removed kind=expense and restored all 10 September entries."] },
+    { "id": "N4", "criterion": "Month changes during search have predictable scope and exit all-time search", "status": "pass", "evidence": ["Independent keyboard council: Next month during all-month search removed q, retained type/category and showed October activity; Back restored search."] },
+    { "id": "M1", "criterion": "Category, account and amount identification survive mobile stacking", "status": "pass", "evidence": ["Final independent visual review, tab 371: November and September at both 360x800 and 390x844 retain month, actuals, estimate and account identification. All four cases have a 114px two-row header and page widths exactly 360px/390px, without horizontal overflow."] },
+    { "id": "M2", "criterion": "Category selection provides a direct route to Activity", "status": "pass", "evidence": ["Independent keyboard council: mobile category activation focused #activity-heading visibly within the viewport."] },
+    { "id": "M3", "criterion": "360px and 390px layouts and sheets remain usable with a real mobile keyboard open", "status": "unverified", "evidence": ["Desktop browser emulation inspected normal narrow layouts, not a real mobile IME. No point awarded."] },
+    { "id": "M4", "criterion": "Meaningful financial explanations are available by touch, not hover alone", "status": "pass", "evidence": ["Independent visual council, including final tab 371 recheck: emulated taps open net-worth and estimate explanations covering scope, exclusions, methodology and limitations. Chart Details also works on mobile and respects privacy masking."] },
+    { "id": "A1", "criterion": "Controls have meaningful accessible names", "status": "pass", "evidence": ["Independent keyboard council verified row actions, fields and navigation labels. Final desktop and mobile review, tab 373: command combobox is named Search pages, entries and commands, and Escape restores its invoker."] },
+    { "id": "A2", "criterion": "Interactive elements have visible keyboard focus indicators", "status": "pass", "evidence": ["Independent keyboard council screenshots show focus rings on row-menu trigger, mobile Budgets and Activity heading."] },
+    { "id": "A3", "criterion": "Filter counts, pending states and errors are announced appropriately", "status": "unverified", "evidence": ["Independent keyboard council observed live counts 1 to 7 to 10 entries. Submitted-form pending/error behavior was deliberately not exercised; full credit withheld."] },
+    { "id": "A4", "criterion": "Keyboard navigation, category jumps and sheet/dialog dismissal maintain logical focus", "status": "pass", "evidence": ["Independent keyboard council: direct row Edit/Escape returned to the exact row; menu Edit/Escape returned to its trigger; keyboard and button-opened command dialogs restored invokers; mobile category jump focused Activity. row-focus.test.ts covers fallback and navigation guards."] },
+    { "id": "V1", "criterion": "Lead balance, monthly actuals, estimate and primary actions are distinct", "status": "pass", "evidence": ["Independent visual council confirmed lime hero, month-labelled actuals, separate estimate and differentiated primary actions."] },
+    { "id": "V2", "criterion": "Populated desktop panels remain usable within the intended one-screen layout", "status": "pass", "evidence": ["Final independent visual review, tab 371, September: at 1280x800, Categories viewport 146.72px with one complete initial row, Accounts viewport 99.76px with one complete initial row, chart SVG 265x312.99px. At 1440x900, Categories viewport 225.90px with three complete rows, Accounts 152.55px with two complete rows, chart SVG 305x428.99px. The final 83.40px account row fits fully after internal scrolling at both sizes. No panel overlap, page overflow or page scrolling. Dense Accounts viewport is recorded as a non-blocking caveat."] },
+    { "id": "V3", "criterion": "Coverage has one actionable explanation and concise contextual markers", "status": "pass", "evidence": ["Independent visual council: one coverage popover plus concise Recorded categories only and Recorded activity context; repeated provider paragraphs removed."] },
+    { "id": "V4", "criterion": "Empty, error and destructive states offer understandable recovery", "status": "pass", "evidence": ["Final independent visual review, tab 371: November's View Sep 2026 recovery reaches 10 recorded entries at both mobile widths; Import action is present. Existing preserved-input and Undo behavior remains in source. Forced-error and destructive submissions were not exercised."] }
+  ]
+}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { after } from "next/server";
 import { SlidersHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   SEARCH_LIMIT,
@@ -25,6 +26,7 @@ import {
 import { computeNetWorth, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, includedPositions, isConnectionStale } from "@/lib/finance/connections/types";
+import { dashboardMonth } from "@/lib/finance/dashboard";
 import { addDays, addMonths, currentMonth, dayLabel, dayRangeLabel, daysBetween, isMonth, monthComparison, monthLabel, shortDayLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { missingBalanceProviders, missingStatementProviders } from "@/lib/finance/imports/coverage";
 import { groupAlerts } from "@/lib/finance/notifications";
@@ -37,6 +39,7 @@ import { ActivityFeed, type ActivityEntry } from "../../_components/activity-fee
 import { AddEntry } from "../../_components/add-entry";
 import { BudgetsForm } from "../../_components/budgets-form";
 import type { FormCategory } from "../../_components/cash-flow-form";
+import { CashFlowHistoryDetails } from "../../_components/cash-flow-history-details";
 import { CategoryBreakdown, type BreakdownItem } from "../../_components/category-breakdown";
 import { CashFlowChart, CashFlowLegend, MiniBars, Sparkline, type MiniBar } from "../../_components/charts";
 import { SyncConnectionsButton } from "../../_components/connection-controls";
@@ -151,24 +154,31 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     ...banks.filter((b) => daysBetween(b.asOf, today) > STALE_BALANCE_DAYS).map((b) => `${PROVIDER_META[b.provider].name} ${shortDayLabel(b.asOf)}`),
     ...missingBalances.map((p) => `${PROVIDER_META[p].name} missing`),
   ];
+  const excluded = connections.filter((c) => !c.includeInNetWorth && c.snapshot).map((c) => PROVIDER_META[c.provider].name);
 
   // ---- the selected month ----
   const series = monthlySeries(month, 12, monthly);
+  const recordedSeries = series.map((p) => dashboardMonth(p, statements, current));
+  const recorded = recordedSeries.at(-1)!;
   const [prev, thisMonth] = series.slice(-2);
-  const missingStatements = missingStatementProviders(statements, month);
+  const missingStatements = recorded.missing;
   const missingPrevious = missingStatementProviders(statements, addMonths(month, -1));
-  const provisional = missingStatements.length > 0;
+  const provisional = recorded.incomplete;
+  const coverageNote = missingStatements.length
+    ? `${missingStatements.map((p) => PROVIDER_META[p].name).join(" and ")} statements are missing for ${monthLabel(month)}. Recorded totals are incomplete.`
+    : month > current ? "Future month: only recorded entries are shown." : undefined;
   const rate = provisional || month > current ? null : savingsRate(thisMonth.income, thisMonth.expense);
   /** The month's largest category of a kind: what the tiles say while statements are still missing. */
   const largest = (k: CashFlowKind) => {
     const totals = k === "expense" ? expenseTotals : incomeTotals;
     const top = allCategories.filter((c) => c.kind === k && (totals.get(c.id) ?? 0) > 0).sort((a, b) => (totals.get(b.id) ?? 0) - (totals.get(a.id) ?? 0))[0];
-    return top ? `Largest: ${top.name}` : k === "expense" ? "Nothing spent yet" : "Nothing received yet";
+    return top ? `Largest: ${top.name}` : k === "expense" ? "No spending recorded" : "No income recorded";
   };
   /** Lower spending and higher income are improvements; the signed percentage still describes the change. */
   const compare = (kind: CashFlowKind) => {
-    // The header's coverage badge explains a provisional month once; the tiles stay quiet about it.
-    if (provisional || !comparison || missingPrevious.length) return largest(kind);
+    if (recorded[kind] == null) return "No recorded data";
+    if (provisional) return "Incomplete records";
+    if (!comparison || missingPrevious.length) return largest(kind);
     const before = (previousPeriod ?? prev)[kind];
     if (before <= 0) return largest(kind);
     const period = comparison.monthToDate ? dayRangeLabel(comparison.previous.start, addDays(comparison.previous.end, -1)) : monthLabel(addMonths(month, -1), "short");
@@ -182,9 +192,14 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   // Hourly work pays differently every month: each client's average month, with everyone's low and high.
   const payers = repeatPayers(received);
   const income = typicalIncome(fx, recurring, payers);
+  const hasIncomeEstimate = income.sources > 0 && income.missing.length === 0;
   // Tile charts: each month the figure is drawn from (pay by month; the year up to the month on show).
-  const bars = (points: { month: string; value: number }[]): MiniBar[] => points.map((p) => ({ key: p.month, label: monthLabel(p.month), value: p.value }));
+  const bars = (points: { month: string; value: number | null; incomplete?: boolean }[]): MiniBar[] => points.map((p) => ({ key: p.month, label: monthLabel(p.month), value: p.value, incomplete: p.incomplete }));
   const lastSixClosed = Array.from({ length: 6 }, (_, i) => addMonths(current, i - 6));
+  const payHistory = repeatIncomeByMonth(fx, payers, lastSixClosed).map((p) => {
+    const recorded = dashboardMonth({ month: p.month, income: p.value, expense: 0, net: p.value }, statements, current);
+    return { month: p.month, value: recorded.income, incomplete: recorded.incomplete };
+  });
 
   // ---- needs you ----
   const inbox: InboxProps = {
@@ -202,13 +217,16 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     const totals = k === "expense" ? expenseTotals : incomeTotals;
     return allCategories
       .filter((c) => c.kind === k && ((totals.get(c.id) ?? 0) > 0 || (k === "expense" && !c.archived && (c.monthlyBudget ?? 0) > 0)))
-      .map((c) => ({ id: c.id, label: c.name, color: c.color, value: totals.get(c.id) ?? 0, budget: k === "expense" ? c.monthlyBudget : null }))
-      .sort((a, b) => b.value - a.value);
+      .map((c) => {
+        const value = totals.get(c.id) ?? 0;
+        return { id: c.id, label: c.name, color: c.color, value: provisional && value === 0 ? null : value, budget: k === "expense" ? c.monthlyBudget : null };
+      })
+      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
   };
   const budgetsSheet = (
     <FormSheet
-      title="Monthly budgets"
-      description="Per expense category, in PHP. Leave blank for no budget."
+      title="Monthly budget defaults"
+      description="These category defaults apply across all months, not just the month on screen. Amounts are in PHP; leave blank for no budget."
       trigger={
         <Button variant="ghost" size="sm">
           <SlidersHorizontal /> Budgets
@@ -216,6 +234,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       }
     >
       <BudgetsForm
+        month={month}
         categories={allCategories
           .filter((c) => c.kind === "expense" && !c.archived)
           .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, spent: expenseTotals.get(c.id) ?? 0 }))}
@@ -234,9 +253,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       return {
         key: c.provider,
         name: PROVIDER_META[c.provider].name,
-        // Healthy accounts open their performance; one that needs attention opens its connection.
-        href: attention ? `/admin/connections#${c.provider}` : "/admin/holdings",
-        description: c.includeInNetWorth ? status : `${status} · not in net worth`,
+        // Excluded accounts open their inclusion setting; healthy included accounts open performance.
+        href: attention || !c.includeInNetWorth ? `/admin/connections#${c.provider}` : "/admin/holdings",
+        description: status,
+        inNetWorth: c.includeInNetWorth,
         value: c.snapshot ? computeNetWorth([], [], fx, c.snapshot.positions).netWorthPhp : null,
         pnlPct: pnl?.pnlUsd != null && pnl.costUsd ? pnl.pnlUsd / pnl.costUsd : null,
         sync: { provider: c.provider, disabled: !c.enabled || c.syncing },
@@ -246,7 +266,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       key: b.provider,
       name: PROVIDER_META[b.provider].name,
       href: `/admin/connections#${b.provider}`,
-      description: `Statement balance · ${dayLabel(b.asOf)} · ${b.currencies.join(", ")}`,
+      description: `${daysBetween(b.asOf, today) > STALE_BALANCE_DAYS ? "Stale statement" : "Statement balance"} · ${b.asOf} · ${b.currencies.join(", ")}`,
+      inNetWorth: true,
+      stale: daysBetween(b.asOf, today) > STALE_BALANCE_DAYS,
       value: b.total.netWorthPhp,
       pnlPct: null,
     })),
@@ -255,6 +277,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       name: PROVIDER_META[provider].name,
       href: `/admin/connections#${provider}`,
       description: "Import a closing balance to count it in net worth.",
+      inNetWorth: false,
       value: null,
       pnlPct: null,
     })),
@@ -282,17 +305,22 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     account: last?.account,
     currency: last?.currency,
   });
+  const lastRecordedMonth = monthly.filter((p) => p.month < month).map((p) => p.month).sort().at(-1);
+  const sparse = !q && entries.length === 0;
+  const history = <CashFlowChart fill points={recordedSeries.map((p) => ({ label: monthLabel(p.month, "short"), income: p.income, expense: p.expense, incomplete: p.incomplete }))} />;
+  const historyAction = <><CashFlowLegend /><CashFlowHistoryDetails points={recordedSeries} month={month} /></>;
 
   return (
     <>
       <AdminHeader wide>
         <MonthNav month={month} current={current} />
-        <CoverageBadge missing={missingStatements} month={month} current={current} />
+        <div className="hidden sm:block"><CoverageBadge missing={missingStatements} month={month} current={current} /></div>
         <div className="ml-auto flex items-center gap-2">
           <NeedsYou {...inbox} />
-          <SyncConnectionsButton compact disabled={!connections.some((c) => c.enabled)} />
+          <div className="hidden sm:block"><SyncConnectionsButton compact disabled={!connections.some((c) => c.enabled)} /></div>
           <AddEntry
             kind="expense"
+            viewedMonth={month}
             categories={formCategories}
             accounts={accounts}
             suggestions={suggestions}
@@ -301,12 +329,21 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         </div>
       </AdminHeader>
 
-      <main id="main-content" className="mx-auto mb-safe flex w-full max-w-screen-2xl flex-1 flex-col gap-3 px-4 pt-4 pb-4 xl:min-h-0">
+      <main id="main-content" tabIndex={-1} className="mx-auto mb-safe flex w-full max-w-screen-2xl flex-1 flex-col gap-3 px-4 pt-4 pb-4 xl:min-h-0">
         <h1 className="sr-only">Overview · {monthLabel(month)}</h1>
         <KpiStrip
+          period={monthLabel(month, "short")}
+          coverage={<CoverageBadge missing={missingStatements} month={month} current={current} />}
           netWorth={{
-            label: "Net worth",
+            label: "Tracked net worth",
             value: <Money value={nw.netWorthPhp} />,
+            detail: (
+              <>
+                <p>Latest synced balances plus the most recent bank statement balances. This is not a historical total for the month you&apos;re viewing.</p>
+                {outOfDate.length > 0 && <div><p className="font-medium">Stale or missing sources</p><ul className="list-inside list-disc">{outOfDate.map((source) => <li key={source}>{source}</li>)}</ul></div>}
+                {excluded.length > 0 && <p>Excluded from this total: {excluded.join(", ")}. Review inclusion in Connections.</p>}
+              </>
+            ),
             // The 30-day change once there is that much history; then what in the total is out of date.
             hint: (
               <>
@@ -316,47 +353,65 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                   </span>
                 )}
                 {outOfDate.length > 0 ? (
-                  <span className="truncate" title={`Out of date: ${outOfDate.join(" · ")}`}>
-                    Out of date: {outOfDate.join(" · ")}
+                  <span>
+                    {outOfDate.length} stale or missing sources
                   </span>
                 ) : (
-                  change == null && <span>Every account is current</span>
+                  change == null && <span>Tracked balances are current</span>
                 )}
+                {excluded.length > 0 && <span>Excludes {excluded.join(", ")}</span>}
               </>
             ),
           }}
           trend={trend.length >= 3 ? <Sparkline points={trend} label="Net worth" /> : undefined}
+          estimate={{
+            label: "Estimated income / mo",
+            value: hasIncomeEstimate ? <Money value={income.average} /> : "—",
+            chart: hasIncomeEstimate ? <MiniBars label="Historical pay" points={bars(payHistory)} reference={income.average} /> : undefined,
+            historyLabel: "6-month pay history",
+            compactHint: hasIncomeEstimate ? <span>Monthly · low <Money value={income.low} compact /> · high <Money value={income.high} compact /></span> : "Estimate unavailable",
+            detail: (
+              <>
+                <p>Each repeat payer&apos;s historical monthly average, plus active income schedules, converted at current exchange rates.</p>
+                <p>This is an estimate, not recorded earnings for {monthLabel(month)}.</p>
+                <p>The low and high add up each payer&apos;s lowest and highest paid month plus fixed schedules. They are not guaranteed limits.</p>
+              </>
+            ),
+            hint: hasIncomeEstimate ? (
+              <>
+                <span>Typical monthly pay + schedules</span>
+                <span>Low <Money value={income.low} compact /> · high <Money value={income.high} compact /></span>
+              </>
+            ) : income.missing.length ? `Missing exchange rates: ${income.missing.join(", ")}` : "Needs repeat payments or a schedule",
+          }}
           items={[
             {
-              label: "Income / month",
-              value: income.sources ? <Money value={income.average} /> : "—",
-              chart: income.sources ? <MiniBars label="Pay" points={bars(repeatIncomeByMonth(fx, payers, lastSixClosed))} reference={income.average} /> : undefined,
-              hint: income.sources ? (
-                <span title="Each client's average month, read from imports. The range adds up everyone's lowest and highest month: plan spending on the low end.">
-                  Low <Money value={income.low} compact /> · high <Money value={income.high} compact />
-                </span>
-              ) : (
-                "Shows up once a payer has paid twice"
-              ),
-            },
-            {
               label: `Spent · ${monthLabel(month, "short")}`,
-              value: <Money value={thisMonth.expense} />,
+              shortLabel: "Spent",
+              unknown: recorded.expense == null,
+              value: recorded.expense == null ? <span aria-label="No recorded spending data">—</span> : <Money value={recorded.expense} />,
               hint: compare("expense"),
-              chart: <MiniBars label="Spent" color="var(--chart-3)" points={bars(series.map((p) => ({ month: p.month, value: p.expense })))} highlight={month} />,
+              chart: <MiniBars label="Recorded spending" color="var(--chart-3)" points={bars(recordedSeries.map((p) => ({ ...p, value: p.expense })))} highlight={month} />,
+              historyLabel: "12-month history",
             },
             {
               label: `Earned · ${monthLabel(month, "short")}`,
-              value: <Money value={thisMonth.income} />,
+              shortLabel: "Earned",
+              unknown: recorded.income == null,
+              value: recorded.income == null ? <span aria-label="No recorded income data">—</span> : <Money value={recorded.income} />,
               hint: compare("income"),
-              chart: <MiniBars label="Earned" points={bars(series.map((p) => ({ month: p.month, value: p.income })))} highlight={month} />,
+              chart: <MiniBars label="Recorded income" points={bars(recordedSeries.map((p) => ({ ...p, value: p.income })))} highlight={month} />,
+              historyLabel: "12-month history",
             },
             {
               label: `Net · ${monthLabel(month, "short")}`,
-              value: <Money value={thisMonth.income - thisMonth.expense} signed tone />,
-              chart: <MiniBars label="Net" tone points={bars(series.map((p) => ({ month: p.month, value: p.net })))} highlight={month} />,
+              shortLabel: "Net",
+              unknown: recorded.net == null,
+              value: recorded.net == null ? <span aria-label="Net unknown: incomplete records">—</span> : <Money value={recorded.net} signed tone={!provisional} />,
+              chart: <MiniBars label="Recorded net" tone points={bars(recordedSeries.map((p) => ({ ...p, value: p.net })))} highlight={month} />,
+              historyLabel: "12-month history",
               hint:
-                rate != null ? (
+                recorded.net == null ? "Net unknown · missing records" : provisional ? "Recorded net · incomplete records" : rate != null ? (
                   <span>
                     Saved <Pct value={rate} />
                     {month === current && " so far"}
@@ -369,32 +424,47 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         />
 
         {/*
-          Wide screens: three columns filling the rest of the viewport (categories, activity, then
-          accounts over the 12-month trend); every panel scrolls inside. Below that the right column
-          dissolves (`contents`) into one stacked grid, with Activity last because it's the longest.
+          Populated months keep Activity and history full-height, with categories over accounts on
+          the left. Empty months give Accounts the full right column and history a wide second row.
+          Mobile follows DOM order: categories, Activity, accounts, then history.
         */}
-        <div className="grid gap-3 md:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-12 xl:grid-rows-1">
-          <div className="min-w-0 xl:col-span-3 xl:min-h-0">
-            <CategoryBreakdown expense={breakdown("expense")} income={breakdown("income")} action={budgetsSheet} />
+        <div className={cn("grid gap-3 md:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-12", sparse ? "xl:grid-rows-2" : "xl:grid-rows-5")}>
+          <div className={cn("min-w-0 xl:col-span-3 xl:min-h-0", !sparse && "xl:row-span-3")}>
+            <CategoryBreakdown expense={breakdown("expense")} income={breakdown("income")} coverageNote={coverageNote} action={budgetsSheet} />
           </div>
           <ActivityFeed
-            className="order-last min-w-0 scroll-mt-20 md:col-span-2 xl:order-none xl:col-span-6 xl:min-h-0"
+            className={cn("min-w-0 scroll-mt-20 md:col-span-2 xl:col-span-6 xl:min-h-0", !sparse && "xl:row-span-5")}
             entries={activity}
             search={q ? { q, capped: entries.length >= SEARCH_LIMIT ? SEARCH_LIMIT : null } : null}
             month={month}
             current={current}
+            coverageNote={coverageNote}
+            lastRecordedMonth={lastRecordedMonth}
             today={today}
             categories={allCategories.map(({ id, kind, name, color, monthlyBudget }) => ({ id, kind, name, color, monthlyBudget }))}
             formCategories={formCategories}
             accounts={accounts}
-            totals={{ expense: thisMonth.expense, income: thisMonth.income, byCategory: Object.fromEntries([...expenseTotals, ...incomeTotals]) }}
+            totals={{
+              expense: recorded.expense,
+              income: recorded.income,
+              byCategory: Object.fromEntries([...expenseTotals, ...incomeTotals].map(([id, total]) => [id, provisional && total === 0 ? null : total])),
+            }}
           />
-          <div className="contents xl:col-span-3 xl:flex xl:min-h-0 xl:flex-col xl:gap-3">
-            <AccountsPanel rows={accountRows} className="min-w-0 xl:max-h-3/5 xl:min-h-0 xl:shrink-0" />
-            <Panel fill scroll={false} title="12 months" action={<CashFlowLegend />} className="min-w-0 md:col-span-2 xl:min-h-40 xl:flex-1">
-              <CashFlowChart fill points={series.map((p) => ({ label: monthLabel(p.month, "short").split(" ")[0], income: p.income, expense: p.expense }))} />
-            </Panel>
-          </div>
+          {sparse ? (
+            <>
+              <AccountsPanel rows={accountRows} className="min-w-0 xl:col-span-3 xl:row-span-2 xl:min-h-0" />
+              <Panel fill scroll={false} title="Cash flow" action={historyAction} toolbar={<p className="text-xs text-muted-foreground">12 months of recorded totals · gaps mean missing data. Open Details for every month.</p>} className="min-w-0 md:col-span-2 xl:col-span-9 xl:min-h-40">
+                {history}
+              </Panel>
+            </>
+          ) : (
+            <>
+              <AccountsPanel rows={accountRows} className="min-w-0 xl:col-span-3 xl:col-start-1 xl:row-span-2 xl:row-start-4 xl:min-h-0" />
+              <Panel fill scroll={false} title="Cash flow" action={historyAction} toolbar={<p className="text-xs text-muted-foreground">12 months · recorded totals; gaps mean missing data.</p>} className="min-w-0 md:col-span-2 xl:col-span-3 xl:col-start-10 xl:row-span-5 xl:row-start-1 xl:min-h-40">
+                {history}
+              </Panel>
+            </>
+          )}
         </div>
       </main>
     </>

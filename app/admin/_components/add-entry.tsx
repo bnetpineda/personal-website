@@ -17,6 +17,7 @@ export interface AddEntryProps {
   accounts: string[];
   suggestions: EntrySuggestion[];
   defaults: Record<CashFlowKind, CashFlowFormProps["defaults"]>;
+  viewedMonth?: string;
 }
 
 const requestedKind = (value: string | null): CashFlowKind | null => (value === "expense" || value === "income" ? value : null);
@@ -25,7 +26,7 @@ const requestedKind = (value: string | null): CashFlowKind | null => (value === 
  * Manual entry for the odd cash payment; synced accounts cover the rest. `?add=expense` or
  * `?add=income` (the ⌘K menu, from any page) opens it, then the parameter is dropped.
  */
-export function AddEntry({ kind: initialKind, categories, accounts, suggestions, defaults }: AddEntryProps) {
+export function AddEntry({ kind: initialKind, categories, accounts, suggestions, defaults, viewedMonth }: AddEntryProps) {
   const requested = useSearchParams().get("add");
   const [open, setOpen] = useState(requestedKind(requested) != null);
   const [kind, setKind] = useState(requestedKind(requested) ?? initialKind);
@@ -49,7 +50,7 @@ export function AddEntry({ kind: initialKind, categories, accounts, suggestions,
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" touch>
           <Plus /> Add
         </Button>
       </SheetTrigger>
@@ -76,6 +77,7 @@ export function AddEntry({ kind: initialKind, categories, accounts, suggestions,
             accounts={accounts}
             suggestions={suggestions.filter((s) => s.kind === kind)}
             defaults={defaults[kind]}
+            viewedMonth={viewedMonth}
             autoFocus
           />
         </div>

@@ -44,6 +44,7 @@ function ChartContainer({
   children,
   config,
   initialDimension = INITIAL_DIMENSION,
+  ref: forwardedRef,
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig
@@ -57,6 +58,28 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const [hasSize, setHasSize] = React.useState(false)
+  const ref = React.useCallback((node: HTMLDivElement | null) => {
+    containerRef.current = node
+    if (typeof forwardedRef === "function") return forwardedRef(node)
+    if (forwardedRef) forwardedRef.current = node
+  }, [forwardedRef])
+
+  // Responsive layouts can hide mini charts entirely. Do not mount Recharts into a zero-size
+  // container: it adds work and emits warnings on every resize. The CSS box keeps its space.
+  React.useLayoutEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+    const measure = () => {
+      const { width, height } = node.getBoundingClientRect()
+      setHasSize(width > 0 && height > 0)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -68,13 +91,14 @@ function ChartContainer({
           className
         )}
         {...props}
+        ref={ref}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer
+        {hasSize && <RechartsPrimitive.ResponsiveContainer
           initialDimension={initialDimension}
         >
           {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        </RechartsPrimitive.ResponsiveContainer>}
       </div>
     </ChartContext.Provider>
   )

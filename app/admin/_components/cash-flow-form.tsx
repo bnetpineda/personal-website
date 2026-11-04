@@ -10,7 +10,7 @@ import { Swatch } from "@/components/ui/swatch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { EntrySuggestion } from "@/lib/dal";
 import { CURRENCIES, type CashFlowKind } from "@/lib/finance/constants";
-import { addDays, todayManila } from "@/lib/finance/dates";
+import { addDays, isMonth, monthLabel, todayManila } from "@/lib/finance/dates";
 import { deleteCashFlow, saveCashFlow } from "../_actions/cash-flows";
 import { FormField, FormFooter, useFormAction } from "./form";
 
@@ -50,9 +50,11 @@ export interface CashFlowFormProps {
   };
   /** Focus the amount on open (the add sheet). */
   autoFocus?: boolean;
+  /** Warn when a new entry's date belongs outside the month currently on screen. */
+  viewedMonth?: string;
 }
 
-export function CashFlowForm({ kind, categories, accounts, suggestions = [], defaults, entry, recurring, autoFocus }: CashFlowFormProps) {
+export function CashFlowForm({ kind, categories, accounts, suggestions = [], defaults, entry, recurring, autoFocus, viewedMonth }: CashFlowFormProps) {
   // A fresh entry can be taken back from the toast; posting a recurring item or editing can't.
   // Fields remount (formKey) only after a successful save, so typed values survive errors.
   const { state, pending, onSubmit, formKey, error } = useFormAction(saveCashFlow, {
@@ -69,6 +71,7 @@ export function CashFlowForm({ kind, categories, accounts, suggestions = [], def
       entry={entry}
       recurring={recurring}
       autoFocus={autoFocus}
+      viewedMonth={viewedMonth}
       onSubmit={onSubmit}
       footer={
         <FormFooter state={state} pending={pending}>
@@ -89,6 +92,7 @@ function CashFlowFields({
   entry,
   recurring,
   autoFocus,
+  viewedMonth,
   onSubmit,
   footer,
   error,
@@ -216,7 +220,9 @@ function CashFlowFields({
           )}
         </FormField>
 
-        <FormField id={id("date")} label="Date" error={error("occurredOn")}>
+        <FormField id={id("date")} label="Date" error={error("occurredOn")}
+          description={!entry && viewedMonth && isMonth(date.slice(0, 7)) && date.slice(0, 7) !== viewedMonth
+            ? `This entry will appear in ${monthLabel(date.slice(0, 7))}, not the ${monthLabel(viewedMonth)} view.` : undefined}>
           <div className="flex flex-col gap-2">
             <DatePicker
               id={id("date")}

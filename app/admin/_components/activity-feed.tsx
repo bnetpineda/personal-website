@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import Form from "next/form";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
-import { GraduationCap, Repeat, Search, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, GraduationCap, Repeat, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@
 import { Swatch } from "@/components/ui/swatch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { addMonths, dayLabel, monthLabel } from "@/lib/finance/dates";
+import { dayLabel, monthLabel } from "@/lib/finance/dates";
 import { filingNote } from "@/lib/finance/notes";
 import { deleteCashFlow, restoreCashFlow } from "../_actions/cash-flows";
 import { CashFlowForm, type FormCategory } from "./cash-flow-form";
@@ -49,8 +49,8 @@ export interface ActivityCategory {
 
 const KINDS = [
   { value: "all", label: "All" },
-  { value: "expense", label: "Out" },
-  { value: "income", label: "In" },
+  { value: "expense", label: "Spent" },
+  { value: "income", label: "Earned" },
 ] as const;
 
 /**
@@ -62,6 +62,8 @@ export function ActivityFeed({
   search,
   month,
   current,
+  coverageNote,
+  lastRecordedMonth,
   today,
   categories,
   formCategories,
@@ -75,12 +77,15 @@ export function ActivityFeed({
   /** The month on show and this month (YYYY-MM). */
   month: string;
   current: string;
+  coverageNote?: string;
+  /** A month that actually contains records, rather than an empty previous month. */
+  lastRecordedMonth?: string;
   today: string;
   categories: ActivityCategory[];
   formCategories: Record<CashFlowKind, FormCategory[]>;
   accounts: string[];
   /** The month's PHP totals, for what one category adds up to. */
-  totals: { expense: number; income: number; byCategory: Record<number, number> };
+  totals: { expense: number | null; income: number | null; byCategory: Record<number, number | null> };
   className?: string;
 }) {
   const filters = useDashboardFilters();
@@ -136,14 +141,14 @@ export function ActivityFeed({
       {(search || category) && (
         <div className="flex flex-wrap items-center gap-2">
           {search && (
-            <Button asChild size="xs">
-              <Link href={filters.hrefWith({ q: null })} aria-label={`Clear search for ${search.q}`}>
-                “{search.q}” <X />
+            <Button asChild variant="outline" size="xs" touch>
+              <Link href={filters.hrefWith({ q: null })} aria-label={`Back to ${monthLabel(month)}; clear search for ${search.q}`}>
+                <ArrowLeft /> Back to {monthLabel(month, "short")}
               </Link>
             </Button>
           )}
           {category && (
-            <Button size="xs" onClick={() => filters.set({ category: null })} aria-label={`Show all categories, not only ${category.name}`}>
+            <Button size="xs" touch onClick={() => filters.set({ category: null })} aria-label={`Show all categories, not only ${category.name}`}>
               <Swatch color={category.color} size="sm" />
               {category.name}
               <X />
@@ -152,13 +157,13 @@ export function ActivityFeed({
           <p className="font-mono text-xs text-muted-foreground">
             {search ? (
               <>
-                {visible.length} {visible.length === 1 ? "result" : "results"} · all months
+                “{search.q}” · {visible.length} {visible.length === 1 ? "result" : "results"}
                 {search.capped != null && ` · newest ${search.capped}`} · out <Money value={sum("expense")} /> · in <Money value={sum("income")} />
               </>
             ) : category?.kind === "expense" ? (
-              <CategorySummary spent={totals.byCategory[category.id] ?? 0} of={totals.expense} budget={category.monthlyBudget} share="spending" />
+              <CategorySummary spent={totals.byCategory[category.id] ?? (coverageNote ? null : 0)} of={totals.expense} budget={category.monthlyBudget} share="spending" />
             ) : category ? (
-              <CategorySummary spent={totals.byCategory[category.id] ?? 0} of={totals.income} budget={null} share="income" />
+              <CategorySummary spent={totals.byCategory[category.id] ?? (coverageNote ? null : 0)} of={totals.income} budget={null} share="income" />
             ) : null}
           </p>
         </div>
@@ -170,10 +175,11 @@ export function ActivityFeed({
     <Panel
       fill
       id="activity"
+      focusableHeading
       className={className}
       title={
         <>
-          {search ? "Search" : "Activity"} <span className="font-mono text-xs text-muted-foreground">· {visible.length}</span>
+          {search ? "Search · all months" : coverageNote ? "Recorded activity" : "Activity"} <span className="font-mono text-xs text-muted-foreground">· {visible.length}</span>
         </>
       }
       action={
@@ -195,14 +201,26 @@ export function ActivityFeed({
       toolbar={toolbar}
     >
       {visible.length === 0 ? (
-        <EmptyState size="sm" title={search ? "No matches" : `Nothing in ${monthLabel(month)}${category ? ` · ${category.name}` : ""}`}>
+        <EmptyState
+          size="sm"
+          title={search || entries.length > 0 ? "No matching entries" : `No records for ${monthLabel(month)}${category ? ` · ${category.name}` : ""}`}
+          action={!search && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {entries.length > 0 ? (
+                <Button variant="outline" size="sm" touch onClick={() => filters.set({ kind: null, category: null })}>Clear filters</Button>
+              ) : (
+                <>
+                  {coverageNote && month <= current && <Button asChild size="sm" touch><Link href="/admin/connections">Import statements <ArrowRight /></Link></Button>}
+                  {lastRecordedMonth && <Button asChild variant="outline" size="sm" touch><Link href={filters.monthHref(lastRecordedMonth, current)}>View {monthLabel(lastRecordedMonth, "short")}</Link></Button>}
+                </>
+              )}
+            </div>
+          )}
+        >
           {search ? (
             "Try another word — search covers descriptions, notes, accounts and categories."
           ) : (
-            <>
-              {month === current ? "Synced and imported transactions show up here once they're filed." : "No entries were filed for this month."}{" "}
-              <Link href={filters.hrefWith({ month: addMonths(month, -1) === current ? null : addMonths(month, -1) })}>See {monthLabel(addMonths(month, -1))}</Link>
-            </>
+            entries.length > 0 ? "Try another type or category filter." : month > current ? "This is a future month. No activity has been recorded yet." : coverageNote ? "Import your bank statements to fill in this month. Missing records are not zero totals." : month === current ? "Transactions show up here once they're recorded." : "No entries were recorded for this month."
           )}
         </EmptyState>
       ) : (
@@ -333,10 +351,11 @@ function FiledBy({ notes }: { notes: string | null }) {
 }
 
 /** "₱8,200 · 23% of spending · 82% of budget" for the selected category's month. */
-function CategorySummary({ spent, of, budget, share }: { spent: number; of: number; budget: number | null; share: string }) {
+function CategorySummary({ spent, of, budget, share }: { spent: number | null; of: number | null; budget: number | null; share: string }) {
+  if (spent == null) return <>No recorded data for this category.</>;
   return (
     <>
-      <Money value={spent} /> · <Pct value={of > 0 ? spent / of : null} /> of {share}
+      <Money value={spent} /> · <Pct value={of != null && of > 0 ? spent / of : null} /> of {share}
       {budget != null && budget > 0 && (
         <>
           {" · "}

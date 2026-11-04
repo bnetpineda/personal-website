@@ -1,11 +1,13 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Eye, EyeOff, LogOut, Settings } from "lucide-react";
+import { Eye, EyeOff, LogOut, Moon, MoreHorizontal, Settings, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useTheme } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Toggle } from "@/components/ui/toggle";
@@ -48,6 +50,7 @@ export function Shell({ initialPrivate, children }: { initialPrivate: boolean; c
 
   return (
     <AdminUiContext.Provider value={{ privacy, openCommand: () => setCommandOpen(true) }}>
+      <a href="#main-content" className="sr-only rounded-md border-2 border-border bg-background px-4 py-2 text-foreground focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50">Skip to content</a>
       {/* Shorter than 800px, the Overview scrolls as a page instead of squeezing its panels. */}
       <div data-private={hidden} className={cn("group/shell flex min-h-svh flex-col", overview && "xl:h-svh xl:min-h-200")}>
         {overview ? (
@@ -55,7 +58,7 @@ export function Shell({ initialPrivate, children }: { initialPrivate: boolean; c
         ) : (
           <>
             <AdminHeader />
-            <main id="main-content" className="mx-auto mb-safe w-full max-w-6xl flex-1 px-4 pt-8 pb-8 lg:pb-12">
+            <main id="main-content" tabIndex={-1} className="mx-auto mb-safe w-full max-w-6xl flex-1 px-4 pt-8 pb-8 lg:pb-12">
               {children}
             </main>
           </>
@@ -64,6 +67,27 @@ export function Shell({ initialPrivate, children }: { initialPrivate: boolean; c
       <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} privacy={privacy} />
       <Toaster />
     </AdminUiContext.Provider>
+  );
+}
+
+function MobileUtilities() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [pending, startTransition] = useTransition();
+  return (
+    <div className="sm:hidden">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" touch aria-label="More options"><MoreHorizontal /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Preferences</DropdownMenuLabel>
+          <DropdownMenuItem onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
+            {resolvedTheme === "dark" ? <Sun /> : <Moon />} Use {resolvedTheme === "dark" ? "light" : "dark"} theme
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild><Link href="/admin/settings"><Settings /> Settings</Link></DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={pending} onSelect={() => startTransition(async () => { await logout(); })}><LogOut /> Log out</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -106,32 +130,35 @@ export function AdminHeader({ wide = false, children }: { wide?: boolean; childr
           </span>
           <span className="hidden font-mono text-xs text-muted-foreground sm:inline">/ finance</span>
         </Link>
-        {children && <div className="order-3 flex w-full flex-wrap items-center gap-2 xl:order-2 xl:w-auto xl:flex-1">{children}</div>}
         <div className="order-2 ml-auto flex items-center gap-1 xl:order-3">
           <CommandButton onOpen={openCommand} />
           <PrivacyToggle />
-          <ThemeToggle />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button asChild variant={inSettings ? "default" : "ghost"} size="icon">
-                <Link href="/admin/settings" aria-label="Settings" aria-current={inSettings ? "page" : undefined}>
-                  <Settings />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Settings</TooltipContent>
-          </Tooltip>
-          <form action={logout}>
+          <MobileUtilities />
+          <div className="hidden items-center gap-1 sm:flex">
+            <ThemeToggle />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button type="submit" variant="ghost" size="icon" aria-label="Log out">
-                  <LogOut />
+                <Button asChild variant={inSettings ? "default" : "ghost"} size="icon">
+                  <Link href="/admin/settings" aria-label="Settings" aria-current={inSettings ? "page" : undefined}>
+                    <Settings />
+                  </Link>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Log out</TooltipContent>
+              <TooltipContent>Settings</TooltipContent>
             </Tooltip>
-          </form>
+            <form action={logout}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="submit" variant="ghost" size="icon" aria-label="Log out">
+                    <LogOut />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Log out</TooltipContent>
+              </Tooltip>
+            </form>
+          </div>
         </div>
+        {children && <div className="order-3 flex w-full flex-wrap items-center gap-2 xl:order-2 xl:w-auto xl:flex-1">{children}</div>}
       </div>
     </header>
   );
