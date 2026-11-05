@@ -13,7 +13,7 @@ import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form"
 import { ImportAction, NativeAmount } from "./import-controls";
 
 export function ConfigureHistoryButton({ yesterday }: { yesterday: string }) {
-  return <FormSheet trigger={<Button variant="outline"><History />Binance history</Button>} title="Load Binance history" description="Choose a start date for Earn and crypto transfers, and list every Spot pair you have traded."><ConfigureForm yesterday={yesterday} /></FormSheet>;
+  return <FormSheet trigger={<Button variant="outline" size="sm"><History />Set up import</Button>} title="Load Binance history" description="Choose a start date for Earn and crypto transfers, and list every Spot pair you have traded."><ConfigureForm yesterday={yesterday} /></FormSheet>;
 }
 export function ImportHoldingCostsButton({ disabled }: { disabled: boolean }) {
   const [running, setRunning] = useState(false), [status, setStatus] = useState("");
@@ -78,7 +78,7 @@ export function ContinueHistoryButton({ jobs }: { jobs: { id: string; scope: str
     } catch { setStatus("Connection interrupted. Resume to continue from saved progress."); }
     finally { setRunning(false); }
   };
-  return <div className="flex flex-col gap-2"><div className="flex gap-2"><Button disabled={running || !jobs.some((j) => j.enabled)} onClick={run}>Continue all / sync new trades</Button>
+  return <div className="flex flex-col gap-2"><div className="flex gap-2"><Button variant="outline" size="sm" disabled={running || !jobs.some((j) => j.enabled)} onClick={run}>Fetch new trades</Button>
     {running && <Button variant="outline" onClick={() => { stopped.current = true; setStatus("Stopping after the current batch…"); }}>Stop</Button>}</div>
     {status && <p role="status" className="text-sm text-muted-foreground">{status}</p>}</div>;
 }

@@ -5,7 +5,7 @@ import { cn } from "cn"
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 
 /**
- * A scrolling region with the house scrollbar: a slim pill that shows while hovering or scrolling,
+ * A scrolling region with the house scrollbar: a slim pill (on hover or scroll by default, `type="auto"` to show whenever there's more),
  * instead of the browser's own track. Give it a height (or let a flex/grid parent bound it).
  * Radix wraps the content in `display: table`, which would stop `truncate`/`line-clamp` from
  * working inside, so the content wrapper is switched back to a block.

@@ -47,6 +47,8 @@ const itemVariants = cva(
         sm: "gap-2.5 px-4 py-3",
         /** Dense lists in `Card size="sm"`: text lines up with the card title, hover bleeds into the padding. */
         xs: "-mx-2 gap-2.5 px-2 py-2",
+        /** Short lists that should fit a dashboard panel without scrolling. */
+        "2xs": "-mx-2 gap-2.5 px-2 py-0.5",
       },
     },
     defaultVariants: {
@@ -140,6 +142,7 @@ const itemDescriptionVariants = cva(
     variants: {
       /** Lines shown before the text is cut with an ellipsis (1: dense feeds; pass `title` with the full text). */
       clamp: {
+        none: "",
         1: "line-clamp-1",
         2: "line-clamp-2",
       },

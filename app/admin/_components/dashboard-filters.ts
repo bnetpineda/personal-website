@@ -18,7 +18,7 @@ export function useDashboardFilters() {
 
   /** Dashboard URL with some filters changed and the rest kept. */
   const hrefWith = (next: Partial<DashboardParams>) => dashboardHref({ ...current, ...next });
-  const monthHref = (month: string, thisMonth: string) => dashboardMonthHref(current, month, thisMonth);
+  const monthHref = (month: string) => dashboardMonthHref(current, month);
   /** Changes type/category in place: a history entry (Back undoes it) without a server request. */
   const set = (next: Partial<Pick<DashboardParams, "kind" | "category">>) => window.history.pushState(null, "", hrefWith(next));
 

@@ -1,53 +1,83 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getConnections } from "@/lib/dal";
-import { knownCost } from "@/lib/finance/calc";
-import { removeBinanceEarnReceipts } from "@/lib/finance/connections/binance-positions";
+import { getFx, getRecordedMonths } from "@/lib/dal";
+import { sumInPhp } from "@/lib/finance/calc";
 import { CURRENCIES } from "@/lib/finance/constants";
 import { currentMonth, isMonth } from "@/lib/finance/dates";
 import { getEarnings } from "@/lib/finance/imports/dal";
+import { PortfolioSections } from "../../_components/admin-nav";
+import { openingMonth } from "../../_components/nav";
 import { NativeAmount } from "../../_components/import-controls";
-import { EmptyState, Money, MonthPicker, PageHeader } from "../../_components/ui";
+import { EmptyState, InfoNote, Money, MonthPicker, PageHeader, Panel, StatCards } from "../../_components/ui";
 
-export default async function EarningsPage({ searchParams }: { searchParams: Promise<{ month?: string; period?: string }> }) {
-  const params = await searchParams, current = currentMonth(), month = isMonth(params.month) ? params.month : current, allTime = params.period === "all";
-  const [data, connections] = await Promise.all([getEarnings(allTime ? null : month), getConnections()]);
-  const tracked = connections.filter((c) => c.includeInNetWorth);
-  const positions = tracked.flatMap((c) => (c.provider === "binance" ? removeBinanceEarnReceipts(c.snapshot?.positions ?? []) : (c.snapshot?.positions ?? []))
-    .filter((p) => p.assetClass !== "cash").map((p) => ({ ...p, provider: c.provider })));
-  const known = new Map<string, number>();
-  for (const p of positions) {
-    const cost = knownCost(p);
-    if (cost != null && p.marketValue != null) known.set(p.currency, (known.get(p.currency) ?? 0) + p.marketValue - cost);
-  }
-  const unknown = positions.filter((p) => knownCost(p) == null || p.marketValue == null);
-  const binanceMissing = unknown.filter((p) => p.provider === "binance").length;
+export const metadata: Metadata = { title: "Earnings" };
+
+type EarningsRow = Awaited<ReturnType<typeof getEarnings>>["rows"][number];
+type Column = readonly [label: string, key: Exclude<keyof EarningsRow, "currency">];
+
+const EARNED: readonly Column[] = [["Earn rewards", "rewards"], ["Dividends", "dividends"], ["Interest", "interest"], ["Realized P/L", "realized"]];
+const FLOWS: readonly Column[] = [["Net contributions", "contributions"], ["Fees", "fees"], ["Taxes", "taxes"]];
+const isFiat = (currency: string) => (CURRENCIES as readonly string[]).includes(currency);
+
+/** Only the columns and rows with something in them: a table of zeros hides what's there. */
+function AmountsTable({ rows, columns }: { rows: EarningsRow[]; columns: readonly Column[] }) {
+  const has = (r: EarningsRow, key: Column[1]) => r[key] != null && r[key] !== 0;
+  // Fees and taxes are kept as positive totals; they read as what they are, money out.
+  const shownValue = (r: EarningsRow, key: Column[1]) => (key === "fees" || key === "taxes" ? -r[key]! : r[key]!);
+  const shown = columns.filter(([, key]) => rows.some((r) => has(r, key)));
+  const kept = rows.filter((r) => shown.some(([, key]) => has(r, key)));
+  return (
+    <Table>
+      <TableHeader><TableRow><TableHead>Asset</TableHead>{shown.map(([label]) => <TableHead key={label} className="text-right">{label}</TableHead>)}</TableRow></TableHeader>
+      <TableBody>{kept.map((r) => <TableRow key={r.currency}><TableCell>{r.currency}</TableCell>{shown.map(([label, key]) => <TableCell key={label} className="text-right font-mono">{has(r, key) ? <NativeAmount value={shownValue(r, key)} currency={r.currency} crypto={!isFiat(r.currency)} /> : ""}</TableCell>)}</TableRow>)}</TableBody>
+    </Table>
+  );
+}
+
+export default async function EarningsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  const params = await searchParams, current = currentMonth(), month = isMonth(params.month) ? params.month : current;
+  // All time unless a month was chosen: this month is usually empty until statements arrive.
+  const allTime = !isMonth(params.month);
+  const [data, fx, recorded] = await Promise.all([getEarnings(allTime ? null : month), getFx(), getRecordedMonths()]);
+  const startMonth = openingMonth(recorded, current) ?? current;
+  const any = (columns: readonly Column[]) => data.rows.some((r) => columns.some(([, key]) => r[key] != null && r[key] !== 0));
+  // Cash can be added up at today's rates; coins can't without historical prices, so they're counted, not valued.
+  const cash = sumInPhp(fx, data.rows.filter((r) => isFiat(r.currency)).map((r) => ({ amount: r.dividends + r.interest + (r.realized ?? 0), currency: r.currency })));
+  const coins = data.rows.filter((r) => !isFiat(r.currency) && r.rewards !== 0).length;
   return <>
-    <PageHeader eyebrow="Investments" title="Earnings" back={{ href: "/admin/holdings", label: "Portfolio" }}><MonthPicker month={month} current={current} href={(m) => `/admin/earnings?month=${m}`} /></PageHeader>
-    <div className="mb-4 flex gap-2"><Button asChild size="sm" variant={allTime ? "default" : "outline"}><Link href="/admin/earnings?period=all">All time</Link></Button><Button asChild size="sm" variant={allTime ? "outline" : "default"}><Link href={`/admin/earnings?month=${month}`}>Selected month</Link></Button></div>
-    <Alert className="mb-6"><AlertTitle>Imported activity, in its original currency</AlertTitle><AlertDescription>
-      Totals cover imported Binance, IBKR and Hyperliquid records {allTime ? "across all imported dates" : "for this month"}, including activity AI has not filed yet. Ignored entries are excluded. Contributions count deposits and withdrawals filed as transfers; linked transfers between investment accounts are excluded. This is not a total-return calculation.
-    </AlertDescription></Alert>
-    {data.postedCash > 0 && <p className="mb-4 text-sm text-muted-foreground">Cash dividends, interest, fees and taxes you posted are on Activity, not in these columns.</p>}
-    {!data.rows.length ? <EmptyState title="No imported earnings yet">Connect Binance, IBKR or Hyperliquid to start collecting rewards, dividends and trade results.</EmptyState> : <Card className="mb-6 gap-0 overflow-hidden py-0"><Table>
-      <TableHeader><TableRow>{["Currency / asset", "Net contributions", "Earn rewards", "Dividends", "Interest", "Realized P/L", "Fees", "Taxes"].map((t) => <TableHead key={t}>{t}</TableHead>)}</TableRow></TableHeader>
-      <TableBody>{data.rows.map((r) => <TableRow key={r.currency}><TableCell>{r.currency}</TableCell>{[r.contributions, r.rewards, r.dividends, r.interest, r.realized, r.fees, r.taxes].map((v, i) => <TableCell key={i} className="text-right font-mono">{v == null ? "Unavailable" : <NativeAmount value={v} currency={r.currency} crypto={!(CURRENCIES as readonly string[]).includes(r.currency)} />}</TableCell>)}</TableRow>)}</TableBody>
-    </Table></Card>}
-    <p className="mb-8 text-sm text-muted-foreground">IBKR realized P/L already includes trade commissions. Fees are shown separately for visibility and must not be subtracted again from that P/L. Hyperliquid&apos;s realized P/L is before trade fees, and perp funding is under Interest. Binance per-pair cost estimates are in <Link href="/admin/history" className="underline">Investment history</Link>; they are separate from reported realized P/L. Crypto rewards retain native quantities without historical fiat conversion.</p>
-    <Card className="mb-6"><CardHeader><CardTitle>Unrealized P/L on included accounts</CardTitle><CardDescription>Latest positions included in net worth that have both a value and a cost basis. This is a snapshot, independent of the selected month.</CardDescription></CardHeader><CardContent className="flex flex-col gap-3">
-      {[...known].map(([currency, value]) => <p key={currency} className="font-mono">{currency} · <Money value={value} currency={currency} signed tone /></p>)}
-      {tracked.map((c) => <p key={c.provider} className="text-sm text-muted-foreground">{c.provider.toUpperCase()} statement {c.snapshot ? c.snapshot.asOf.slice(0, 10) : "not synced yet"}</p>)}
-      {!known.size && <p className="text-sm text-muted-foreground">Turn on Include in net worth for a connection that supplies both position values and cost basis.</p>}
-      {unknown.length > 0 && <p className="text-sm text-warning">{unknown.length} positions have missing values or cost basis and are excluded.</p>}
-      {binanceMissing > 0 && <p className="text-sm text-warning">Binance does not supply cost basis through this connection.</p>}
-    </CardContent></Card>
-    <Card><CardHeader><CardTitle>Latest automatic history window</CardTitle><CardDescription>Older IBKR reports and Binance backfill progress are recorded in Investment history. These dates describe the most recent regular sync only.</CardDescription></CardHeader><CardContent className="flex flex-col gap-4">
-      {connections.map((c) => <div key={c.provider}><p className="font-mono text-sm uppercase">{c.provider}</p><p className="text-sm">{c.historyCoverage ? `${c.historyCoverage.from} through ${c.historyCoverage.to} · ${c.historyCoverage.description}` : "No successful history import yet."}</p>{c.historyError && <p className="text-sm text-destructive">{c.historyError}</p>}</div>)}
-      <Button asChild variant="outline" className="self-start"><Link href="/admin/connections">Manage connections</Link></Button>
-      <Button asChild variant="outline" className="self-start"><Link href="/admin/history">Import older history</Link></Button>
-    </CardContent></Card>
+    <PageHeader title="Portfolio">
+      {!allTime && <MonthPicker month={month} current={current} href={(m) => `/admin/earnings?month=${m}`} />}
+    </PageHeader>
+    <PortfolioSections />
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <Button asChild size="sm" variant={allTime ? "default" : "outline"}><Link href="/admin/earnings">All time</Link></Button>
+      <Button asChild size="sm" variant={allTime ? "outline" : "default"}><Link href={`/admin/earnings?month=${allTime ? startMonth : month}`}>By month</Link></Button>
+      <InfoNote title="How earnings add up">
+        <p>Totals cover imported Binance, IBKR and Hyperliquid records {allTime ? "across all imported dates" : "for this month"}, in their original currency, including activity AI hasn&apos;t filed yet. Ignored entries are excluded.</p>
+        <p>Contributions count deposits and withdrawals filed as transfers; transfers between your own investment accounts are excluded. This is not a total-return calculation.</p>
+        <p>IBKR realized P/L already includes trade commissions: fees are shown separately, not to be subtracted again. Hyperliquid&apos;s realized P/L is before trade fees, and perp funding is under Interest.</p>
+        <p>The peso total is an estimate at today&apos;s exchange rate, so it can move. Entries on the Overview are different: each keeps the rate from when it was recorded, so their totals don&apos;t change.</p>
+        <p>Crypto rewards keep their coin amounts, without converting to historical prices. Binance per-pair cost estimates are in <Link href="/admin/history" className="underline underline-offset-4">History</Link>.</p>
+      </InfoNote>
+    </div>
+    {!any(EARNED) && !any(FLOWS) ? (
+      <EmptyState title={allTime ? "No imported earnings yet" : "No earnings this month"}>{allTime ? "Connect Binance, IBKR or Hyperliquid to start collecting rewards, dividends and trade results." : "Try All time, or another month."}</EmptyState>
+    ) : (
+      <>
+        <StatCards
+          items={[
+            { label: "Cash earned (estimate)", value: cash.total === 0 ? "—" : <Money value={cash.total} />, primary: true, hint: cash.missing.length ? `Leaves out ${cash.missing.join(", ")}: no exchange rate` : `${data.rows.some((r) => isFiat(r.currency) && r.realized) ? "Dividends, interest and realized P/L" : "Dividends and interest"}, before tax. An estimate in pesos at today's rate` },
+            { label: "Rewards in coins", value: coins ? `${coins} ${coins === 1 ? "coin" : "coins"}` : "—", hint: coins ? "Listed below in their own units, not valued" : "None in this period" },
+          ]}
+        />
+        <p className="mb-4 text-sm text-muted-foreground">Gains and losses on what you still own are on <Link href="/admin/holdings" className="underline underline-offset-4">Holdings</Link>; estimated results of past coin trades are on <Link href="/admin/history" className="underline underline-offset-4">History</Link>.</p>
+        <div className="flex flex-col gap-6">
+          {any(EARNED) && <Panel title="What you earned"><AmountsTable rows={data.rows} columns={EARNED} /></Panel>}
+          {any(FLOWS) && <Panel title="Money in and costs"><AmountsTable rows={data.rows} columns={FLOWS} /></Panel>}
+        </div>
+      </>
+    )}
   </>;
 }

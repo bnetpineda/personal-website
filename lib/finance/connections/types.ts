@@ -131,6 +131,44 @@ export function includedPositions(connections: readonly (Pick<ConnectionView, "i
   });
 }
 
+/** A saved sync error in everyday words: what happened and what to do, without status codes. */
+export function plainSyncError(name: string, error: string): string {
+  const status = error.match(/returned HTTP (\d{3})/)?.[1];
+  if (status) {
+    return status.startsWith("5")
+      ? `${name} is having trouble right now. Try again later.`
+      : `${name} rejected the last sync, usually because its key expired or changed. Reconnect with a new key to fix it.`;
+  }
+  return error.replace(/\b(the account provider|the provider|this provider)\b/gi, name);
+}
+
+/** Syncing again can't fix these: the account needs new credentials. */
+export function needsNewCredentials(error: string) {
+  return /returned HTTP 4\d\d|access was denied/i.test(error);
+}
+
+/** Days without so much as an attempt before the daily job counts as stuck, not just late. */
+const DAILY_SYNC_GRACE_DAYS = 2;
+
+/** The daily job tries every enabled account, so one left untried for days means the job isn't running. */
+export function untriedAccounts<T extends { enabled: boolean; lastAttemptAt: Date | null; lastSyncedAt: Date | null }>(connections: T[], now = new Date()): T[] {
+  const cutoff = now.getTime() - DAILY_SYNC_GRACE_DAYS * 86_400_000;
+  return connections.filter((c) => {
+    const tried = c.lastAttemptAt ?? c.lastSyncedAt;
+    return c.enabled && tried != null && tried.getTime() < cutoff;
+  });
+}
+
+/** An account's state, in the same words on every page. Only "Up to date" and "Paused" need no action. */
+export function connectionStatus(connection: { enabled: boolean; syncing?: boolean; error: string | null; historyError: string | null; provider: SyncProvider; snapshot: { asOf: string } | null; lastSyncedAt: Date | null }, now = new Date()) {
+  if (connection.syncing) return { label: "Syncing", attention: false };
+  if (!connection.enabled) return { label: "Paused", attention: false };
+  if (connection.error) return { label: "Sync failed", attention: true };
+  if (connection.historyError) return { label: "History failed", attention: true };
+  if (isConnectionStale(connection, now)) return { label: "Out of date", attention: true };
+  return { label: "Up to date", attention: false };
+}
+
 export function isConnectionStale(connection: { provider: SyncProvider; snapshot: { asOf: string } | null; lastSyncedAt: Date | null }, now = new Date()): boolean {
   if (!connection.snapshot || !connection.lastSyncedAt) return true;
   const day = 86_400_000;

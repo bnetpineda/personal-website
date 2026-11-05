@@ -46,7 +46,7 @@ function TeachRow({ group, categories }: { group: TeachGroup; categories: FormCa
         <ItemTitle>{group.payee}</ItemTitle>
         <ItemDescription>
           {group.count} {group.count === 1 ? "payment" : "payments"} · <Money value={group.kind === "income" ? group.totalPhp : -group.totalPhp} signed tone /> · last {dayLabel(group.lastOn)}
-          {group.guess && ` · Jev leaned ${group.guess}`}
+          {group.guess && ` · AI's guess: ${group.guess}`}
         </ItemDescription>
       </ItemContent>
       <ItemActions>

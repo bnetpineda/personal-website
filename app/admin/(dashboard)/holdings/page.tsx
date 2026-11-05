@@ -6,12 +6,13 @@ import { Swatch } from "@/components/ui/swatch";
 import { getConnections, getFx, getPortfolioSnapshots } from "@/lib/dal";
 import { allocation, computeNetWorth, fxToPhp, isSmallHolding, knownCost, type FxTable } from "@/lib/finance/calc";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { isConnectionStale, PROVIDER_META, type ConnectionView, type SyncProvider } from "@/lib/finance/connections/types";
+import { connectionStatus, PROVIDER_META, type ConnectionView, type SyncProvider } from "@/lib/finance/connections/types";
 import { addDays, dayLabel, dayRangeLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { getBinanceHoldingCosts } from "@/lib/finance/imports/dal";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { accountTotals, changeSince, combineChanges, moverRows, profitLossCoverage, snapshotDay, topMovers, withCurrent, type PortfolioPoint } from "@/lib/finance/performance";
 import { portfolioRows, savePortfolioRows } from "@/lib/finance/portfolio";
+import { PortfolioSections } from "../../_components/admin-nav";
 import { AllocationChart } from "../../_components/charts";
 import { ConnectedValuationNotice } from "../../_components/connected-accounts";
 import { SyncConnectionsButton } from "../../_components/connection-controls";
@@ -107,9 +108,9 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         : connection.provider === "ibkr"
           ? `Close of ${dayLabel(snapshotDay("ibkr", connection.snapshot!.asOf))}`
           : connection.lastSyncedAt
-            ? `Synced ${timeAgo(connection.lastSyncedAt, now)}`
+            ? `Synced ${timeAgo(connection.lastSyncedAt, now)}${connectionStatus(connection, now).attention ? ", value and P/L from then" : ""}`
             : "Not synced yet",
-      attention: Boolean(connection.error || connection.historyError || isConnectionStale(connection, now)),
+      attention: connectionStatus(connection, now).attention ? connectionStatus(connection, now).label : null,
       inNetWorth: connection.includeInNetWorth,
       value: toPage(totals.valueUsd),
       valueUsd: totals.valueUsd,
@@ -128,6 +129,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
   const pnlUsd = withCost.length ? withCost.reduce((sum, a) => sum + a.totals.pnlUsd!, 0) : null;
   const costUsd = withCost.reduce((sum, a) => sum + (a.totals.costUsd ?? 0), 0);
   const missingCosts = tracked.reduce((sum, a) => sum + a.coverage.missing, 0);
+  const missingCostValue = tracked.reduce((sum, a) => sum + a.coverage.missingValue, 0);
   const estimatedPnl = withCost.some((a) => a.connection.provider !== "ibkr");
   const changes = tracked.flatMap((a) => {
     const change = changeSince(a.points.map((p) => ({ date: p.date, value: p.valueUsd })), addDays(today, -30));
@@ -148,6 +150,8 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
   const countClass = (c: AssetClass) => visible.filter((p) => p.assetClass === c).length;
   const classes = ASSET_CLASSES.filter((c) => countClass(c) > 0);
   const alloc = allocation(all.byClass);
+  const notInNetWorth = connections.filter((c) => c.snapshot && !c.includeInNetWorth).map((c) => PROVIDER_META[c.provider].name);
+  const needsLook = connections.filter((c) => c.snapshot && connectionStatus(c, now).attention).map((c) => PROVIDER_META[c.provider].name);
 
   const filterHref = (c: AssetClass | null, small = showSmall) => {
     const q = new URLSearchParams();
@@ -159,22 +163,22 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PageHeader eyebrow="Investments" title="Portfolio" back={{ href: "/admin", label: "Overview" }}>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/admin/earnings">Earnings</Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/admin/history">History</Link>
-        </Button>
+      <PageHeader title="Portfolio">
         <SyncConnectionsButton disabled={!connections.some((c) => c.enabled)} />
       </PageHeader>
+      <PortfolioSections />
 
       <StatCards
         items={[
           {
             label: "Portfolio value",
             value: <Money value={toPage(valueUsd)} currency={currency} />,
-            hint: currency === "USD" ? undefined : <Money value={valueUsd} currency="USD" />,
+            hint: <>
+              {currency !== "USD" && <Money value={valueUsd} currency="USD" />}
+              {/* So it can be reconciled with net worth on the Overview. */}
+              {notInNetWorth.length > 0 && <span className="mt-1 block">Includes {notInNetWorth.join(", ")}, not in net worth (your choice, in Accounts → Manage)</span>}
+              {needsLook.length > 0 && <span className="mt-1 block">{needsLook.join(", ")} not up to date</span>}
+            </>,
             primary: true,
           },
           {
@@ -182,13 +186,13 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
             value: pnlUsd == null ? "—" : <Money value={toPage(pnlUsd)} currency={currency} signed tone />,
             hint: pnlUsd == null ? "Needs a cost basis" : <>
               <Pct value={costUsd > 0 ? pnlUsd / costUsd : null} tone /> on <Money value={toPage(costUsd)} currency={currency} /> known cost
-              {missingCosts > 0 && <span className="mt-1 block">Excludes {missingCosts} {missingCosts === 1 ? "holding" : "holdings"} without a cost basis</span>}
+              {missingCosts > 0 && <span className="mt-1 block">Leaves out {missingCosts} {missingCosts === 1 ? "holding" : "holdings"} worth <Money value={missingCostValue} />, with no known cost</span>}
             </>,
           },
           {
-            label: "Recent value change",
-            value: month ? <Money value={toPage(month.change)} currency={currency} signed tone /> : "—",
-            hint: month ? <><Pct value={month.pct} tone /><span className="mt-1 block">{periodHint}</span></> : "History starts today",
+            label: "Balance change",
+            value: month ? <Money value={toPage(month.change)} currency={currency} signed /> : "—",
+            hint: month ? <><Pct value={month.pct} /> · includes deposits<span className="mt-1 block">{periodHint}</span></> : "History starts today",
           },
         ]}
       />

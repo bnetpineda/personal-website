@@ -71,14 +71,17 @@ Use the component that fits; don't rebuild it from `div`s.
 | Empty / zero state | `Empty` (`EmptyHeader`, `EmptyTitle`, `EmptyDescription`); `size="sm"` (or `EmptyState size="sm"`) inside dense panels |
 | Notices | `Alert` — `default warning destructive` |
 | Loading | `Skeleton`, `Spinner` |
-| Scrolling region (panel bodies) | `ScrollArea` — the house scrollbar shows on hover/scroll; `Panel fill` uses it (never the browser's own scrollbar) |
+| Scrolling region (panel bodies) | `ScrollArea` — the house scrollbar; `Panel fill` keeps it visible whenever there's more to see (never the browser's own scrollbar) |
 | Hints on icon buttons | `Tooltip` (admin is wrapped in `TooltipProvider`) |
-| Dense controls on a touchscreen | `Button touch` opts into 44px coarse-pointer targets without changing desktop density |
+| Comfortable controls on a touchscreen | `Button`, `Input`, `Select`, `Toggle`, `Tabs`, `Checkbox` and the sheet close button grow to 44px on coarse pointers by default, without changing desktop density |
 | Search / jump / run anything | `CommandDialog` (cmdk) — the admin's ⌘K / Ctrl+K `CommandMenu`, mounted once in `Shell` |
 | Explanation + fix next to a marker | `Popover` (e.g. `CoverageBadge`) |
+| The small print behind a page | `InfoNote` (a labelled `Popover`), not a paragraph on the page |
+| An account's state | `connectionStatus`: one vocabulary (Sync failed, History failed, Out of date, Up to date, Paused, Syncing) on every page |
+| Main navigation | `SideNav` (rail, `lg` up) / `BottomNav` (below `lg`), both from `NAV_DESTINATIONS`; Portfolio's three views use `PortfolioSections` |
 | Charts (trend, allocation, sparkline, tile mini bars) | `ChartContainer` + Recharts; series colors from `ChartConfig` (`var(--chart-N)`), per-row data colors via `<Cell fill>` |
 
-Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `StatCards`, `Panel`
+Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `InfoNote`, `StatCards`, `Panel`
 (`fill` = the dashboard's dense, self-scrolling panel), `Money`, `MonthPicker`, `FormField`,
 `FormSheet`, `RowActions`, the recurring `OccurrenceList` / `DueList` / `DuePanel` / `DueActions`,
 `EditableRow` (+ `extra` controls), `AddEntry`, `BudgetsForm`, `TeachList`, `PortfolioAccounts`,
@@ -124,8 +127,12 @@ components without re-applying these (`--overwrite` replaces the house style).
   ancestor: read-only amounts in a sheet need a live privacy boundary inside the portal, as in
   `CashFlowHistoryDetails` (`group/shell` + `data-private` from `useAdminUi().privacy.hidden`).
 - **Forms**: Server Action + `useFormAction` (admin) → errors from the returned `FormState`,
-  `aria-invalid` on the control, message in `FieldError`. Success closes the sheet, resets, and
-  toasts the message; pass `undo` to add an "Undo" button (e.g. a new entry).
+  `aria-invalid` on the control, message in `FieldError`, focus moved to the first invalid field. Success
+  closes the sheet, resets, and toasts the message; pass `undo` to add an "Undo" button (e.g. a new entry);
+  a `data-stay` submit button keeps the sheet open to add another. A sheet with anything typed in it ignores
+  clicks outside, and Escape or its close button ask before discarding.
+- **Plain words on screen**: no status codes, internal names or raw ISO dates. Show saved sync errors through
+  `plainSyncError`, dates through `dayLabel`/`dayRangeLabel`. A failing account's alert offers Reconnect, not just Sync.
 - **Destructive actions**: confirm in `AlertDialog`; never `window.confirm`. Exception: cheap,
   fully reversible deletes (single cash-flow entries) run straight away with an "Undo" toast
   (`RowActions onRestore`).
@@ -133,24 +140,31 @@ components without re-applying these (`--overwrite` replaces the house style).
   those prices show in detail (CoinGecko's free API asks for it); the admin has no footer.
 - **Toasts never show amounts** that weren't typed by the user — they aren't blurred by privacy mode.
 - **One screen**: `/admin` (Overview) shows everything at once — net worth and the month's numbers
-  (`KpiStrip`: desktop tiles carry `MiniBars` with history captions; phones show a compact net-worth
+  (`KpiStrip`: the net-worth line covers the same span as the change beside it; desktop tiles carry `MiniBars`; phones show a compact net-worth
   hero, one recorded-month card, then a separate income estimate without mini charts),
   then categories, the month's activity, accounts, and 12-month cash-flow history.
   It renders its own `AdminHeader` (the month, its coverage badge, the Needs you bell, Sync,
   Add); other pages get the shared one from `Shell`. From `xl` (1280px) it fills exactly one
   viewport (`Shell` locks the height on `/admin`; under 800px tall it scrolls as a page) and each
   `Panel fill` scrolls inside; populated months keep Activity and the chart full-height, with
-  categories above Accounts in the left column so chart headers cannot squeeze the plot away.
-  Empty months give Accounts the full right column and history a wide second row. Below `xl` it
+  categories above Accounts in the left column so chart headers cannot squeeze the plot away; the layout
+  is the same every month, so nothing moves when the month changes. Below `xl` it
   stacks in DOM order: categories, Activity, accounts, history. Synced
   accounts, recurring items and AI filing do the data entry, so a new panel has to earn its place.
-  Deeper pages (Portfolio → Earnings/History, Connections, Recurring, Settings via the header gear,
-  all of them via ⌘K) hang off the Overview with a `PageHeader back` link; there is no tab bar.
+  It opens on the latest month with both income and spending (`openingMonth`), and says so next to the
+  month; choosing a month keeps it in the URL, so this month stays one click away.
+- **Fit at laptop size**: at 1440x900 every category and account shows without scrolling inside its panel (rows use dense `Item size="2xs"` and `Progress thin`); longer lists scroll with a visible scrollbar.
+- **History reads first**: activity with account, type and word filters; imports and cost estimates live in sheets from the page header.
+- **Say how sure a figure is**: recorded entries keep the rate from when they were recorded, while a total worked out at today's rate is labelled an estimate; with out-of-date sources, net worth reads "latest known" and "≈" with the exact sum in its detail; figures built on incomplete records are muted; nothing scheduled is a dash, not a zero.
+- **Always visible navigation**: Overview, Portfolio, Recurring, Accounts and Settings are labelled links on
+  every page: a rail from `lg`, a bottom bar below that. ⌘K is the fast way, never the only way. Accounts
+  is the name everywhere (the route stays `/admin/connections`). Every page has Add in its header, opening in
+  place: the Overview preloads its data, other pages fetch it when opened (`AddEntryAnywhere`, and `NeedsYouAnywhere` for Needs you).
 - **Quiet by default**: the headline tiles keep the hard border and offset shadow; panels are
   `Card variant="quiet"` (via `Panel fill`). Things that need a decision live behind the header's
   Needs you bell (a sheet): an account's alerts are grouped into one row (`groupAlerts`) with its fix
   in place (`SyncNowButton`, statement import) and a warning icon, not a badge per row; the Accounts
-  panel shows no status badges: exclusions are persistent text beside the amount, and statement balances
+  panel shows no status badges: exclusions are persistent text beside the name, and statement balances
   carry their as-of dates and a stale marker. A month without full statement coverage gets a clear
   "Statements missing" marker (`CoverageBadge`, with upload buttons), shown beside the month on
   desktop and in the recorded-month card on phones. Other panels use concise recorded-only context,
@@ -164,8 +178,8 @@ components without re-applying these (`--overwrite` replaces the house style).
   Details sheet as an alternative to hovering chart bars.
 - **Filters**: Activity's type and category filters live in the URL but switch on the client
   (`useDashboardFilters`: `history.pushState`, so Back undoes them) because the month's entries are
-  already on the page; month and search are links because they need new data. Category tabs and
-  Activity share All/Spending/Income state; clearing a category retains its type. Choosing a month
+  already on the page; month and search are links because they need new data. Activity's
+  All/Spending/Income switch also decides which sections By category shows; a category only sets the category, so clearing it restores what was on. Choosing a month
   exits all-time search while keeping type/category. Search is labelled all months and offers an
   explicit return to the selected month. Empty states link to a month with records, not a blind prior month.
 - **Adding entries**: manual entry is the exception. One `AddEntry` sheet in the Overview header
@@ -180,12 +194,24 @@ components without re-applying these (`--overwrite` replaces the house style).
   Mobile navigation stays visible; secondary utilities sit in More.
 - **Dark mode**: never hard-code light/dark values in app code — tokens flip automatically.
 
-## 5. UX council acceptance
+## 5. Usability score
 
-`ux-scorecard.json` records 20 checks with evidence: data clarity, navigation, mobile usability,
-accessibility, and hierarchy/recovery (four checks × 0.5 = 2 points each). `bun run ux:score` computes
-the result; acceptance requires at least 9/10, at least 1.5 in every area, and no blocking defects.
-Critical data-trust, primary-navigation, filter-scope and keyboard-restoration checks must pass.
-Unknown checks earn no points. Browser checks and independent council review support the score;
-unit tests verify behavior and prevent missing evidence, duplicate checks or blockers from being ignored.
-This is a scoped product review, not a WCAG certification or a substitute for real-device testing.
+`bun run ux:score` reports how much of a hassle the admin is, out of 10, from numbers measured in the
+real UI rather than marked by hand: actions per task against a budget (3), finding things (1.5),
+reading load and wording (1.5), trust that the app agrees with itself (1.5), forgiveness and feedback (1),
+phone (1), speed (0.5). The overall score is the lower of that and an independent cold test
+(`admin-usability.cold-test.json`): someone new to the admin trying its main jobs and rating it, because
+the measured score alone once read 10/10 next to a tester's 6.5. Acceptance needs both at 9 or more, 70% in
+every area, every task completable, and the data-trust guards: the month on show is visible and explained,
+Hide amounts blurs everything, missing data never reads as zero.
+
+`scripts/admin-usability-probe.js` measures a production build in BrowserOS neo and writes
+`admin-usability.json` through `bun run ux:bridge` (re-run with the `/neo-admin-ux-score` task);
+`scripts/admin-usability.ts` scores it. `scripts/admin-usability-cold-test.md` is the cold test's script. A measurement or cold test counts only for the source it was taken from, so any change to the admin
+marks the score STALE until it is done again. `admin-usability.baseline.json` is the first measurement,
+taken before the improvements. The probe never finishes a write on live data.
+
+It measures effort and wording, not feelings: it can't replace real-device testing or your own opinion.
+
+`ux-scorecard.json` (`bun run ux:trust`) is the older hand-recorded council review of data clarity and
+accessibility, kept for its evidence. Its build-specific notes predate the visible navigation.

@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { categoryRules, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
 import { monthRange } from "../dates";
+import type { EntryKind } from "./types";
 import { earningsByCurrency } from "./review";
 import type { ConnectionSnapshot } from "../connections/types";
 import { loadBinanceHoldingCosts } from "../portfolio";
@@ -36,9 +37,15 @@ export async function getEarnings(month: string | null) {
   return { rows: earnings.rows, postedCash: earnings.postedCash };
 }
 
-export async function getInvestmentHistory(provider: "binance" | "ibkr" | "hyperliquid" | "all", page: number) {
+export async function getInvestmentHistory(provider: "binance" | "ibkr" | "hyperliquid" | "all", page: number, q = "", kinds: readonly EntryKind[] = []) {
   await requireAdmin();
-  const db = getDb(), filter = provider === "all" ? sql`${importedEntries.provider} in ('binance','ibkr','hyperliquid')` : eq(importedEntries.provider, provider);
+  const db = getDb();
+  const source = provider === "all" ? sql`${importedEntries.provider} in ('binance','ibkr','hyperliquid')` : eq(importedEntries.provider, provider);
+  const filter = and(
+    source,
+    q ? ilike(importedEntries.description, `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`) : undefined,
+    kinds.length ? inArray(importedEntries.kind, [...kinds]) : undefined,
+  );
   const [jobs, reports, entries, totals, coverage] = await Promise.all([
     db.select().from(investmentSyncs).orderBy(asc(investmentSyncs.scope)),
     db.select().from(investmentReports).orderBy(desc(investmentReports.createdAt)).limit(100),

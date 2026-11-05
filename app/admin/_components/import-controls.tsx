@@ -14,8 +14,8 @@ import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form"
 import { Money } from "./ui";
 
 export function NativeAmount({ value, currency, crypto = false }: { value: number; currency: string; crypto?: boolean }) {
-  return crypto ? <span className="tabular-nums group-data-[private=true]/shell:blur-sm">{value !== 0 && Math.abs(value) < 1e-12 ? value.toExponential(6) : value.toLocaleString("en-US", { maximumFractionDigits: 12 })} {currency}</span>
-    : <Money value={value} currency={currency} signed />;
+  return crypto ? <span className="tabular-nums group-data-[private=true]/shell:blur-sm">{value !== 0 && Math.abs(value) < 1e-8 ? value.toExponential(2) : value.toLocaleString("en-US", { maximumFractionDigits: 8 })} {currency}</span>
+    : <Money value={value} currency={currency} />;
 }
 
 /** Opens the file picker straight away. Picking or dropping several statements imports them all. */
@@ -73,8 +73,8 @@ function RuleForm({ categories }: { categories: Category[] }) {
   const [kind, setKind] = useState("expense");
   return <form key={formKey} onSubmit={onSubmit} className="flex flex-col gap-6"><FieldGroup>
     <FormField id="rule-text" label="Description contains"><Input id="rule-text" name="contains" placeholder="e.g. Spotify" minLength={2} maxLength={120} required /></FormField>
-    <FormField id="rule-provider" label="Provider"><Select name="provider" defaultValue="any"><SelectTrigger id="rule-provider"><SelectValue /></SelectTrigger><SelectContent>
-      <SelectItem value="any">Any provider</SelectItem><SelectItem value="wise">Wise</SelectItem><SelectItem value="maribank">MariBank</SelectItem><SelectItem value="ibkr">IBKR</SelectItem>
+    <FormField id="rule-provider" label="Account"><Select name="provider" defaultValue="any"><SelectTrigger id="rule-provider"><SelectValue /></SelectTrigger><SelectContent>
+      <SelectItem value="any">Any account</SelectItem><SelectItem value="wise">Wise</SelectItem><SelectItem value="maribank">MariBank</SelectItem><SelectItem value="ibkr">IBKR</SelectItem>
     </SelectContent></Select></FormField>
     <FormField id="rule-kind" label="Entry type"><Select name="kind" value={kind} onValueChange={setKind}><SelectTrigger id="rule-kind"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="expense">Expense</SelectItem><SelectItem value="income">Income</SelectItem></SelectContent></Select></FormField>
     <FormField id="rule-category" label="Category"><Select key={kind} name="categoryId" required><SelectTrigger id="rule-category"><SelectValue placeholder="Choose a category" /></SelectTrigger><SelectContent>

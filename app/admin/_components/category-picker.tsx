@@ -52,7 +52,7 @@ export function CategoryPicker({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="subtle" size="xs" touch disabled={pending} aria-label={`Category for ${description}: ${current.name}. Change`} className="justify-between sm:w-32">
+        <Button variant="subtle" size="xs" touch disabled={pending} aria-label={`Category for ${description}: ${current.name}. Change`} className="justify-between sm:w-40">
           <span className="hidden truncate sm:inline">{current.name}</span>
           {pending ? <Spinner /> : <ChevronDown />}
         </Button>

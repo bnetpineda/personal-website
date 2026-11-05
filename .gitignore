@@ -45,3 +45,4 @@ next-env.d.ts
 *.md
 !DESIGN.md
 !docs/account-connections.md
+!scripts/admin-usability-cold-test.md

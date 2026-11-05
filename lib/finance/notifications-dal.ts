@@ -14,7 +14,7 @@ export async function getNotifications() {
   const e = importedEntries;
   const [connections, budgets, bills, dismissed, aiBacklog, months] = await Promise.all([
     db.select({
-      provider: accountConnections.provider, enabled: accountConnections.enabled, lastSyncedAt: accountConnections.lastSyncedAt,
+      provider: accountConnections.provider, enabled: accountConnections.enabled, lastSyncedAt: accountConnections.lastSyncedAt, lastAttemptAt: accountConnections.lastAttemptAt,
       error: accountConnections.error, credentialsExpireOn: accountConnections.credentialsExpireOn,
       historySyncedAt: accountConnections.historySyncedAt, historyError: accountConnections.historyError,
       asOf: sql<string | null>`${accountConnections.snapshot}->>'asOf'`,

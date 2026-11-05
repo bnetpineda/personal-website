@@ -24,13 +24,12 @@ describe("dashboard UI accessibility contracts", () => {
     expect(html).toContain("Import statements");
   });
 
-  test("touch targets are opt-in and the styling prop never leaks onto the DOM", () => {
-    const touch = renderToStaticMarkup(<Button size="xs" touch>Category</Button>);
-    const normal = renderToStaticMarkup(<Button size="xs">Category</Button>);
-    expect(touch).toContain("pointer-coarse:min-h-11");
-    expect(touch).toContain("pointer-coarse:min-w-11");
-    expect(touch).not.toContain("touch=");
-    expect(normal).not.toContain("pointer-coarse:min-h-11");
+  test("every button is a comfortable touch target by default, and the styling prop never leaks onto the DOM", () => {
+    const html = renderToStaticMarkup(<Button size="xs">Category</Button>);
+    expect(html).toContain("pointer-coarse:min-h-11");
+    expect(html).toContain("pointer-coarse:min-w-11");
+    expect(html).not.toContain("touch=");
+    expect(renderToStaticMarkup(<Button size="xs" touch={false}>Category</Button>)).not.toContain("pointer-coarse:min-h-11");
   });
 
   test("money still participates in the shared privacy mode", () => {

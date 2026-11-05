@@ -2,12 +2,15 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import type { AddEntryData } from "../_components/add-entry";
 import { requireAdmin } from "@/lib/auth/session";
+import { getAccounts, getCategories, getEntrySuggestions, getLastEntryDefaults } from "@/lib/dal";
 import { getDb } from "@/lib/db";
 import { pgCode } from "@/lib/db/errors";
 import { cashFlows, categories, liabilities, recurringCashFlows } from "@/lib/db/schema";
 import { fxToPhp, round2 } from "@/lib/finance/calc";
-import { addDays } from "@/lib/finance/dates";
+import type { CashFlowKind } from "@/lib/finance/constants";
+import { addDays, todayManila } from "@/lib/finance/dates";
 import { nextOccurrence, scheduleOf } from "@/lib/finance/recurrence";
 import {
   cashFlowSchema,
@@ -19,6 +22,27 @@ import {
   type RestoreCashFlowInput,
 } from "@/lib/finance/schemas";
 import { ensureFx } from "@/lib/finance/service";
+
+/** What the Add sheet needs, fetched when it opens so other pages don't pay for it on every load. */
+export async function getAddEntryData(): Promise<AddEntryData> {
+  await requireAdmin();
+  const [categories, accounts, suggestions, lastExpense, lastIncome] = await Promise.all([
+    getCategories(),
+    getAccounts(),
+    getEntrySuggestions(),
+    getLastEntryDefaults("expense"),
+    getLastEntryDefaults("income"),
+  ]);
+  const today = todayManila();
+  const defaults = (last: typeof lastExpense) => ({ occurredOn: today, categoryId: last?.categoryId, account: last?.account, currency: last?.currency });
+  const form = (kind: CashFlowKind) => categories.filter((c) => c.kind === kind).map(({ id, name, color, archived }) => ({ id, name, color, archived }));
+  return {
+    categories: { expense: form("expense"), income: form("income") },
+    accounts,
+    suggestions,
+    defaults: { expense: defaults(lastExpense), income: defaults(lastIncome) },
+  };
+}
 
 export async function saveCashFlow(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireAdmin();

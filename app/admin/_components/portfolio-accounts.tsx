@@ -21,7 +21,8 @@ export interface PortfolioAccount {
   color: string;
   /** "Synced 3 h ago", "Close of Tue, Sep 30", "Sync paused"… */
   status: string;
-  attention: boolean;
+  /** The account's state when it needs a look ("Sync failed"…), or null when all is well. */
+  attention: string | null;
   inNetWorth: boolean;
   value: number;
   valueUsd: number;
@@ -97,7 +98,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
           </div>
           {a.attention && (
             <Link href="/admin/connections">
-              <Badge variant="warning">Check sync</Badge>
+              <Badge variant="warning">{a.attention}</Badge>
             </Link>
           )}
         </div>
@@ -135,14 +136,15 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
             </dd>
           </div>
           <div className="flex flex-col gap-1">
-            <dt className={label}>{view === "pnl" ? "P/L change" : "Value change"}</dt>
+            <dt className={label}>{view === "pnl" ? "P/L change" : "Balance change"}</dt>
             <dd className="flex flex-wrap items-baseline gap-x-2 font-mono">
               {change ? (
                 <>
-                  <Money value={change.change} currency={currency} signed tone />
+                  {/* A balance moves with deposits too, so only P/L earns gain/loss colors. */}
+                  <Money value={change.change} currency={currency} signed tone={view === "pnl"} />
                   {view === "value" && (
                     <span className="text-xs">
-                      <Pct value={change.pct} tone />
+                      <Pct value={change.pct} />
                     </span>
                   )}
                 </>
@@ -150,7 +152,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
                 <span className="text-muted-foreground">—</span>
               )}
             </dd>
-            {change && <dd className="text-xs text-muted-foreground">{dayRangeLabel(change.from, series.at(-1)!.date)}</dd>}
+            {change && <dd className="text-xs text-muted-foreground">{dayRangeLabel(change.from, series.at(-1)!.date)}{view === "value" && " · includes deposits"}</dd>}
           </div>
         </dl>
 
@@ -190,13 +192,16 @@ function EmptyChart({ account: a, view }: { account: PortfolioAccount; view: Vie
       </EmptyState>
     );
   }
+  if (a.attention) {
+    return <EmptyState title="Waiting on this account">This chart starts once it syncs again: {a.attention.toLowerCase()} for now. Fix it in Accounts.</EmptyState>;
+  }
   return (
     <EmptyState title="Building history">
       {view === "pnl"
-        ? "P/L is saved every day; the chart starts with the next one."
+        ? "P/L is saved with each sync; the chart starts with the next one."
         : a.provider === "ibkr"
           ? "A point is saved after every statement. To load earlier days now, add Net Asset Value (NAV) in Base to your IBKR Flex Query."
-          : "A point is saved every day; the chart starts with the next one."}
+          : "A point is saved with each sync; the chart starts with the next one."}
     </EmptyState>
   );
 }

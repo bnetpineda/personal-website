@@ -49,8 +49,8 @@ export interface ActivityCategory {
 
 const KINDS = [
   { value: "all", label: "All" },
-  { value: "expense", label: "Spent" },
-  { value: "income", label: "Earned" },
+  { value: "expense", label: "Spending" },
+  { value: "income", label: "Income" },
 ] as const;
 
 /**
@@ -105,8 +105,7 @@ export function ActivityFeed({
   const category = categories.find((c) => c.id === filters.category) ?? null;
   const kind = category?.kind ?? filters.kind;
   const visible = entries.filter((e) => (!kind || e.kind === kind) && (!category || e.categoryId === category.id));
-  // Signed amounts when both kinds are listed, so a day's total reads as net cash flow.
-  const signed = kind == null;
+  // Always signed, so a filter doesn't change how the same entry reads; a day's total is its net cash flow.
   const signedAmount = (e: ActivityEntry) => (e.kind === "expense" ? -e.amountPhp : e.amountPhp);
   const sum = (k: CashFlowKind) => visible.filter((e) => e.kind === k).reduce((a, e) => a + e.amountPhp, 0);
 
@@ -179,7 +178,7 @@ export function ActivityFeed({
       className={className}
       title={
         <>
-          {search ? "Search · all months" : coverageNote ? "Recorded activity" : "Activity"} <span className="font-mono text-xs text-muted-foreground">· {visible.length}</span>
+          {search ? "Search · all months" : "Activity"} <span className="font-mono text-xs text-muted-foreground">· {visible.length}</span>
         </>
       }
       action={
@@ -211,7 +210,7 @@ export function ActivityFeed({
               ) : (
                 <>
                   {coverageNote && month <= current && <Button asChild size="sm" touch><Link href="/admin/connections">Import statements <ArrowRight /></Link></Button>}
-                  {lastRecordedMonth && <Button asChild variant="outline" size="sm" touch><Link href={filters.monthHref(lastRecordedMonth, current)}>View {monthLabel(lastRecordedMonth, "short")}</Link></Button>}
+                  {lastRecordedMonth && <Button asChild variant="outline" size="sm" touch><Link href={filters.monthHref(lastRecordedMonth)}>View {monthLabel(lastRecordedMonth, "short")}</Link></Button>}
                 </>
               )}
             </div>
@@ -231,7 +230,7 @@ export function ActivityFeed({
               <h3 className="z-20 -mx-4 bg-card px-4 pt-1 font-mono text-xs font-bold tracking-wider text-muted-foreground uppercase xl:sticky xl:top-0">
                 <span className="flex justify-between border-b-2 border-border pb-1.5">
                   <span>{day === today ? "Today" : dayLabel(day)}</span>
-                  <Money value={list.reduce((a, e) => a + (signed ? signedAmount(e) : e.amountPhp), 0)} signed={signed} />
+                  <Money value={list.reduce((a, e) => a + signedAmount(e), 0)} signed />
                 </span>
               </h3>
               <ItemGroup>
@@ -277,14 +276,14 @@ export function ActivityFeed({
                     aside={
                       <span className="flex flex-col items-end font-mono text-sm">
                         <Money
-                          value={signed && e.kind === "expense" ? -e.amount : e.amount}
+                          value={e.kind === "expense" ? -e.amount : e.amount}
                           currency={e.currency}
-                          signed={signed}
-                          tone={signed && e.kind === "income"}
+                          signed
+                          tone={e.kind === "income"}
                         />
                         {e.currency !== "PHP" && (
                           <span className="text-xs text-muted-foreground">
-                            <Money value={e.amountPhp} />
+                            <Money value={signedAmount(e)} signed />
                           </span>
                         )}
                       </span>

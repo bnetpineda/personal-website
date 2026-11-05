@@ -16,7 +16,7 @@ import type { TeachGroup } from "@/lib/finance/imports/teach";
 import type { AlertGroup } from "@/lib/finance/notifications";
 import type { Occurrence } from "@/lib/finance/recurrence";
 import type { FormCategory } from "./cash-flow-form";
-import { SyncNowButton } from "./connection-controls";
+import { ConnectAccountButton, SyncConnectionsButton, SyncNowButton } from "./connection-controls";
 import { FormSheet } from "./form";
 import { ImportMariBankButton, ImportWiseButton } from "./import-controls";
 import { DismissNotificationButton } from "./notification-controls";
@@ -33,6 +33,8 @@ export interface Kpi {
   hint?: ReactNode;
   compactHint?: ReactNode;
   unknown?: boolean;
+  /** Built from incomplete records: a figure, but quieter than one you can rely on. */
+  provisional?: boolean;
   /** A mini chart under the numbers (MiniBars). */
   chart?: ReactNode;
   historyLabel?: string;
@@ -51,7 +53,7 @@ export function KpiStrip({ netWorth, trend, estimate, period, coverage, items }:
         <Card size="sm" variant="primary" className="h-full">
           <CardContent className="flex h-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <KpiText kpi={netWorth} lead />
-            {trend && <div className="hidden min-w-0 sm:block sm:w-2/5 sm:shrink-0">{trend}</div>}
+            {trend && <div className="hidden min-w-0 sm:block sm:w-1/3 sm:shrink-0">{trend}</div>}
           </CardContent>
         </Card>
       </div>
@@ -65,7 +67,7 @@ export function KpiStrip({ netWorth, trend, estimate, period, coverage, items }:
                   <div className="min-w-0">
                     <dt className="text-sm font-medium">{kpi.shortLabel ?? kpi.label}</dt>
                   </div>
-                  <dd className="shrink-0 font-display text-lg tabular-nums">{kpi.value}</dd>
+                  <dd className={cn("shrink-0 font-display text-lg tabular-nums", kpi.provisional && "text-muted-foreground")}>{kpi.value}</dd>
                 </div>
               ))}
             </dl>
@@ -75,13 +77,15 @@ export function KpiStrip({ netWorth, trend, estimate, period, coverage, items }:
       </div>
       <div className="col-span-2 sm:hidden">
         <Card size="sm">
-          <CardContent className="relative pr-16">
+          <CardContent>
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-xs tracking-wider text-muted-foreground uppercase">Income estimate</p>
               <p className="shrink-0 font-display text-base tabular-nums">{estimate.value}</p>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">{estimate.compactHint ?? estimate.hint}</div>
-            <div className="absolute top-3 right-3"><KpiInfo kpi={estimate} /></div>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <div className="text-xs text-muted-foreground">{estimate.compactHint ?? estimate.hint}</div>
+              <KpiInfo kpi={estimate} />
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -89,7 +93,7 @@ export function KpiStrip({ netWorth, trend, estimate, period, coverage, items }:
         <Card size="sm" className="h-full">
           <CardContent className="flex h-full flex-col justify-between gap-2">
             <KpiText kpi={estimate} />
-            {estimate.chart && <div className="hidden sm:block">{estimate.chart}<p className="mt-1 font-mono text-xs text-muted-foreground">{estimate.historyLabel}</p></div>}
+            {estimate.chart && <div className="hidden sm:block" title={estimate.historyLabel}>{estimate.chart}</div>}
           </CardContent>
         </Card>
       </div>
@@ -98,7 +102,7 @@ export function KpiStrip({ netWorth, trend, estimate, period, coverage, items }:
           <Card size="sm" className="h-full">
             <CardContent className="flex h-full flex-col justify-between gap-2">
               <KpiText kpi={kpi} />
-              {kpi.chart && <div>{kpi.chart}<p className="mt-1 font-mono text-xs text-muted-foreground">{kpi.historyLabel}</p></div>}
+              {kpi.chart && <div title={kpi.historyLabel}>{kpi.chart}</div>}
             </CardContent>
           </Card>
         </div>
@@ -116,7 +120,7 @@ function KpiText({ kpi, lead = false }: { kpi: Kpi; lead?: boolean }) {
         {!lead && <KpiInfo kpi={kpi} />}
       </div>
       {lead && <div className="absolute top-0 right-0"><KpiInfo kpi={kpi} /></div>}
-      <p className={cn("font-display whitespace-nowrap tabular-nums", lead ? "text-2xl 2xl:text-3xl" : "text-base sm:text-xl 2xl:text-2xl")}>{kpi.value}</p>
+      <p className={cn("font-display whitespace-nowrap tabular-nums", lead ? "text-2xl 2xl:text-3xl" : "text-base sm:text-xl 2xl:text-2xl", kpi.provisional && "text-muted-foreground")}>{kpi.value}</p>
       {kpi.hint != null && <div className="flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground group-data-[variant=primary]/card:text-primary-foreground/80">{kpi.hint}</div>}
     </div>
   );
@@ -159,7 +163,7 @@ export function CoverageBadge({ missing, month, current }: { missing: StatementP
   const names = missing.map((p) => PROVIDER_META[p].name).join(" and ");
   return (
     <Popover>
-      <Badge asChild variant={month > current ? "outline" : "warning"}>
+      <Badge asChild variant={month > current ? "outline" : "warning"} className="pointer-coarse:min-h-11">
         <PopoverTrigger>Statements missing</PopoverTrigger>
       </Badge>
       <PopoverContent aria-label={`Statement coverage for ${monthLabel(month)}`} align="start" className="w-80">
@@ -177,7 +181,15 @@ export function CoverageBadge({ missing, month, current }: { missing: StatementP
 
 /** A group's fix, in place: sync a synced account, upload a bank's statements. Otherwise the row opens its page. */
 function AlertFix({ group }: { group: AlertGroup }) {
-  if (group.provider === "binance" || group.provider === "ibkr" || group.provider === "hyperliquid") return group.types.includes("sync") ? <SyncNowButton provider={group.provider} label /> : null;
+  if (group.key.startsWith("daily-sync:")) return <SyncConnectionsButton />;
+  if (group.provider === "binance" || group.provider === "ibkr" || group.provider === "hyperliquid") {
+    return (
+      <>
+        {group.reconnect && <ConnectAccountButton provider={group.provider} connected primary />}
+        {!group.reconnect && group.types.includes("sync") && <SyncNowButton provider={group.provider} label />}
+      </>
+    );
+  }
   if (!group.types.includes("statement")) return null;
   if (group.provider === "wise") return <ImportWiseButton size="xs" />;
   if (group.provider === "maribank") return <ImportMariBankButton size="xs" />;
@@ -200,13 +212,14 @@ function AlertRow({ group: g }: { group: AlertGroup }) {
           {urgent && <Badge variant="destructive">Urgent</Badge>}
         </ItemTitle>
         {g.lines.map((line) => (
-          <ItemDescription key={line.key} title={line.detail}>
+          <ItemDescription key={line.key} clamp="none">
             {line.label && <span className="text-foreground">{line.label} · </span>}
             {line.detail}
           </ItemDescription>
         ))}
       </ItemContent>
-      <ItemActions>
+      {/* On its own line, so the explanation keeps the row's full width and is never cut off. */}
+      <ItemActions className="basis-full flex-wrap justify-end">
         <AlertFix group={g} />
         <DismissNotificationButton keys={g.keys} title={g.title} />
       </ItemActions>
@@ -243,21 +256,24 @@ export function inboxCount({ groups, missingFx, due, teach }: Pick<InboxProps, "
 
 /**
  * "Needs you" on demand: a bell in the header with the count, opening a sheet with each account's
- * alerts (and its fix: Sync now, Import), recurring items to confirm and payees to teach Jev.
+ * alerts (and its fix: Reconnect, Sync now, Import), recurring items to confirm and payees to sort.
  */
-export function NeedsYou(props: InboxProps) {
+export function NeedsYou({ defaultOpen, onClosed, ...props }: InboxProps & { defaultOpen?: boolean; onClosed?: () => void }) {
   const { groups, missingFx, due, teach, today, categories, accounts } = props;
   const count = inboxCount(props);
   const urgent = groups.some((g) => g.severity === "destructive");
   const notices = groups.length + (missingFx.length ? 1 : 0);
   return (
     <FormSheet
+      defaultOpen={defaultOpen}
+      onClosed={onClosed}
       title={count ? `Needs you · ${count}` : "Needs you"}
-      description={count ? "Alerts with their fixes, recurring items to confirm and payees to teach Jev." : "Nothing needs you right now."}
+      description={count ? "What needs doing, with the fix right here." : "Nothing needs you right now."}
       trigger={
-        <Button variant={count ? (urgent ? "destructive" : "outline") : "ghost"} size="sm" touch className="relative" aria-label={count ? `Needs you: ${count}` : "Needs you: all caught up"}>
+        <Button variant={count ? (urgent ? "destructive" : "outline") : "ghost"} size="sm" className="relative" aria-label={count ? `Needs you: ${count}` : "Needs you: all caught up"}>
           <Bell />
-          {count > 0 && <><Badge variant={urgent ? "destructive" : "default"} className="absolute -top-1 -right-1 sm:hidden">{count}</Badge><span className="hidden sm:inline">{count}</span></>}
+          <span className="hidden sm:inline">Needs you</span>
+          {count > 0 && <Badge variant={urgent ? "destructive" : "default"} className="absolute -top-1 -right-1 sm:static">{count}</Badge>}
         </Button>
       }
     >
@@ -293,9 +309,9 @@ export function NeedsYou(props: InboxProps) {
             </InboxSection>
           )}
           {teach.length > 0 && (
-            <InboxSection title={`Teach Jev · ${teach.length} ${teach.length === 1 ? "payee" : "payees"}`}>
+            <InboxSection title={`Sort these · ${teach.length} ${teach.length === 1 ? "payee" : "payees"}`}>
               <p className="text-sm text-muted-foreground">
-                Jev wasn&apos;t sure about these, so they sit in Other. Pick a category once: past payments move and future ones follow.
+                AI wasn&apos;t sure about these, so they sit in Other. Pick a category once: past payments move and future ones follow.
               </p>
               <TeachList groups={teach} categories={categories} />
             </InboxSection>
@@ -314,7 +330,8 @@ export interface AccountRow {
   description: string;
   /** Inclusion is shown separately from sync status, so it cannot be hidden by truncation. */
   inNetWorth: boolean;
-  stale?: boolean;
+  /** Failing, out of date or an old statement: the row carries a marker. */
+  attention?: boolean;
   /** PHP; null when it isn't known yet. */
   value: number | null;
   /** Investment accounts: profit/loss on known cost. */
@@ -329,12 +346,12 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
     <Panel
       fill
       className={className}
-      title="Accounts"
+      title={<>Accounts {rows.length > 0 && <span className="font-mono text-xs text-muted-foreground">· {rows.length}</span>}</>}
       action={
         rows.length > 0 ? (
           <Button asChild variant="ghost" size="sm">
-            <Link href="/admin/holdings">
-              Portfolio <ArrowRight />
+            <Link href="/admin/connections">
+              All <ArrowRight />
             </Link>
           </Button>
         ) : (
@@ -353,15 +370,16 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
       ) : (
         <ItemGroup>
           {rows.map((row) => (
-            <Item key={row.key} size="xs" variant="interactive" className="flex-nowrap">
+            <Item key={row.key} size="2xs" variant="interactive" className="flex-nowrap">
               <ItemContent className="min-w-0">
                 <ItemTitle>
                   <Link href={row.href} className="outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring">
                     {row.name}
                   </Link>
-                  {row.stale && <TriangleAlert aria-label="Stale balance" className="size-3 text-warning" />}
+                  {row.attention && <TriangleAlert aria-label="Needs attention" className="size-3 text-warning" />}
+                  {!row.inNetWorth && <span className="font-normal text-muted-foreground text-xs" title="Not counted in net worth">Excluded</span>}
                 </ItemTitle>
-                <ItemDescription clamp={2} title={row.description}>
+                <ItemDescription clamp={1} title={row.description}>
                   {row.description}
                 </ItemDescription>
               </ItemContent>
@@ -369,7 +387,6 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
                 {/* Clicks on the amount fall through to the row's link. */}
                 <span className="pointer-events-none flex flex-col items-end font-mono text-sm">
                   {row.value == null ? <span className="text-muted-foreground">Unknown</span> : <Money value={row.value} />}
-                  {!row.inNetWorth && <span className="text-xs text-muted-foreground" title="Excluded from tracked net worth">Excluded</span>}
                   {row.pnlPct != null && (
                     <span className="text-xs">
                       <Pct value={row.pnlPct} tone /> P/L

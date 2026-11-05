@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/chart";
 import { Swatch } from "@/components/ui/swatch";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { dayLabel } from "@/lib/finance/dates";
+import { dayLabel, shortDayLabel } from "@/lib/finance/dates";
 import { formatMoney } from "@/lib/finance/format";
 import { EmptyState } from "./ui";
 
@@ -48,7 +48,7 @@ export function PortfolioChart({ points, label, color, currency }: { points: { d
       <ChartContainer config={config} className="aspect-auto h-48 w-full">
         <AreaChart aria-label={`${label} history`} data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
-          <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} tickFormatter={(d: string) => d.slice(5)} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} tickFormatter={shortDayLabel} />
           <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(v: number) => formatMoney(v, currency, { compact: true })} domain={["auto", "auto"]} />
           <ChartTooltip
             content={
@@ -163,10 +163,13 @@ export function AllocationChart({ slices }: { slices: { assetClass: AssetClass; 
  */
 export function Sparkline({ points, label }: { points: { date: string; value: number }[]; label: string }) {
   const config = { value: { label, color: "currentColor" } } satisfies ChartConfig;
+  // Spaced by date, not by point, so a gap in the history reads as a gap in time.
+  const data = points.map((p) => ({ ...p, time: Date.parse(p.date) }));
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={config} className="aspect-auto h-10 w-full">
-        <AreaChart aria-label={`${label} history`} data={points} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+        <AreaChart aria-label={`${label} history`} data={data} margin={{ top: 4, right: 4, left: 2, bottom: 4 }}>
+          <XAxis hide dataKey="time" type="number" scale="time" domain={["dataMin", "dataMax"]} />
           <YAxis hide domain={["dataMin", "dataMax"]} />
           <ChartTooltip
             cursor={false}
@@ -177,7 +180,17 @@ export function Sparkline({ points, label }: { points: { date: string; value: nu
               />
             }
           />
-          <Area dataKey="value" type="monotone" fill="var(--color-value)" fillOpacity={0.15} stroke="var(--color-value)" strokeWidth={2} isAnimationActive={false} />
+          <Area
+            dataKey="value"
+            type="linear"
+            fill="var(--color-value)"
+            fillOpacity={0.15}
+            stroke="var(--color-value)"
+            strokeWidth={2}
+            isAnimationActive={false}
+            // A jump today sits in the line's last pixel, so mark where it ends: that's the headline figure.
+            dot={({ index, cx, cy }) => (index === points.length - 1 ? <circle key="end" cx={cx} cy={cy} r={3} fill="currentColor" /> : <g key={index} />)}
+          />
         </AreaChart>
       </ChartContainer>
     </div>

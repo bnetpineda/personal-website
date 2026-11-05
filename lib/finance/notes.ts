@@ -14,6 +14,8 @@ export interface FilingNote {
 
 const AI = "Categorized by AI: ";
 const TAUGHT = "Taught once: ";
+/** SQL LIKE patterns for the notes the importer writes, so manual entries can be told from filed ones. */
+export const IMPORTER_NOTE_PATTERNS = [`${AI}%`, `${TAUGHT}%`, "Imported transaction; PHP conversion uses %", "Automatically imported; PHP conversion uses %"];
 const IMPORTED = /^(Imported transaction|Automatically imported); PHP conversion uses /;
 
 /** How an entry got its category, when the note is one the app wrote; null for the person's own note (or none). */

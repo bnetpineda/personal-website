@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ChevronRight, Download, Link2, Plus, Repeat, SlidersHorizontal, Wallet } from "lucide-react";
+import { Download, Plus, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { getCategories, getCategoryTotals, getCategoryUsage, getConnections, getRecurring } from "@/lib/dal";
+import { getCategories, getCategoryTotals, getCategoryUsage } from "@/lib/dal";
 import { PROVIDER_META } from "@/lib/finance/connections/types";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { currentMonth } from "@/lib/finance/dates";
@@ -24,38 +23,12 @@ export const metadata: Metadata = {
 
 export default async function SettingsPage() {
   const month = currentMonth();
-  const [categories, usage, spent, rules, connections, recurring] = await Promise.all([
+  const [categories, usage, spent, rules] = await Promise.all([
     getCategories(),
     getCategoryUsage(),
     getCategoryTotals("expense", month),
     getCategoryRules(),
-    getConnections(),
-    getRecurring(),
   ]);
-  const activeRecurring = recurring.filter((r) => !r.paused && r.nextOn != null).length;
-
-  const sections = [
-    {
-      href: "/admin/connections",
-      icon: <Link2 />,
-      title: "Connected accounts",
-      description: connections.length
-        ? `${connections.map((c) => PROVIDER_META[c.provider].name).join(", ")} · sync daily, import Wise CSVs`
-        : "Connect Binance, IBKR or Hyperliquid to track balances automatically, and import Wise CSVs",
-    },
-    {
-      href: "/admin/recurring",
-      icon: <Repeat />,
-      title: "Recurring",
-      description: activeRecurring ? `${activeRecurring} active · salary, rent and bills log themselves` : "Salary, rent and bills that log themselves",
-    },
-    {
-      href: "/admin/holdings",
-      icon: <Wallet />,
-      title: "Portfolio",
-      description: "How Binance, IBKR and Hyperliquid are doing: value, P/L, best and worst holdings, earnings and history",
-    },
-  ];
 
   const categoryList = (kind: CashFlowKind) => (
     <ItemGroup>
@@ -113,32 +86,11 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Setup" title="Settings" back={{ href: "/admin", label: "Overview" }} />
-
-      <div className="mb-6">
-        <Panel title="Automation">
-          <ItemGroup>
-            {sections.map((section) => (
-              <Item key={section.href} size="sm" asChild>
-                <Link href={section.href}>
-                  <ItemMedia variant="icon">{section.icon}</ItemMedia>
-                  <ItemContent>
-                    <ItemTitle>{section.title}</ItemTitle>
-                    <ItemDescription>{section.description}</ItemDescription>
-                  </ItemContent>
-                  <ItemActions>
-                    <ChevronRight />
-                  </ItemActions>
-                </Link>
-              </Item>
-            ))}
-          </ItemGroup>
-        </Panel>
-      </div>
+      <PageHeader title="Settings" />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel
-          title="Expense categories & budgets"
+          title="Spending categories"
           action={
             <div className="flex items-center gap-2">
               <FormSheet
@@ -171,7 +123,7 @@ export default async function SettingsPage() {
       <div className="mt-6">
         <Panel title="Category rules" action={<AddRuleButton categories={categories} />}>
           <p className="mb-4 text-sm text-muted-foreground">
-            Imports and syncs run your rules first, then AI files everything else. Use a rule only when you want a merchant pinned to one category.
+            AI files imported entries. Add a rule only to pin a merchant to one category.
           </p>
           {!rules.length ? (
             <p className="text-sm text-muted-foreground">No rules. AI categorizes all imported activity.</p>
@@ -182,7 +134,7 @@ export default async function SettingsPage() {
                   <ItemContent>
                     <ItemTitle>“{r.contains}” → {categories.find((c) => c.id === r.categoryId)?.name ?? "Unavailable category"}</ItemTitle>
                     <ItemDescription>
-                      {r.provider ? PROVIDER_META[r.provider].name : "Any provider"} · {r.kind} · {r.autoPost ? "Posts automatically" : "Left to AI"} · {r.enabled ? "Active" : "Paused"}
+                      {r.provider ? PROVIDER_META[r.provider].name : "Any account"} · {r.kind} · {r.autoPost ? "Posts automatically" : "Left to AI"} · {r.enabled ? "Active" : "Paused"}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -198,10 +150,7 @@ export default async function SettingsPage() {
       <div className="mt-6">
         <Panel title="Backup">
           <div className="flex flex-col items-start gap-4">
-            <p className="text-sm text-muted-foreground">
-              Download everything as JSON. Neon&apos;s free plan only keeps a few hours of restore history, so grab a copy now
-              and then.
-            </p>
+            <p className="text-sm text-muted-foreground">Download everything as a JSON file. Grab a copy now and then.</p>
             <Button asChild variant="outline">
               <a href="/admin/export" download>
                 <Download /> Export JSON

@@ -1,6 +1,6 @@
 import type { ConnectionView, Provider } from "./connections/types";
-import { isConnectionStale, PROVIDER_META } from "./connections/types";
-import { addMonths, daysBetween, monthLabel, todayManila } from "./dates";
+import { isConnectionStale, needsNewCredentials, plainSyncError, PROVIDER_META, untriedAccounts } from "./connections/types";
+import { addMonths, daysBetween, monthLabel, timeAgo, todayManila } from "./dates";
 import type { StatementCoverage } from "./imports/coverage";
 
 export type NotificationType = "sync" | "history" | "expiry" | "budget" | "bill" | "statement" | "ai";
@@ -16,10 +16,12 @@ export interface FinanceNotification {
   provider?: Provider;
   /** The title without the account's name, for a line inside that account's group. */
   label: string;
+  /** Syncing again won't fix this: the account needs new credentials. */
+  reconnect?: boolean;
 }
 
 export function buildNotifications(input: {
-  connections: { provider: ConnectionView["provider"]; enabled: boolean; error: string | null; lastSyncedAt: Date | null; historyError: string | null; historySyncedAt: Date | null; credentialsExpireOn: string | null; snapshot: { asOf: string } | null }[];
+  connections: { provider: ConnectionView["provider"]; enabled: boolean; error: string | null; lastSyncedAt: Date | null; lastAttemptAt?: Date | null; historyError: string | null; historySyncedAt: Date | null; credentialsExpireOn: string | null; snapshot: { asOf: string } | null }[];
   budgets: { id: number; name: string; budget: number; spent: number }[];
   bills: { id: string; description: string; nextOn: string | null }[];
   /** Imported entries still uncategorized after a day, while AI is configured. Background runs fail quietly. */
@@ -29,17 +31,25 @@ export function buildNotifications(input: {
 }, now = new Date()): FinanceNotification[] {
   const today = todayManila(now), month = today.slice(0, 7);
   const alerts: FinanceNotification[] = [];
+  const untried = untriedAccounts(input.connections.map((c) => ({ ...c, lastAttemptAt: c.lastAttemptAt ?? null })), now);
+  if (untried.length) {
+    const title = "Daily sync doesn't seem to be running";
+    alerts.push({ key: `daily-sync:${untried.map((c) => (c.lastAttemptAt ?? c.lastSyncedAt)!.toISOString()).sort().at(-1)}`, type: "sync", title, label: title,
+      detail: `Nothing has tried to update ${untried.map((c) => PROVIDER_META[c.provider].name).join(" or ")} in over 2 days, so these will keep going out of date. Sync by hand for now; the daily job needs checking in Vercel.`,
+      href: "/admin/connections", severity: "warning" });
+  }
   for (const c of input.connections) {
     const name = PROVIDER_META[c.provider].name;
     const episode = c.lastSyncedAt?.toISOString() ?? "never";
     if (c.enabled && (c.error || isConnectionStale(c, now))) alerts.push({ key: `sync:${c.provider}:${episode}`, type: "sync", provider: c.provider,
-      title: `${name} sync needs attention`, label: "Sync needs attention", detail: c.error || "Saved balances are older than the expected sync window.", href: "/admin/connections", severity: "warning" });
+      title: `${name} sync needs attention`, label: c.error ? "Sync failed" : "Out of date", reconnect: Boolean(c.error && needsNewCredentials(c.error)),
+      detail: c.error ? plainSyncError(name, c.error) : `Balances last updated ${c.lastSyncedAt ? timeAgo(c.lastSyncedAt, now) : "never"}. Sync now to refresh them.`, href: "/admin/connections", severity: "warning" });
     if (c.enabled && c.historyError) alerts.push({ key: `history:${c.provider}:${c.historySyncedAt?.toISOString() ?? "never"}`, type: "history", provider: c.provider,
-      title: `${name} history needs attention`, label: "History needs attention", detail: c.historyError, href: "/admin/connections", severity: "warning" });
+      title: `${name} history needs attention`, label: "History failed", detail: c.historyError, href: "/admin/connections", severity: "warning" });
     if (c.credentialsExpireOn && daysBetween(today, c.credentialsExpireOn) <= 7) {
       const expired = c.credentialsExpireOn < today;
       alerts.push({ key: `expiry:${c.provider}:${c.credentialsExpireOn}`, type: "expiry", provider: c.provider,
-        title: `${name} credential ${expired ? "expired" : "expires soon"}`, label: `Credential ${expired ? "expired" : "expires soon"}`,
+        title: `${name} credential ${expired ? "expired" : "expires soon"}`, label: `Credential ${expired ? "expired" : "expires soon"}`, reconnect: true,
         detail: `Your saved expiry date is ${c.credentialsExpireOn}. Update the credential and its reminder after renewal.`, href: "/admin/connections", severity: expired ? "destructive" : "warning" });
     }
   }
@@ -89,6 +99,8 @@ export interface AlertGroup {
   lines: { key: string; label: string | null; detail: string }[];
   /** Notification keys that dismiss together. */
   keys: string[];
+  /** Any of its alerts needs new credentials. */
+  reconnect: boolean;
   href: string;
   types: NotificationType[];
 }
@@ -107,12 +119,13 @@ export function groupAlerts(alerts: FinanceNotification[]): AlertGroup[] {
       grouped.keys.push(a.key);
       if (!grouped.types.includes(a.type)) grouped.types.push(a.type);
       if (a.severity === "destructive") grouped.severity = "destructive";
+      if (a.reconnect) grouped.reconnect = true;
       continue;
     }
     const group: AlertGroup = a.provider
       ? { key: `provider:${a.provider}`, provider: a.provider, title: PROVIDER_META[a.provider].name, severity: a.severity,
-          lines: [{ key: a.key, label: a.label, detail: a.detail }], keys: [a.key], href: `/admin/connections#${a.provider}`, types: [a.type] }
-      : { key: a.key, provider: null, title: a.title, severity: a.severity, lines: [{ key: a.key, label: null, detail: a.detail }], keys: [a.key], href: a.href, types: [a.type] };
+          lines: [{ key: a.key, label: a.label, detail: a.detail }], keys: [a.key], reconnect: Boolean(a.reconnect), href: `/admin/connections#${a.provider}`, types: [a.type] }
+      : { key: a.key, provider: null, title: a.title, severity: a.severity, lines: [{ key: a.key, label: null, detail: a.detail }], keys: [a.key], reconnect: Boolean(a.reconnect), href: a.href, types: [a.type] };
     if (a.provider) byProvider.set(a.provider, group);
     groups.push(group);
   }

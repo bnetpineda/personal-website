@@ -14,7 +14,7 @@ export function CashFlowHistoryDetails({ points, month }: { points: ReturnType<t
   const { privacy } = useAdminUi();
   const amount = (value: number | null) => value == null ? <span className="text-muted-foreground">No data</span> : <Money value={value} />;
   return (
-    <FormSheet title="Monthly recorded totals" description="Amounts are recorded entries, not estimates. Missing data is never treated as zero."
+    <FormSheet wide title="Monthly recorded totals" description="Recorded entries, each converted once at the rate when it was recorded, so these totals don't move. Missing data is never treated as zero."
       trigger={<Button variant="ghost" size="sm" touch aria-label="View monthly cash-flow details">Details</Button>}>
       <div data-private={privacy.hidden} className="group/shell">
         <Card className="gap-0 overflow-hidden py-0">
@@ -24,7 +24,7 @@ export function CashFlowHistoryDetails({ points, month }: { points: ReturnType<t
             <TableBody>
               {[...points].reverse().map((p) => (
                 <TableRow key={p.month} data-state={p.month === month ? "selected" : undefined}>
-                  <TableCell>{monthLabel(p.month, "short")}<span className="block text-xs text-muted-foreground">{p.incomplete ? "Incomplete records" : "Recorded"}</span></TableCell>
+                  <TableCell>{monthLabel(p.month, "short")}{(p.income != null || p.expense != null) && <span className="block text-xs text-muted-foreground">{p.incomplete ? "Incomplete" : "Recorded"}</span>}</TableCell>
                   <TableCell className="font-mono tabular-nums">{amount(p.income)}</TableCell>
                   <TableCell className="font-mono tabular-nums">{amount(p.expense)}</TableCell>
                   <TableCell className="font-mono tabular-nums">{amount(p.net)}</TableCell>

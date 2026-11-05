@@ -27,18 +27,22 @@ function Progress({
   value,
   variant = "default",
   indicatorColor,
+  thin = false,
   ...props
 }: React.ComponentProps<typeof ProgressPrimitive.Root> &
   VariantProps<typeof progressIndicatorVariants> & {
     /** Data-driven fill (e.g. a category color). Overrides the variant color. */
     indicatorColor?: string
+    /** A hairline for dense lists. */
+    thin?: boolean
   }) {
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
       data-variant={variant}
       className={cn(
-        "relative h-3 w-full overflow-hidden rounded-full border-2 border-border bg-background",
+        "relative w-full overflow-hidden rounded-full",
+        thin ? "h-1 bg-muted" : "h-3 border-2 border-border bg-background",
         className
       )}
       value={value}
@@ -46,7 +50,7 @@ function Progress({
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className={progressIndicatorVariants({ variant })}
+        className={cn(progressIndicatorVariants({ variant }), thin && "border-r-0")}
         style={{
           transform: `translateX(-${100 - Math.min(Math.max(value || 0, 0), 100)}%)`,
           ...(indicatorColor ? { backgroundColor: indicatorColor } : {}),

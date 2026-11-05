@@ -36,10 +36,13 @@ export interface AccountTotals {
 export function profitLossCoverage(provider: SyncProvider, positions: readonly ConnectedPosition[], fx: FxTable, costs: readonly HoldingCost[] = []) {
   const investments = (provider === "binance" ? binanceHoldingRows(positions) : positions)
     .filter((p) => p.assetClass !== "cash" && p.marketValue !== 0 && !isSmallHolding(p.marketValue, p.currency, fx));
-  const missing = investments.filter((p) => provider === "binance"
+  const uncosted = investments.filter((p) => provider === "binance"
     ? !costs.some((c) => c.symbol === p.symbol && c.pnlEstimate != null)
-    : knownCost(p) == null).length;
-  return { known: investments.length - missing, missing };
+    : knownCost(p) == null);
+  const missing = uncosted.length;
+  // In PHP, so the footnote can say how much is left out and not just how many.
+  const missingValue = uncosted.reduce((sum, p) => sum + (p.marketValue ?? 0) * (fxToPhp(fx, p.currency) ?? 0), 0);
+  return { known: investments.length - missing, missing, missingValue };
 }
 
 /**

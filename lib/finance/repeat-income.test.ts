@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { importedIncomeSince, monthlyIncome, payerName, repeatIncomeByMonth, repeatPayers, typicalIncome } from "./repeat-income";
+import { importedIncomeSince, payerName, repeatIncomeByMonth, repeatPayers, typicalIncome } from "./repeat-income";
 
 const income = (description: string, occurredOn: string, amount: number, currency = "PHP") =>
   ({ description, occurredOn, amount, currency, categoryName: "Business", categoryColor: "var(--chart-1)" });
@@ -41,10 +41,10 @@ describe("repeat payers", () => {
     expect(payer.monthly).toBe(1200);
   });
 
-  test("monthly income adds schedules to repeat payers", () => {
+  test("estimated income adds active income schedules to repeat payers", () => {
     const payers = repeatPayers([income("Employer", "2026-05-30", 1000), income("Employer", "2026-06-30", 1000)]);
     const schedule = { kind: "income" as const, amount: 500, currency: "PHP", frequency: "monthly" as const, paused: false, nextOn: "2026-07-01" };
-    expect(monthlyIncome({}, [schedule, { ...schedule, paused: true }, { ...schedule, kind: "expense" }], payers).total).toBe(1500);
+    expect(typicalIncome({}, [schedule, { ...schedule, paused: true }, { ...schedule, kind: "expense" }], payers).average).toBe(1500);
     expect(importedIncomeSince("2026-09-27")).toBe("2026-04-01");
   });
 
@@ -74,7 +74,7 @@ describe("typical income for hourly work", () => {
 
   test("adds each payer's average month, with everyone's low and high months as the range", () => {
     const typical = typicalIncome({ USD: 50 }, [], payers);
-    expect(typical).toEqual({ average: 56_000 + 1_900 * 50, low: 54_000 + 1_800 * 50, high: 58_000 + 2_000 * 50, sources: 2, missing: [] });
+    expect(typical).toEqual({ average: 56_000 + 1_900 * 50, low: 54_000 + 1_800 * 50, high: 58_000 + 2_000 * 50, fixed: 0, sources: 2, missing: [] });
   });
 
   test("an active income schedule counts at its fixed monthly amount; missing rates are reported", () => {

@@ -64,7 +64,7 @@ function ConnectionForm({ provider }: { provider: SyncProvider }) {
               maxLength={field.maxLength} required aria-invalid={Boolean(error(field.key))} disabled={pending} />
           </FormField>
         ))}
-        {!wallet && <FormField id={`${provider}-expires`} label="Credentials expire after" description="Choose what you picked when creating them. A reminder appears 7 days before they expire.">
+        {!wallet && <FormField id={`${provider}-expires`} label="Credentials expire after" description="The lifetime you chose when creating them. You'll get a reminder 7 days before they expire.">
           <Select name="credentialsExpireAfter" defaultValue="none" disabled={pending}>
             <SelectTrigger id={`${provider}-expires`}><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -94,11 +94,11 @@ function CredentialExpiryForm({ provider, expiresOn }: { provider: SyncProvider;
   </form>;
 }
 
-export function ConnectAccountButton({ provider, connected = false }: { provider: SyncProvider; connected?: boolean }) {
+export function ConnectAccountButton({ provider, connected = false, primary = false }: { provider: SyncProvider; connected?: boolean; primary?: boolean }) {
   return (
     <FormSheet title={`${connected ? "Reconnect" : "Connect"} ${PROVIDER_META[provider].name}`}
       description={connected ? "Replacing credentials clears the old synced balances until the new connection succeeds." : "A one-time setup for automatic balance updates."}
-      trigger={<Button variant="outline" size="sm"><Link2 />{connected ? "Reconnect" : "Connect"}</Button>}>
+      trigger={<Button variant={primary ? "default" : "outline"} size="sm"><Link2 />{connected ? "Reconnect" : "Connect"}</Button>}>
       <ConnectionForm provider={provider} />
     </FormSheet>
   );

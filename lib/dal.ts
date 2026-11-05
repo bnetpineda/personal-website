@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, isNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import {
@@ -21,6 +21,7 @@ import {
 import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
+import { IMPORTER_NOTE_PATTERNS } from "@/lib/finance/notes";
 import { statementCoverage } from "@/lib/finance/imports/coverage";
 import { teachGroups } from "@/lib/finance/imports/teach";
 import { loadFxTable } from "@/lib/finance/service";
@@ -214,6 +215,13 @@ export async function getMonthlyTotals(endMonth: string, months: number): Promis
   return rows.map((r) => ({ month: r.month, kind: r.kind, total: r.total ?? 0 }));
 }
 
+/** Every month with entries and which kinds it has, newest first: where the Overview opens and what the month picker marks. */
+export async function getRecordedMonths(): Promise<{ month: string; kind: CashFlowKind }[]> {
+  await requireAdmin();
+  const month = sql<string>`to_char(${cashFlows.occurredOn}, 'YYYY-MM')`;
+  return getDb().selectDistinct({ month, kind: cashFlows.kind }).from(cashFlows).orderBy(desc(month));
+}
+
 /** Accounts used before, most recent first — powers the account <datalist>. */
 export async function getAccounts(limit = 25): Promise<string[]> {
   await requireAdmin();
@@ -227,13 +235,13 @@ export async function getAccounts(limit = 25): Promise<string[]> {
   return rows.map((r) => r.account!).filter(Boolean);
 }
 
-/** Category/account/currency of the latest entry, used to prefill the add form. */
+/** Category/account/currency of the latest entry typed by hand, used to prefill the add form: a filed import says nothing about the next cash expense. */
 export async function getLastEntryDefaults(kind: CashFlowKind) {
   await requireAdmin();
   const [row] = await getDb()
     .select({ categoryId: cashFlows.categoryId, account: cashFlows.account, currency: cashFlows.currency })
     .from(cashFlows)
-    .where(eq(cashFlows.kind, kind))
+    .where(and(eq(cashFlows.kind, kind), isNull(cashFlows.recurringId), ...IMPORTER_NOTE_PATTERNS.map((pattern) => sql`coalesce(${cashFlows.notes}, '') not like ${pattern}`)))
     .orderBy(desc(cashFlows.createdAt))
     .limit(1);
   return row ?? null;

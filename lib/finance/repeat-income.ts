@@ -86,15 +86,6 @@ export function importedIncomeSince(today: string): string {
 
 type Schedule = { kind: CashFlowKind; amount: number; currency: string; frequency: RecurrenceFrequency; paused: boolean; nextOn: string | null };
 
-/** Monthly income in PHP: active income schedules plus what repeat payers currently pay. */
-export function monthlyIncome(fx: FxTable, schedules: Schedule[], payers: RepeatPayer[]) {
-  return sumInPhp(fx, [
-    ...schedules.filter((r) => r.kind === "income" && !r.paused && r.nextOn != null)
-      .map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency })),
-    ...payers.map((p) => ({ amount: p.monthly, currency: p.currency })),
-  ]);
-}
-
 /**
  * What a month brings in when pay varies (hourly work), in PHP: each repeat payer's average month plus
  * active income schedules, and the range from everyone's lowest month to everyone's highest. Plan
@@ -105,7 +96,7 @@ export function typicalIncome(fx: FxTable, schedules: Schedule[], payers: Repeat
     .map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency }));
   const sum = (pick: (p: RepeatPayer) => number) => sumInPhp(fx, [...fixed, ...payers.map((p) => ({ amount: pick(p), currency: p.currency }))]);
   const average = sum((p) => p.average);
-  return { average: average.total, low: sum((p) => p.low).total, high: sum((p) => p.high).total, sources: fixed.length + payers.length, missing: average.missing };
+  return { average: average.total, low: sum((p) => p.low).total, high: sum((p) => p.high).total, fixed: sumInPhp(fx, fixed).total, sources: fixed.length + payers.length, missing: average.missing };
 }
 
 /** Each month's pay from repeat payers, in PHP at today's rates: the months the typical figure is drawn from. */

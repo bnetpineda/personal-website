@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, TriangleAlert } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Info, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Popover, PopoverClose, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { addMonths, monthLabel } from "@/lib/finance/dates";
 import { formatMoney, formatPct } from "@/lib/finance/format";
@@ -33,8 +34,8 @@ export function Money({
     <span
       className={cn(
         "tabular-nums transition group-data-[private=true]/shell:blur-sm group-data-[variant=primary]/card:text-primary-foreground",
-        tone && value > 0 && "text-success",
-        tone && value < 0 && "text-destructive"
+        tone && value > 0 && "text-success group-data-[private=true]/shell:text-foreground",
+        tone && value < 0 && "text-destructive group-data-[private=true]/shell:text-foreground"
       )}
     >
       {formatMoney(value, currency, { signed, compact })}
@@ -46,7 +47,7 @@ export function Pct({ value, tone = false, lowerIsBetter = false }: { value: num
   if (value == null) return <span className="text-muted-foreground">—</span>;
   const improvement = lowerIsBetter ? -value : value;
   return (
-    <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm group-data-[variant=primary]/card:text-primary-foreground", tone && improvement > 0 && "text-success", tone && improvement < 0 && "text-destructive")}>
+    <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm group-data-[variant=primary]/card:text-primary-foreground", tone && improvement > 0 && "text-success group-data-[private=true]/shell:text-foreground", tone && improvement < 0 && "text-destructive group-data-[private=true]/shell:text-foreground")}>
       {formatPct(value, { signed: tone })}
     </span>
   );
@@ -73,35 +74,33 @@ export function TokenAmount({ value, currency, signed = false, tone = false }: {
   </span>;
 }
 
-/** `back` links pages that aren't tabs (reached from Home or Settings) to where they came from. */
-export function PageHeader({
-  eyebrow,
-  title,
-  back,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  back?: { href: string; label: string };
-  children?: ReactNode;
-}) {
+export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div className="flex flex-col items-start gap-3">
-        {back && (
-          <Button asChild variant="ghost" size="sm">
-            <Link href={back.href}>
-              <ChevronLeft /> {back.label}
-            </Link>
-          </Button>
-        )}
-        <p className="font-mono text-xs font-bold tracking-widest text-muted-foreground uppercase">{eyebrow}</p>
-        <h1 className="-rotate-1 rounded-lg border-2 border-border bg-primary px-4 py-2 font-display text-3xl text-primary-foreground uppercase shadow-md">
-          {title}
-        </h1>
-      </div>
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <h1 className="-rotate-1 rounded-lg border-2 border-border bg-primary px-4 py-2 font-display text-2xl text-primary-foreground uppercase shadow-md sm:text-3xl">
+        {title}
+      </h1>
       {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
     </div>
+  );
+}
+
+/** The small print behind a page: there when wanted, out of the way when not. */
+export function InfoNote({ label = "How this works", title, children }: { label?: string; title: string; children: ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm">
+          <Info /> {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80">
+        <PopoverHeader>
+          <PopoverTitle>{title}</PopoverTitle>
+        </PopoverHeader>
+        <div className="mt-3 flex flex-col gap-2 text-sm">{children}</div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -114,7 +113,7 @@ export interface Stat {
 
 export function StatCards({ items }: { items: Stat[] }) {
   return (
-    <div className={cn("mb-6 grid grid-cols-2 gap-4", items.length === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+    <div className={cn("mb-6 grid grid-cols-2 gap-4", items.length === 4 ? "lg:grid-cols-4" : items.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3")}>
       {items.map((item) => (
         <Card key={item.label} variant={item.primary ? "primary" : "default"} className="gap-2 py-4">
           <CardHeader className="gap-2 px-4">
@@ -175,8 +174,9 @@ export function Panel({
       </CardHeader>
       <CardContent className={cn(fill && "xl:min-h-0 xl:flex-1")}>
         {fill && scroll ? (
-          // The scroll area spans the card's padding, so the scrollbar sits at the card's edge.
-          <ScrollArea className="-mx-4 h-full">
+          // The scroll area spans the card's padding, so the scrollbar sits at the card's edge; it shows
+          // whenever there's more to see.
+          <ScrollArea type="auto" className="-mx-4 h-full">
             <div className="px-4 py-0.5">{children}</div>
           </ScrollArea>
         ) : (
@@ -207,30 +207,78 @@ export function EmptyState({ title, size, children, action }: { title: string; s
   );
 }
 
-/** Month stepper. `href` builds the link for a month (so other filters are kept). */
-export function MonthPicker({ month, current, href, compact = false }: { month: string; current: string; href: (month: string) => string; compact?: boolean }) {
+const PICKER_YEARS = 3;
+
+/**
+ * Step a month at a time, or open the label to jump straight to one, laid out by year. `href` builds
+ * the link for a month (so other filters are kept); `recorded` marks the months that have data, so
+ * the empty ones can be skipped at a glance.
+ */
+export function MonthPicker({ month, current, href, recorded, compact = false }: { month: string; current: string; href: (month: string) => string; recorded?: string[]; compact?: boolean }) {
+  const thisYear = Number(current.slice(0, 4));
+  const years = Array.from({ length: PICKER_YEARS }, (_, i) => thisYear - i).map((year) => ({
+    year,
+    months: Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`).filter((m) => m <= current),
+  }));
   return (
     <div className="flex items-center gap-2">
-    <ButtonGroup aria-label="Month">
-      <Button asChild variant="outline" size="icon-sm" touch>
-        <Link href={href(addMonths(month, -1))} aria-label="Previous month">
-          <LinkIcon>
-            <ChevronLeft />
-          </LinkIcon>
-        </Link>
-      </Button>
-      <ButtonGroupText size="sm" aria-current="date"><span className="sm:hidden">{monthLabel(month, "short")}</span><span className="hidden sm:inline">{monthLabel(month)}</span></ButtonGroupText>
-      <Button asChild variant="outline" size="icon-sm" touch>
-        <Link href={href(addMonths(month, 1))} aria-label="Next month">
-          <LinkIcon>
-            <ChevronRight />
-          </LinkIcon>
-        </Link>
-      </Button>
-    </ButtonGroup>
+      <ButtonGroup aria-label="Month">
+        <Button asChild variant="outline" size="icon-sm">
+          <Link href={href(addMonths(month, -1))} aria-label="Previous month">
+            <LinkIcon>
+              <ChevronLeft />
+            </LinkIcon>
+          </Link>
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="sm:w-44" aria-label={`Choose month: ${monthLabel(month)}`} aria-current="date">
+              <CalendarDays className="hidden sm:block" />
+              <span className="sm:hidden">{monthLabel(month, "short")}</span>
+              <span className="hidden sm:inline">{monthLabel(month)}</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80">
+            <PopoverHeader>
+              <PopoverTitle>Choose a month</PopoverTitle>
+            </PopoverHeader>
+            <ScrollArea className="mt-3 h-72">
+              <div className="flex flex-col gap-3 p-0.5 pr-3">
+                {years.map(({ year, months }) => (
+                  <section key={year} aria-label={String(year)}>
+                    <h3 className="mb-1 font-mono text-xs font-bold tracking-wider text-muted-foreground">{year}</h3>
+                    <ul className="grid grid-cols-4 gap-1">
+                      {months.map((m) => (
+                        <li key={m}>
+                          <PopoverClose asChild>
+                            <Button asChild size="xs" className="w-full" variant={m === month ? "default" : !recorded || recorded.includes(m) ? "outline" : "ghost"}>
+                              <Link href={href(m)} aria-label={monthLabel(m)} aria-current={m === month ? "date" : undefined}>
+                                {monthLabel(m, "short").split(" ")[0]}
+                              </Link>
+                            </Button>
+                          </PopoverClose>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            </ScrollArea>
+            {recorded && <p className="mt-2 text-xs text-muted-foreground">Outlined months have records.</p>}
+          </PopoverContent>
+        </Popover>
+        <Button asChild variant="outline" size="icon-sm">
+          <Link href={href(addMonths(month, 1))} aria-label="Next month">
+            <LinkIcon>
+              <ChevronRight />
+            </LinkIcon>
+          </Link>
+        </Button>
+      </ButtonGroup>
       {month !== current && (
-        compact ? <Button asChild variant="outline" size="sm" touch className="hidden sm:inline-flex"><Link href={href(current)}>This month</Link></Button>
-          : <Button asChild variant="outline" size="sm" touch><Link href={href(current)}>This month</Link></Button>
+        <Button asChild variant="outline" size="sm" className={compact ? "hidden sm:inline-flex" : undefined}>
+          <Link href={href(current)}>Go to {monthLabel(current, "short")}</Link>
+        </Button>
       )}
     </div>
   );

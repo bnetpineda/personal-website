@@ -45,11 +45,8 @@ export function earningsByCurrency(entries: Pick<ImportedEntry, "provider" | "ki
   let postedCash = 0;
   for (const e of entries) {
     if (e.status === "ignored" || isBank(e.provider)) continue;
-    // Posted cash already lives on Transactions. Counting it here would add it twice.
-    if (e.status === "posted" && POSTED_CASH_KINDS.has(e.kind)) {
-      postedCash += 1;
-      continue;
-    }
+    // Posted cash is on the Overview too; this page is the only place it's added up, so it counts here as well.
+    if (e.status === "posted" && POSTED_CASH_KINDS.has(e.kind)) postedCash += 1;
     const row = rows.get(e.currency) ?? { currency: e.currency, contributions: 0, rewards: 0, dividends: 0, interest: 0, fees: 0, taxes: 0, realized: null };
     if (e.status === "transfer") row.contributions += e.amount;
     if (e.kind === "reward") row.rewards += e.amount;

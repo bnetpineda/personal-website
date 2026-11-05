@@ -67,12 +67,15 @@ describe("accountTotals", () => {
 
 describe("profit/loss coverage", () => {
   test("a zero broker basis is unknown; cash and dust do not make P/L partial", () => {
-    expect(profitLossCoverage("ibkr", [
+    const coverage = profitLossCoverage("ibkr", [
       position({ symbol: "VOO", marketValue: 500, costBasis: 0 }),
       position({ symbol: "KNOWN", marketValue: 100, costBasis: 80 }),
       position({ symbol: "USD", assetClass: "cash", marketValue: 50, costBasis: null }),
       position({ symbol: "DUST", marketValue: 0.5, costBasis: null }),
-    ], fx)).toEqual({ known: 1, missing: 1 });
+    ], fx);
+    expect(coverage).toMatchObject({ known: 1, missing: 1 });
+    // How much is left out, so a footnote can't make a large gap sound small.
+    expect(coverage.missingValue).toBeGreaterThan(0);
   });
 
   test("Binance coverage counts a coin once across Spot and Earn, and requires a usable estimate", () => {
@@ -81,8 +84,8 @@ describe("profit/loss coverage", () => {
       position({ id: "earn:BTC", symbol: "BTC", assetClass: "crypto", costBasis: null }),
       position({ symbol: "ETH", assetClass: "crypto", costBasis: null }),
     ];
-    expect(profitLossCoverage("binance", positions, fx, [coin("BTC", 10), { ...coin("ETH", 0), pnlEstimate: null }])).toEqual({ known: 1, missing: 1 });
-    expect(profitLossCoverage("ibkr", [], fx)).toEqual({ known: 0, missing: 0 });
+    expect(profitLossCoverage("binance", positions, fx, [coin("BTC", 10), { ...coin("ETH", 0), pnlEstimate: null }])).toMatchObject({ known: 1, missing: 1 });
+    expect(profitLossCoverage("ibkr", [], fx)).toEqual({ known: 0, missing: 0, missingValue: 0 });
   });
 });
 

@@ -33,14 +33,16 @@ const buttonVariants = cva(
         "icon-sm": "size-8",
         "icon-lg": "size-10",
       },
-      /** Opt in where dense controls need a comfortable target on touchscreens. */
+      /** Comfortable targets on touchscreens by default, without changing desktop density. */
       touch: {
         true: "pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+        false: "",
       },
     },
     defaultVariants: {
       variant: "default",
       size: "default",
+      touch: true,
     },
   }
 )

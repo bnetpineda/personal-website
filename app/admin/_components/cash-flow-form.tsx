@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -74,7 +75,11 @@ export function CashFlowForm({ kind, categories, accounts, suggestions = [], def
       viewedMonth={viewedMonth}
       onSubmit={onSubmit}
       footer={
-        <FormFooter state={state} pending={pending}>
+        <FormFooter
+          state={state}
+          pending={pending}
+          secondary={!entry && !recurring && <Button type="submit" variant="outline" data-stay disabled={pending}>Add another</Button>}
+        >
           {entry ? "Save" : recurring ? "Post" : kind === "expense" ? "Add expense" : "Add income"}
         </FormFooter>
       }

@@ -9,7 +9,7 @@ import { sumInPhp } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addDays, dayLabel, todayManila } from "@/lib/finance/dates";
 import { describeSchedule, dueOccurrences, monthlyEquivalent, upcomingOccurrences } from "@/lib/finance/recurrence";
-import { importedIncomeSince, monthlyIncome, repeatPayers } from "@/lib/finance/repeat-income";
+import { importedIncomeSince, repeatPayers, typicalIncome } from "@/lib/finance/repeat-income";
 import { deleteRecurring, setRecurringPaused } from "../../_actions/recurring";
 import type { FormCategory } from "../../_components/cash-flow-form";
 import { FormSheet } from "../../_components/form";
@@ -58,7 +58,8 @@ export default async function RecurringPage() {
   const perMonth = (kind: CashFlowKind) =>
     sumInPhp(fx, live.filter((r) => r.kind === kind).map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency })));
   const payers = repeatPayers(received);
-  const income = monthlyIncome(fx, rows, payers);
+  // The same estimate as the Overview, so the two pages never disagree about monthly income.
+  const income = typicalIncome(fx, rows, payers);
   const expenses = perMonth("expense");
   const missingFx = [...new Set([...income.missing, ...expenses.missing])];
 
@@ -70,8 +71,8 @@ export default async function RecurringPage() {
       title={kind === "expense" ? "New recurring expense" : "New recurring income"}
       description={kind === "expense" ? "Rent, bills, subscriptions, loan payments…" : "Salary, allowance, rent you collect…"}
       trigger={
-        <Button variant={kind === "expense" ? "default" : "outline"}>
-          <Plus /> {kind === "expense" ? "Expense" : "Income"}
+        <Button variant="outline">
+          <Plus /> Schedule {kind === "expense" ? "expense" : "income"}
         </Button>
       }
     >
@@ -153,9 +154,10 @@ export default async function RecurringPage() {
             </ItemContent>
             <ItemActions>
               <span className="flex flex-col items-end font-mono text-sm">
-                <Money value={p.monthly} currency={p.currency} />
+                {/* The average is what the estimate adds up. */}
+                <Money value={p.average} currency={p.currency} />
                 <span className="text-xs text-muted-foreground">
-                  /mo · avg <Money value={p.average} currency={p.currency} />
+                  avg / mo · latest <Money value={p.monthly} currency={p.currency} />
                 </span>
               </span>
             </ItemActions>
@@ -167,16 +169,17 @@ export default async function RecurringPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Scheduled" title="Recurring" back={{ href: "/admin", label: "Overview" }}>
+      <PageHeader title="Recurring">
         {addButton("income")}
         {addButton("expense")}
       </PageHeader>
 
       <StatCards
         items={[
-          { label: "Net per month", value: <Money value={income.total - expenses.total} signed />, primary: true },
-          { label: "Income per month", value: <Money value={income.total} />, hint: `${live.filter((r) => r.kind === "income").length} active${payers.length ? ` · ${payers.length} from imports` : ""}` },
-          { label: "Fixed costs per month", value: <Money value={expenses.total} />, hint: `${live.filter((r) => r.kind === "expense").length} active` },
+          // With no fixed costs added, net would just repeat income and read like money left over.
+          ...(live.some((r) => r.kind === "expense") ? [{ label: "Estimated net / mo", value: <Money value={income.average - expenses.total} signed />, primary: true }] : []),
+          { label: "Estimated income / mo", value: <Money value={income.average} />, primary: !live.some((r) => r.kind === "expense"), hint: [live.some((r) => r.kind === "income") && `${live.filter((r) => r.kind === "income").length} scheduled`, payers.length > 0 && `${payers.length} from imports`].filter(Boolean).join(" · ") || "None yet" },
+          { label: "Fixed costs per month", value: live.some((r) => r.kind === "expense") ? <Money value={expenses.total} /> : "—", hint: live.some((r) => r.kind === "expense") ? `${live.filter((r) => r.kind === "expense").length} active` : "None scheduled yet. Imported subscriptions aren't counted here." },
         ]}
       />
 
@@ -195,7 +198,7 @@ export default async function RecurringPage() {
         </div>
         <div className="lg:col-span-2">
           <Panel title="Next 30 days">
-            {upcoming.length === 0 ? <EmptyState title="Nothing scheduled" /> : <OccurrenceList items={upcoming} today={today} />}
+            {upcoming.length === 0 ? <EmptyState title="Nothing scheduled">{payers.length > 0 && "Pay that arrives through imports isn't scheduled; it's counted in the estimate above."}</EmptyState> : <OccurrenceList items={upcoming} today={today} />}
           </Panel>
         </div>
       </div>

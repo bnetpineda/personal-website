@@ -7,7 +7,7 @@ import { Swatch } from "@/components/ui/swatch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { connectedHoldingMetrics, fxToPhp, isSmallHolding, type FxTable } from "@/lib/finance/calc";
 import { ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { isConnectionStale, PROVIDER_META, type ConnectionView } from "@/lib/finance/connections/types";
+import { connectionStatus, PROVIDER_META, type ConnectionView } from "@/lib/finance/connections/types";
 import { formatQty } from "@/lib/finance/format";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { BinanceCostDetails } from "./holding-cost-details";
@@ -62,8 +62,8 @@ function syncedRows(connection: ConnectionView, fx: FxTable, costs: Map<string, 
 /** Only accounts that need attention; healthy ones stay out of the way. */
 export function ConnectionStatus({ connections, now }: { connections: ConnectionView[]; now: Date }) {
   const problems = connections.flatMap((connection) => {
-    const problem = connection.error || connection.historyError ? "check connection" : isConnectionStale(connection, now) ? "needs refresh" : null;
-    return problem ? [{ provider: connection.provider, problem }] : [];
+    const status = connectionStatus(connection, now);
+    return status.attention ? [{ provider: connection.provider, problem: status.label }] : [];
   });
   if (!problems.length) return null;
   return <div className="flex flex-wrap gap-2">

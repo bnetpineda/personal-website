@@ -49,7 +49,9 @@ test("an account's alerts group into one row; the rest stay single", () => {
   expect(groups.map((g) => g.key)).toEqual(["provider:ibkr", "budget:2026-09:1:85"]);
   const [account, budget] = groups;
   expect(account).toMatchObject({ provider: "ibkr", title: "IBKR", href: "/admin/connections#ibkr", types: ["sync", "history", "expiry"] });
-  expect(account.lines.map((l) => l.label)).toEqual(["Sync needs attention", "History needs attention", "Credential expired"]);
+  expect(account.lines.map((l) => l.label)).toEqual(["Out of date", "History failed", "Credential expired"]);
+  // An expired credential can't be synced back to health, so the row offers Reconnect.
+  expect(account.reconnect).toBe(true);
   expect(account.keys).toHaveLength(3);
   // The expired credential makes the whole account urgent.
   expect(account.severity).toBe("destructive");

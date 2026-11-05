@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth/session";
+import { groupAlerts } from "@/lib/finance/notifications";
+import { getNotifications } from "@/lib/finance/notifications-dal";
 import { postDueRecurringQuietly } from "@/lib/finance/service";
 import { PRIVACY_COOKIE } from "../_components/nav";
 import { Shell } from "../_components/shell";
@@ -14,7 +16,12 @@ export default async function DashboardLayout({
   // Catch up on recurring entries due today if the 06:00 cron hasn't posted them yet
   // (e.g. opening the app after midnight). Shows up on the next navigation.
   after(postDueRecurringQuietly);
-  const cookieStore = await cookies();
+  const [cookieStore, notifications] = await Promise.all([
+    cookies(),
+    // A failed count must never take the page down with it.
+    getNotifications().catch(() => []),
+  ]);
+  const alerts = groupAlerts(notifications.filter((alert) => !alert.dismissed)).length;
 
-  return <Shell initialPrivate={cookieStore.get(PRIVACY_COOKIE)?.value === "1"}>{children}</Shell>;
+  return <Shell initialPrivate={cookieStore.get(PRIVACY_COOKIE)?.value === "1"} alerts={alerts}>{children}</Shell>;
 }
