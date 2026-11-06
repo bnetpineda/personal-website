@@ -9,7 +9,9 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    // Migrations need a direct (unpooled) connection.
-    url: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? "",
+    // Migrations need a direct (unpooled) connection. `bun run db:migrate:prod` targets production (main).
+    url: process.env.DRIZZLE_TARGET === "production"
+      ? (process.env.PROD_DATABASE_URL_UNPOOLED ?? "")
+      : (process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? ""),
   },
 });
