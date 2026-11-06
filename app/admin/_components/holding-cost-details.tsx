@@ -7,7 +7,7 @@ import { formatPct, formatQty } from "@/lib/finance/format";
 import type { HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { FormSheet } from "./form";
 import { useAdminUi } from "./shell";
-import { TokenAmount } from "./ui";
+import { PrivateFigure, TokenAmount } from "./ui";
 
 /**
  * Cost and P/L sheet for a Binance coin. With `children`, they become the trigger and its overlay
@@ -28,8 +28,8 @@ export function BinanceCostDetails({ cost, children }: { cost: HoldingCost; chil
         <dl className="grid grid-cols-2 gap-4 text-sm">
           <div><dt className="text-muted-foreground">Average buy cost</dt><dd className="mt-1 font-mono"><TokenAmount value={estimate.averageCost} currency="USDT" /></dd></div>
           <div><dt className="text-muted-foreground">Cost used</dt><dd className="mt-1 font-mono"><TokenAmount value={estimate.cost} currency="USDT" /></dd></div>
-          <div><dt className="text-muted-foreground">Balance</dt><dd className="mt-1 font-mono group-data-[private=true]/shell:blur-sm">{formatQty(cost.heldQuantity)} {cost.symbol}</dd></div>
-          <div><dt className="text-muted-foreground">Units with an estimated cost</dt><dd className="mt-1 font-mono group-data-[private=true]/shell:blur-sm">{formatQty(estimate.quantity)} · {formatPct(estimate.coverage)}</dd></div>
+          <div><dt className="text-muted-foreground">Balance</dt><dd className="mt-1 font-mono"><PrivateFigure>{`${formatQty(cost.heldQuantity)} ${cost.symbol}`}</PrivateFigure></dd></div>
+          <div><dt className="text-muted-foreground">Units with an estimated cost</dt><dd className="mt-1 font-mono"><PrivateFigure>{`${formatQty(estimate.quantity)} · ${formatPct(estimate.coverage)}`}</PrivateFigure></dd></div>
         </dl>
         <p className="text-sm text-muted-foreground">Uses the average cost of your remaining recorded Spot purchases. If fewer coins remain in your wallet, their cost is reduced proportionally. Extra units without purchase records are excluded from P/L.</p>
         <p className="text-sm text-muted-foreground">Transfers, rewards, missing trades and fees paid in other coins can change the exact result. PHP figures use current exchange rates.</p>

@@ -11,10 +11,10 @@ import type { Category } from "@/lib/db/schema";
 import type { FormState } from "@/lib/finance/schemas";
 import { importMariBankStatements, importWiseStatements, saveCategoryRule, setRuleEnabled } from "../_actions/imports";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
-import { Money } from "./ui";
+import { Money, PrivateFigure } from "./ui";
 
 export function NativeAmount({ value, currency, crypto = false }: { value: number; currency: string; crypto?: boolean }) {
-  return crypto ? <span className="tabular-nums group-data-[private=true]/shell:blur-sm">{value !== 0 && Math.abs(value) < 1e-8 ? value.toExponential(2) : value.toLocaleString("en-US", { maximumFractionDigits: 8 })} {currency}</span>
+  return crypto ? <PrivateFigure>{`${value !== 0 && Math.abs(value) < 1e-8 ? value.toExponential(2) : value.toLocaleString("en-US", { maximumFractionDigits: 8 })} ${currency}`}</PrivateFigure>
     : <Money value={value} currency={currency} />;
 }
 
@@ -56,13 +56,16 @@ export function ImportMariBankButton({ size }: { size?: "sm" | "xs" }) {
   return <ImportStatementsButton size={size} label="Import PDFs" accept=".pdf,application/pdf" pattern={/\.pdf$/i} empty="Choose MariBank statement PDF files." action={importMariBankStatements} />;
 }
 
-export function ImportAction({ action, children }: { action: () => Promise<FormState>; children: React.ReactNode }) {
+export function ImportAction({ action, label, children }: { action: () => Promise<FormState>; label?: string; children: React.ReactNode }) {
   const [pending, startTransition] = useTransition();
-  return <Button variant="outline" size="sm" disabled={pending} onClick={() => startTransition(async () => {
+  return <Button variant="outline" size="sm" disabled={pending} aria-label={label} onClick={() => startTransition(async () => {
     try { notify(await action()); } catch { notify({ ok: false, message: "Couldn't save that change. Try again." }); }
   })}>{pending && <Spinner />}{children}</Button>;
 }
-export function RuleToggle({ id, enabled }: { id: string; enabled: boolean }) { return <ImportAction action={() => setRuleEnabled(id, !enabled)}>{enabled ? "Pause" : "Resume"}</ImportAction>; }
+/** Named after its rule, so a list of them doesn't read as a column of identical "Pause" buttons. */
+export function RuleToggle({ id, enabled, name }: { id: string; enabled: boolean; name: string }) {
+  return <ImportAction label={`${enabled ? "Pause" : "Resume"} rule “${name}”`} action={() => setRuleEnabled(id, !enabled)}>{enabled ? "Pause" : "Resume"}</ImportAction>;
+}
 
 export function AddRuleButton({ categories }: { categories: Category[] }) {
   return <FormSheet trigger={<Button variant="outline" size="sm"><Plus />Category rule</Button>} title="Add category rule"

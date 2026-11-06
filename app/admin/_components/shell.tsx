@@ -13,6 +13,7 @@ import { BottomNav, MoreMenu, SideNav } from "./admin-nav";
 import { CommandButton, CommandMenu } from "./command-menu";
 import { NeedsYouAnywhere } from "./needs-you-anywhere";
 import { PRIVACY_COOKIE } from "./nav";
+import { PrivacyHiddenContext } from "./privacy";
 
 interface AdminUi {
   privacy: { hidden: boolean; toggle: () => void };
@@ -51,6 +52,7 @@ export function Shell({ initialPrivate, alerts, children }: { initialPrivate: bo
 
   return (
     <AdminUiContext.Provider value={{ privacy, alerts, openCommand: () => setCommandOpen(true) }}>
+      <PrivacyHiddenContext.Provider value={hidden}>
       <a href="#main-content" className="sr-only rounded-md border-2 border-border bg-background px-4 py-2 text-foreground focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50">Skip to content</a>
       <SideNav />
       {/* Shorter than 800px, the Overview scrolls as a page instead of squeezing its panels. */}
@@ -69,6 +71,7 @@ export function Shell({ initialPrivate, alerts, children }: { initialPrivate: bo
       <BottomNav />
       <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} privacy={privacy} />
       <Toaster />
+      </PrivacyHiddenContext.Provider>
     </AdminUiContext.Provider>
   );
 }

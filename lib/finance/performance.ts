@@ -14,6 +14,15 @@ import { binanceHoldingRows, type HoldingCost } from "./imports/holding-costs";
 export const PORTFOLIO_SOURCES = ["balances", "nav"] as const;
 export type PortfolioSource = (typeof PORTFOLIO_SOURCES)[number];
 
+/** Chart ranges; "All" starts at the first saved day. Here rather than in the chart, so server pages can read it too. */
+export const RANGES = [
+  // 30 days, like every "since" figure on the page, so a card and the totals above it cover the same span.
+  { value: "1M", days: 30 },
+  { value: "3M", days: 92 },
+  { value: "1Y", days: 366 },
+  { value: "All", days: 0 },
+] as const;
+
 /** US dollars per 1 unit of `currency`, crossed through the PHP rates. */
 export function fxToUsd(fx: FxTable, currency: string): number | null {
   if (currency === "USD") return 1;

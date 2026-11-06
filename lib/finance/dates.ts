@@ -64,6 +64,14 @@ export function dayLabel(day: string): string {
   );
 }
 
+/** "Tue, Sep 30, 2026": for dates that could be in another year, such as an expiry. */
+export function fullDayLabel(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(
+    new Date(Date.UTC(y, m - 1, d))
+  );
+}
+
 /** "Feb 28": a day without its weekday, for tight spots. */
 export function shortDayLabel(day: string): string {
   const [y, m, d] = day.split("-").map(Number);

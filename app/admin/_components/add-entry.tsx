@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { EntrySuggestion } from "@/lib/dal";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { getAddEntryData } from "../_actions/cash-flows";
+import { getAddEntryData, getAddEntrySuggestions } from "../_actions/cash-flows";
 import { CashFlowForm, type CashFlowFormProps, type FormCategory } from "./cash-flow-form";
 import { FormSheetContent, notify } from "./form";
 
@@ -20,7 +20,7 @@ export interface AddEntryData {
   defaults: Record<CashFlowKind, CashFlowFormProps["defaults"]>;
 }
 
-export interface AddEntryProps extends AddEntryData {
+export interface AddEntryProps extends Omit<AddEntryData, "suggestions"> {
   kind: CashFlowKind;
   viewedMonth?: string;
 }
@@ -63,6 +63,12 @@ export function AddEntry({ kind: initialKind, viewedMonth, ...data }: AddEntryPr
   const [open, setOpen] = useState(requestedKind(requested) != null);
   const [kind, setKind] = useState(requestedKind(requested) ?? initialKind);
   const [seen, setSeen] = useState(requested);
+  // Past entries to suggest from are the heaviest part of the form, so they load when it first opens.
+  const [suggestions, setSuggestions] = useState<EntrySuggestion[] | null>(null);
+  useEffect(() => {
+    if (!open || suggestions) return;
+    getAddEntrySuggestions().then(setSuggestions).catch(() => setSuggestions([]));
+  }, [open, suggestions]);
   if (requested !== seen) {
     setSeen(requested);
     const asked = requestedKind(requested);
@@ -91,7 +97,7 @@ export function AddEntry({ kind: initialKind, viewedMonth, ...data }: AddEntryPr
         description="For cash and anything your accounts don't sync."
         onClose={() => setOpen(false)}
       >
-        <AddEntryForm {...data} kind={kind} onKind={setKind} viewedMonth={viewedMonth} />
+        <AddEntryForm {...data} suggestions={suggestions ?? []} kind={kind} onKind={setKind} viewedMonth={viewedMonth} />
       </FormSheetContent>
     </Sheet>
   );

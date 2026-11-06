@@ -1,6 +1,6 @@
 import type { ConnectionView, Provider } from "./connections/types";
 import { isConnectionStale, needsNewCredentials, plainSyncError, PROVIDER_META, untriedAccounts } from "./connections/types";
-import { addMonths, daysBetween, monthLabel, timeAgo, todayManila } from "./dates";
+import { addMonths, dayLabel, daysBetween, fullDayLabel, monthLabel, timeAgo, todayManila } from "./dates";
 import type { StatementCoverage } from "./imports/coverage";
 
 export type NotificationType = "sync" | "history" | "expiry" | "budget" | "bill" | "statement" | "ai";
@@ -50,7 +50,7 @@ export function buildNotifications(input: {
       const expired = c.credentialsExpireOn < today;
       alerts.push({ key: `expiry:${c.provider}:${c.credentialsExpireOn}`, type: "expiry", provider: c.provider,
         title: `${name} credential ${expired ? "expired" : "expires soon"}`, label: `Credential ${expired ? "expired" : "expires soon"}`, reconnect: true,
-        detail: `Your saved expiry date is ${c.credentialsExpireOn}. Update the credential and its reminder after renewal.`, href: "/admin/connections", severity: expired ? "destructive" : "warning" });
+        detail: `Your saved expiry date is ${fullDayLabel(c.credentialsExpireOn)}. Update the credential and its reminder after renewal.`, href: "/admin/connections", severity: expired ? "destructive" : "warning" });
     }
   }
   for (const b of input.budgets) if (b.budget > 0 && b.spent >= b.budget * 0.85) {
@@ -61,7 +61,7 @@ export function buildNotifications(input: {
   }
   for (const b of input.bills) if (b.nextOn && daysBetween(today, b.nextOn) <= 3) {
     const title = `${b.description} ${b.nextOn < today ? "is overdue" : "is coming up"}`;
-    alerts.push({ key: `bill:${b.id}:${b.nextOn}`, type: "bill", title, label: title, detail: `Scheduled for ${b.nextOn}.`, href: "/admin/recurring", severity: "warning" });
+    alerts.push({ key: `bill:${b.id}:${b.nextOn}`, type: "bill", title, label: title, detail: `Scheduled for ${dayLabel(b.nextOn)}.`, href: "/admin/recurring", severity: "warning" });
   }
   const lastMonth = addMonths(month, -1);
   const banks = Object.entries(input.statements ?? {}) as ["wise" | "maribank", StatementCoverage][];

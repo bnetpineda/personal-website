@@ -1,11 +1,13 @@
 // Sets up admin credentials in .env.local:
 //   ADMIN_PASSWORD_HASH  — scrypt hash of the password you type (input is hidden)
 //   ADMIN_SESSION_SECRET — random signing key for the session cookie (kept if it already exists)
-//   CRON_SECRET          — random bearer token for /api/cron/daily (kept if it already exists)
+//   CRON_SECRET          - random bearer token for /api/cron/daily (kept if it already exists)
+//   CREDENTIALS_SECRET   - random key for saved account credentials (kept if it already exists and never
+//                          rotated here: a new one can't open credentials saved with the old one)
 //
 // Usage (in PowerShell / Windows Terminal, not Git Bash):
 //   bun run admin:setup                           # set/replace the password
-//   bun run admin:setup -- --rotate-secrets       # also regenerate both secrets (logs out all sessions)
+//   bun run admin:setup -- --rotate-secrets       # also regenerate the session and cron secrets (logs out all sessions)
 import fs from 'fs';
 import path from 'path';
 import { randomBytes } from 'crypto';
@@ -78,8 +80,8 @@ async function main() {
   env = upsertEnv(env, 'ADMIN_PASSWORD_HASH', await hashPassword(password));
 
   const written = ['ADMIN_PASSWORD_HASH'];
-  for (const key of ['ADMIN_SESSION_SECRET', 'CRON_SECRET']) {
-    if (rotate || !hasKey(env, key)) {
+  for (const key of ['ADMIN_SESSION_SECRET', 'CRON_SECRET', 'CREDENTIALS_SECRET']) {
+    if ((rotate && key !== 'CREDENTIALS_SECRET') || !hasKey(env, key)) {
       env = upsertEnv(env, key, randomBytes(32).toString('base64url'));
       written.push(key);
     }

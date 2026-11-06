@@ -113,6 +113,27 @@
       "when": 1793626004750,
       "tag": "0015_hyperliquid_provider",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793916719190,
+      "tag": "0016_goals_budgets_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793917378641,
+      "tag": "0017_archive_legacy_balances",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793918968605,
+      "tag": "0018_ai_summaries",
+      "breakpoints": true
     }
   ]
 }

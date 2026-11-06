@@ -14,9 +14,10 @@ export const PORTFOLIO_SECTIONS = [
   { href: "/admin/holdings", label: "Holdings" },
   { href: "/admin/earnings", label: "Earnings" },
   { href: "/admin/history", label: "History" },
+  { href: "/admin/goals", label: "Goals" },
 ] as const;
 
-/** Earnings and History are part of Portfolio; only the Overview needs an exact match. */
+/** Earnings, History and Goals are part of Portfolio; only the Overview needs an exact match. */
 export function isNavActive(href: (typeof NAV_DESTINATIONS)[number]["href"], pathname: string) {
   if (href === "/admin") return pathname === "/admin";
   if (href === "/admin/holdings") return PORTFOLIO_SECTIONS.some((section) => section.href === pathname);

@@ -1,8 +1,9 @@
 import "server-only";
-import { and, count, eq, gt, gte, inArray, lt, max, min, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, max, min, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { accountConnections, cashFlows, categories, importedEntries, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
+import { accountConnections, cashFlows, categories, categoryBudgets, importedEntries, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
+import { monthBudget } from "./calc";
 import { statementCoverage } from "./imports/coverage";
 import { env } from "@/lib/env";
 import { currentMonth, monthRange } from "./dates";
@@ -10,9 +11,10 @@ import { buildNotifications } from "./notifications";
 
 export async function getNotifications() {
   await requireAdmin();
-  const db = getDb(), { start, end } = monthRange(currentMonth());
+  const month = currentMonth();
+  const db = getDb(), { start, end } = monthRange(month);
   const e = importedEntries;
-  const [connections, budgets, bills, dismissed, aiBacklog, months] = await Promise.all([
+  const [connections, budgets, bills, dismissed, aiBacklog, months, overrides] = await Promise.all([
     db.select({
       provider: accountConnections.provider, enabled: accountConnections.enabled, lastSyncedAt: accountConnections.lastSyncedAt, lastAttemptAt: accountConnections.lastAttemptAt,
       error: accountConnections.error, credentialsExpireOn: accountConnections.credentialsExpireOn,
@@ -22,7 +24,8 @@ export async function getNotifications() {
     db.select({ id: categories.id, name: categories.name, budget: categories.monthlyBudget,
       spent: sql<number>`coalesce(sum(${cashFlows.amountPhp}), 0)`.mapWith(Number) }).from(categories)
       .leftJoin(cashFlows, and(eq(cashFlows.categoryId, categories.id), eq(cashFlows.kind, "expense"), gte(cashFlows.occurredOn, start), lt(cashFlows.occurredOn, end)))
-      .where(and(eq(categories.archived, false), eq(categories.kind, "expense"), gt(categories.monthlyBudget, 0)))
+      // Every expense category: a month's own budget can apply where there's no default.
+      .where(and(eq(categories.archived, false), eq(categories.kind, "expense")))
       .groupBy(categories.id),
     db.select({ id: recurringCashFlows.id, description: recurringCashFlows.description, nextOn: recurringCashFlows.nextOn })
       .from(recurringCashFlows).where(and(eq(recurringCashFlows.paused, false), eq(recurringCashFlows.kind, "expense"))),
@@ -32,8 +35,11 @@ export async function getNotifications() {
       : Promise.resolve(null),
     db.select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
       .from(e).where(inArray(e.provider, ["wise", "maribank"])).groupBy(e.provider, sql`2`),
+    db.select({ categoryId: categoryBudgets.categoryId, amount: categoryBudgets.amount }).from(categoryBudgets).where(eq(categoryBudgets.month, month)),
   ]);
   const keys = new Set(dismissed.map((d) => d.key));
-  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgets.map((b) => ({ ...b, budget: b.budget ?? 0 })), bills, aiBacklog, statements: statementCoverage(months) })
+  const own = new Map(overrides.map((o) => [o.categoryId, o.amount]));
+  const budgeted = budgets.map((b) => ({ ...b, budget: monthBudget({ id: b.id, monthlyBudget: b.budget }, own) ?? 0 })).filter((b) => b.budget > 0);
+  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgeted, bills, aiBacklog, statements: statementCoverage(months) })
     .map((alert) => ({ ...alert, dismissed: keys.has(alert.key) }));
 }

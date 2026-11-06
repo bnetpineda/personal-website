@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accountConnections, cashFlows, fxRates, netWorthSnapshots, recurringCashFlows, statementBalances } from "@/lib/db/schema";
+import { accountConnections, cashFlows, fxRates, holdings, liabilities, netWorthSnapshots, recurringCashFlows, statementBalances } from "@/lib/db/schema";
 import { includedPositions } from "./connections/types";
 import { statementPositions } from "./statement-balances";
 import { computeNetWorth, fxToPhp, round2, type FxTable, type NetWorth } from "./calc";
@@ -72,31 +72,40 @@ export async function ensureFx(currencies: string[]): Promise<FxTable> {
 /** Refreshes FX for every currency the synced accounts and recurring items use, then records today's net worth. */
 export async function refreshRates(): Promise<RefreshSummary> {
   const db = getDb();
-  const [connections, recurring, balances] = await Promise.all([
+  const [connections, recurring, balances, manual, debts] = await Promise.all([
     db.select({ snapshot: accountConnections.snapshot }).from(accountConnections),
     db.selectDistinct({ currency: recurringCashFlows.currency }).from(recurringCashFlows),
     db.selectDistinct({ currency: statementBalances.currency }).from(statementBalances),
+    db.selectDistinct({ currency: holdings.currency }).from(holdings),
+    db.selectDistinct({ currency: liabilities.currency }).from(liabilities),
   ]);
   const fx = await refreshFxRates([
     ...connections.flatMap((c) => c.snapshot?.positions.map((p) => p.currency) ?? []),
     ...recurring.map((r) => r.currency),
     ...balances.map((b) => b.currency),
+    ...manual.map((h) => h.currency),
+    ...debts.map((l) => l.currency),
   ]);
   await upsertTodaySnapshot();
   return { fxUpdated: fx.updated.length, failed: fx.failed, at: new Date().toISOString() };
 }
 
-/** Net worth is what the synced accounts hold (those included in net worth) plus bank statement balances. */
+/**
+ * Net worth is what the synced accounts hold (those included in net worth), bank statement balances and
+ * manual accounts, minus debts. Archived manual accounts and debts are left out.
+ */
 export async function currentNetWorth(): Promise<NetWorth & { empty: boolean }> {
   const db = getDb();
-  const [fx, connections, balances] = await Promise.all([
+  const [fx, connections, balances, manual, debts] = await Promise.all([
     loadFxTable(),
     db.select({ provider: accountConnections.provider, includeInNetWorth: accountConnections.includeInNetWorth, snapshot: accountConnections.snapshot }).from(accountConnections),
     db.select().from(statementBalances),
+    db.select().from(holdings).where(eq(holdings.archived, false)),
+    db.select().from(liabilities).where(eq(liabilities.archived, false)),
   ]);
   return {
-    ...computeNetWorth([], [], fx, [...includedPositions(connections), ...statementPositions(balances)]),
-    empty: !connections.some((c) => c.includeInNetWorth && c.snapshot) && !balances.length,
+    ...computeNetWorth(manual, debts, fx, [...includedPositions(connections), ...statementPositions(balances)]),
+    empty: !connections.some((c) => c.includeInNetWorth && c.snapshot) && !balances.length && !manual.length && !debts.length,
   };
 }
 

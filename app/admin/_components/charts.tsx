@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, ReferenceLine, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 import {
@@ -15,15 +15,22 @@ import { Swatch } from "@/components/ui/swatch";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
 import { dayLabel, shortDayLabel } from "@/lib/finance/dates";
 import { formatMoney } from "@/lib/finance/format";
+import { Masked, PrivacyHiddenContext, maskDigits } from "./privacy";
 import { EmptyState } from "./ui";
 
 const compact = (value: number) => formatMoney(value, "PHP", { compact: true });
+
+/** Axis labels are amounts too: dotted out while amounts are hidden. */
+function useTick(format: (value: number) => string) {
+  const hidden = useContext(PrivacyHiddenContext);
+  return (value: number) => (hidden ? maskDigits(format(value)) : format(value));
+}
 
 function TooltipRow({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div className="flex w-full items-center justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono tabular-nums">{value}</span>
+      <span className="font-mono tabular-nums"><Masked text={value} /></span>
     </div>
   );
 }
@@ -33,23 +40,17 @@ function moneyFormatter(value: unknown, name: unknown, item: { color?: string },
   return <TooltipRow label={config[key]?.label ?? key} value={value == null ? "No recorded data" : formatMoney(Number(value))} />;
 }
 
-export const RANGES = [
-  { value: "1M", days: 31 },
-  { value: "3M", days: 92 },
-  { value: "1Y", days: 366 },
-  { value: "All", days: 0 },
-] as const;
-
 /** One account's value (or P/L) over time. The caller picks the range and says what is charted. */
 export function PortfolioChart({ points, label, color, currency }: { points: { date: string; value: number }[]; label: string; color: string; currency: string }) {
   const config = { value: { label, color } } satisfies ChartConfig;
+  const tick = useTick((v) => formatMoney(v, currency, { compact: true }));
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={config} className="aspect-auto h-48 w-full">
         <AreaChart aria-label={`${label} history`} data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} tickFormatter={shortDayLabel} />
-          <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(v: number) => formatMoney(v, currency, { compact: true })} domain={["auto", "auto"]} />
+          <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={tick} domain={["auto", "auto"]} />
           <ChartTooltip
             content={
               <ChartTooltipContent
@@ -58,7 +59,8 @@ export function PortfolioChart({ points, label, color, currency }: { points: { d
               />
             }
           />
-          <Area dataKey="value" type="monotone" fill="var(--color-value)" fillOpacity={0.35} stroke="var(--color-value)" strokeWidth={3} isAnimationActive={false} />
+          {/* A line, not a filled area: the axis doesn't start at zero, and a fill would make small moves look like big ones. */}
+          <Area dataKey="value" type="monotone" fill="none" stroke="var(--color-value)" strokeWidth={3} isAnimationActive={false} />
         </AreaChart>
       </ChartContainer>
     </div>
@@ -86,6 +88,7 @@ export function CashFlowLegend() {
 
 /** Monthly income vs. expenses. `fill`: takes the height of its panel on wide screens (the dashboard). */
 export function CashFlowChart({ points, fill = false }: { points: { label: string; income: number | null; expense: number | null; incomplete?: boolean }[]; fill?: boolean }) {
+  const tick = useTick(compact);
   if (points.every((p) => (p.income ?? 0) === 0 && (p.expense ?? 0) === 0)) {
     return <EmptyState title="No recorded cash flow">Only recorded income and spending are charted. Missing data is not a zero total.</EmptyState>;
   }
@@ -95,7 +98,7 @@ export function CashFlowChart({ points, fill = false }: { points: { label: strin
         <BarChart aria-label="Recorded monthly income and spending" data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-          <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={compact} />
+          <YAxis tickLine={false} axisLine={false} width={72} tickFormatter={tick} />
           <ChartTooltip
             filterNull={false}
             content={
@@ -122,6 +125,7 @@ const allocationConfig = Object.fromEntries(
 export function AllocationChart({ slices }: { slices: { assetClass: AssetClass; value: number }[] }) {
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   const data = slices.map((s) => ({ ...s, fill: `var(--color-${s.assetClass})` }));
+  const tick = useTick(compact);
   return (
     <div className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={allocationConfig} className="mx-auto aspect-square h-56">
@@ -141,7 +145,7 @@ export function AllocationChart({ slices }: { slices: { assetClass: AssetClass; 
                 viewBox && "cx" in viewBox ? (
                   <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
                     <tspan x={viewBox.cx} y={viewBox.cy - 6} className="fill-foreground font-display text-xl">
-                      {compact(total)}
+                      {tick(total)}
                     </tspan>
                     <tspan x={viewBox.cx} y={viewBox.cy + 16} className="fill-muted-foreground font-mono text-xs uppercase">
                       Assets

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { ConnectionSnapshot, Provider, SyncProvider } from "../finance/connections/types";
 import type { AiSuggestion, CategorizedBy, EntryKind, EntryStatus, HistoryCoverage, SpotTrade } from "../finance/imports/types";
 import type { PortfolioSource } from "../finance/performance";
+import type { FinanceSummary } from "../finance/ai-summary";
 import {
   type AnyPgColumn,
   bigserial,
@@ -32,6 +33,7 @@ import {
   PRICE_SOURCES,
   RECURRENCE_FREQUENCIES,
   type AssetClass,
+  type GoalMeasure,
 } from "../finance/constants";
 
 export const assetClassEnum = pgEnum("asset_class", ASSET_CLASSES);
@@ -397,6 +399,61 @@ export const spotFifoMeta = pgTable("spot_fifo_meta", {
   paymentAssets: text("payment_assets").array().notNull(),
 }, (t) => [primaryKey({ columns: [t.accountKey, t.asOf] })]);
 
+/** A month's own budget for a category, replacing its monthly default for that month only. */
+export const categoryBudgets = pgTable("category_budgets", {
+  categoryId: integer("category_id").notNull().references(() => categories.id, { onDelete: "cascade" }),
+  /** YYYY-MM */
+  month: varchar("month", { length: 7 }).notNull(),
+  /** PHP; null means "no budget this month" even when the category has a default. */
+  amount: money("amount"),
+  ...timestamps,
+}, (t) => [
+  primaryKey({ columns: [t.categoryId, t.month] }),
+  check("category_budgets_month_format", sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+  check("category_budgets_amount_nonnegative", sql`${t.amount} is null or ${t.amount} >= 0`),
+]);
+
+/** Something to save towards. Progress comes from live figures unless the measure is "manual". */
+export const goals = pgTable("goals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  measure: text("measure").$type<GoalMeasure>().notNull(),
+  /** PHP, or a number of months for the emergency fund. */
+  target: numeric("target", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  /** PHP saved so far, for "manual" goals only. */
+  saved: money("saved"),
+  targetOn: date("target_on"),
+  archived: boolean("archived").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  ...timestamps,
+}, (t) => [
+  check("goals_measure", sql`${t.measure} in ('emergency_fund', 'net_worth', 'cash', 'investments', 'manual')`),
+  check("goals_target_positive", sql`${t.target} > 0`),
+  check("goals_saved_nonnegative", sql`${t.saved} is null or ${t.saved} >= 0`),
+]);
+
+/**
+ * One row of admin-wide state. Session tokens carry the epoch they were issued in; bumping it signs
+ * every device out ("Sign out everywhere"), which a stateless token can't do on its own.
+ */
+export const adminState = pgTable("admin_state", {
+  id: smallint("id").primaryKey().default(1),
+  sessionEpoch: integer("session_epoch").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [check("admin_state_single_row", sql`${t.id} = 1`)]);
+
+/**
+ * The Overview's AI feedback, newest first. `inputHash` is the digest of the facts it was written from,
+ * so the daily run only pays for a new one when the numbers changed.
+ */
+export const aiSummaries = pgTable("ai_summaries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  model: text("model").notNull(),
+  inputHash: text("input_hash").notNull(),
+  summary: jsonb("summary").$type<FinanceSummary>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("ai_summaries_created_at_idx").on(t.createdAt)]);
+
 /** Alert content is derived from current data; only dismissals need persistence. */
 export const notificationDismissals = pgTable("notification_dismissals", {
   key: text("key").primaryKey(),
@@ -414,3 +471,5 @@ export type RecurringCashFlow = typeof recurringCashFlows.$inferSelect;
 export type Liability = typeof liabilities.$inferSelect;
 export type NetWorthSnapshot = typeof netWorthSnapshots.$inferSelect;
 export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
+export type Goal = typeof goals.$inferSelect;
+export type CategoryBudget = typeof categoryBudgets.$inferSelect;

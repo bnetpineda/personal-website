@@ -8,8 +8,9 @@ import { Swatch } from "@/components/ui/swatch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { SyncProvider } from "@/lib/finance/connections/types";
 import { addDays, dayRangeLabel } from "@/lib/finance/dates";
-import { changeSince } from "@/lib/finance/performance";
-import { PortfolioChart, RANGES } from "./charts";
+import { RANGES, changeSince } from "@/lib/finance/performance";
+import { marketReturn, type Flow } from "@/lib/finance/returns";
+import { PortfolioChart } from "./charts";
 import { EmptyState, Money, Pct } from "./ui";
 
 /** One investment account, already converted to the page currency on the server. */
@@ -31,6 +32,10 @@ export interface PortfolioAccount {
   pnlPartial: boolean;
   /** Saved history ending in the live balances. */
   points: { date: string; value: number; pnl: number | null }[];
+  /** Deposits (+) and withdrawals (−) in the page currency, from imported history. */
+  flows: Flow[];
+  /** Transfers in coins without a price today, so they're left in the return. */
+  unpricedFlows: number;
   winners: AccountMover[];
   losers: AccountMover[];
   /** What the P/L leaves out, with where to fix it. */
@@ -87,6 +92,10 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
   const change = changeSince(series, since);
   // The chart starts where the change does, so the line and the number cover the same days.
   const shown = change ? series.filter((p) => p.date >= change.from) : series;
+  // A balance moves with deposits too; the return takes them back out. P/L already leaves them out.
+  const result = change && view === "value" ? marketReturn({ date: change.from, value: change.base }, series.at(-1)!, a.flows) : null;
+  // A day at zero between real balances is a sync that saw nothing, not a sell-off.
+  const zeroDay = view === "value" ? shown.find((p, i) => p.value === 0 && i > 0 && i < shown.length - 1) : undefined;
 
   return (
     <Card className="min-w-0">
@@ -136,23 +145,27 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
             </dd>
           </div>
           <div className="flex flex-col gap-1">
-            <dt className={label}>{view === "pnl" ? "P/L change" : "Balance change"}</dt>
+            <dt className={label}>{view === "pnl" ? "P/L change" : a.unpricedFlows > 0 ? "Return, partial" : "Return"}</dt>
             <dd className="flex flex-wrap items-baseline gap-x-2 font-mono">
-              {change ? (
+              {result ? (
                 <>
-                  {/* A balance moves with deposits too, so only P/L earns gain/loss colors. */}
-                  <Money value={change.change} currency={currency} signed tone={view === "pnl"} />
-                  {view === "value" && (
-                    <span className="text-xs">
-                      <Pct value={change.pct} />
-                    </span>
-                  )}
+                  <Money value={result.market} currency={currency} signed tone />
+                  <span className="text-xs">
+                    <Pct value={result.pct} tone />
+                  </span>
                 </>
+              ) : change ? (
+                <Money value={change.change} currency={currency} signed tone />
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}
             </dd>
-            {change && <dd className="text-xs text-muted-foreground">{dayRangeLabel(change.from, series.at(-1)!.date)}{view === "value" && " · includes deposits"}</dd>}
+            {result && (
+              <dd className="text-xs text-muted-foreground">
+                Balance <Money value={result.change} currency={currency} signed /> · moved in or out <Money value={result.flows} currency={currency} signed />
+              </dd>
+            )}
+            {change && <dd className="text-xs text-muted-foreground">{dayRangeLabel(change.from, series.at(-1)!.date)}</dd>}
           </div>
         </dl>
 
@@ -161,6 +174,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
         ) : (
           <EmptyChart account={a} view={view} />
         )}
+        {zeroDay && <p className="text-xs text-muted-foreground">The value saved for {dayRangeLabel(zeroDay.date, zeroDay.date)} is zero, with balances before and after it: usually a sync that returned no balances that day.</p>}
 
         {(a.winners.length > 0 || a.losers.length > 0) && (
           <div className="grid grid-cols-2 gap-4">

@@ -213,6 +213,11 @@ export function allocation(byClass: Partial<Record<AssetClass, number>>): { asse
     .sort((a, b) => b.value - a.value);
 }
 
+/** A category's budget for a month: that month's own, when it has one, else the default. */
+export function monthBudget(category: { id: number; monthlyBudget: number | null }, overrides: ReadonlyMap<number, number | null>): number | null {
+  return overrides.has(category.id) ? (overrides.get(category.id) ?? null) : category.monthlyBudget;
+}
+
 export function budgetProgress(
   spent: number,
   budget: number | null | undefined

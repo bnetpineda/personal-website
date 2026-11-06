@@ -164,7 +164,8 @@ export function CoverageBadge({ missing, month, current }: { missing: StatementP
   return (
     <Popover>
       <Badge asChild variant={month > current ? "outline" : "warning"} className="pointer-coarse:min-h-11">
-        <PopoverTrigger>Statements missing</PopoverTrigger>
+        {/* One name for one condition: Accounts and the account rows say "Statement due" too. */}
+        <PopoverTrigger>Statement due</PopoverTrigger>
       </Badge>
       <PopoverContent aria-label={`Statement coverage for ${monthLabel(month)}`} align="start" className="w-80">
         <PopoverHeader>
@@ -379,7 +380,8 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
                   {row.attention && <TriangleAlert aria-label="Needs attention" className="size-3 text-warning" />}
                   {!row.inNetWorth && <span className="font-normal text-muted-foreground text-xs" title="Not counted in net worth">Excluded</span>}
                 </ItemTitle>
-                <ItemDescription clamp={1} title={row.description}>
+                {/* Two lines, so a statement's date isn't cut off beside a long balance. */}
+                <ItemDescription clamp={2} title={row.description}>
                   {row.description}
                 </ItemDescription>
               </ItemContent>

@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getFx, getRecordedMonths } from "@/lib/dal";
-import { sumInPhp } from "@/lib/finance/calc";
+import { getConnections, getFx, getRecordedMonths } from "@/lib/dal";
+import { fxToPhp, sumInPhp } from "@/lib/finance/calc";
 import { CURRENCIES } from "@/lib/finance/constants";
-import { currentMonth, isMonth } from "@/lib/finance/dates";
+import { currentMonth, isMonth, monthLabel } from "@/lib/finance/dates";
 import { getEarnings } from "@/lib/finance/imports/dal";
+import { amountInUsd, unitPricesUsd } from "@/lib/finance/returns";
 import { PortfolioSections } from "../../_components/admin-nav";
 import { openingMonth } from "../../_components/nav";
 import { NativeAmount } from "../../_components/import-controls";
@@ -40,11 +41,17 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
   const params = await searchParams, current = currentMonth(), month = isMonth(params.month) ? params.month : current;
   // All time unless a month was chosen: this month is usually empty until statements arrive.
   const allTime = !isMonth(params.month);
-  const [data, fx, recorded] = await Promise.all([getEarnings(allTime ? null : month), getFx(), getRecordedMonths()]);
+  const [data, fx, recorded, connections] = await Promise.all([getEarnings(allTime ? null : month), getFx(), getRecordedMonths(), getConnections()]);
   const startMonth = openingMonth(recorded, current) ?? current;
   const any = (columns: readonly Column[]) => data.rows.some((r) => columns.some(([, key]) => r[key] != null && r[key] !== 0));
-  // Cash can be added up at today's rates; coins can't without historical prices, so they're counted, not valued.
-  const cash = sumInPhp(fx, data.rows.filter((r) => isFiat(r.currency)).map((r) => ({ amount: r.dividends + r.interest + (r.realized ?? 0), currency: r.currency })));
+  // One answer to "what did I earn?": everything earned, coins included at today's prices from your own balances.
+  const prices = unitPricesUsd(connections.flatMap((c) => c.snapshot?.positions ?? []), fx);
+  const usdToPhp = fxToPhp(fx, "USD");
+  const earnedRows = data.rows.filter((r) => r.rewards + r.dividends + r.interest + (r.realized ?? 0) !== 0);
+  const valued = earnedRows.map((r) => ({ currency: r.currency, usd: amountInUsd(r.rewards + r.dividends + r.interest + (r.realized ?? 0), r.currency, prices, fx) }));
+  const unvalued = valued.filter((v) => v.usd == null).map((v) => v.currency);
+  const earnedPhp = usdToPhp == null || !earnedRows.length ? null : valued.reduce((sum, v) => sum + (v.usd ?? 0), 0) * usdToPhp;
+  const costs = sumInPhp(fx, data.rows.filter((r) => isFiat(r.currency)).map((r) => ({ amount: r.fees + r.taxes, currency: r.currency })));
   const coins = data.rows.filter((r) => !isFiat(r.currency) && r.rewards !== 0).length;
   return <>
     <PageHeader title="Portfolio">
@@ -56,10 +63,10 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
       <Button asChild size="sm" variant={allTime ? "outline" : "default"}><Link href={`/admin/earnings?month=${allTime ? startMonth : month}`}>By month</Link></Button>
       <InfoNote title="How earnings add up">
         <p>Totals cover imported Binance, IBKR and Hyperliquid records {allTime ? "across all imported dates" : "for this month"}, in their original currency, including activity AI hasn&apos;t filed yet. Ignored entries are excluded.</p>
-        <p>Contributions count deposits and withdrawals filed as transfers; transfers between your own investment accounts are excluded. This is not a total-return calculation.</p>
+        <p>Contributions count deposits and withdrawals filed as transfers; transfers between your own investment accounts are excluded. For the return with transfers taken out, see the Return card on <Link href="/admin/holdings" className="underline underline-offset-4">Holdings</Link>.</p>
         <p>IBKR realized P/L already includes trade commissions: fees are shown separately, not to be subtracted again. Hyperliquid&apos;s realized P/L is before trade fees, and perp funding is under Interest.</p>
         <p>The peso total is an estimate at today&apos;s exchange rate, so it can move. Entries on the Overview are different: each keeps the rate from when it was recorded, so their totals don&apos;t change.</p>
-        <p>Crypto rewards keep their coin amounts, without converting to historical prices. Binance per-pair cost estimates are in <Link href="/admin/history" className="underline underline-offset-4">History</Link>.</p>
+        <p>The headline values coins at today&apos;s prices, taken from your own balances, not at the price on the day you received them; the tables keep coin amounts. Binance per-pair cost estimates are in <Link href="/admin/history" className="underline underline-offset-4">History</Link>.</p>
       </InfoNote>
     </div>
     {!any(EARNED) && !any(FLOWS) ? (
@@ -68,8 +75,21 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
       <>
         <StatCards
           items={[
-            { label: "Cash earned (estimate)", value: cash.total === 0 ? "—" : <Money value={cash.total} />, primary: true, hint: cash.missing.length ? `Leaves out ${cash.missing.join(", ")}: no exchange rate` : `${data.rows.some((r) => isFiat(r.currency) && r.realized) ? "Dividends, interest and realized P/L" : "Dividends and interest"}, before tax. An estimate in pesos at today's rate` },
-            { label: "Rewards in coins", value: coins ? `${coins} ${coins === 1 ? "coin" : "coins"}` : "—", hint: coins ? "Listed below in their own units, not valued" : "None in this period" },
+            {
+              label: unvalued.length ? "Earned from investments, partial" : "Earned from investments",
+              value: earnedPhp == null ? "—" : <Money value={earnedPhp} signed tone />,
+              primary: true,
+              hint: earnedPhp == null ? "Needs a US dollar exchange rate" : <>
+                Rewards, dividends, interest and realized P/L, {allTime ? "all time" : monthLabel(month)}, before fees and tax
+                <span className="mt-1 block">An estimate at today&apos;s prices and rates{coins > 0 && ", coins included"}</span>
+                {unvalued.length > 0 && <span className="mt-1 block">Leaves out {unvalued.join(", ")}: no price today</span>}
+              </>,
+            },
+            {
+              label: "Fees and taxes",
+              value: costs.total === 0 ? "—" : <Money value={-costs.total} signed />,
+              hint: costs.total === 0 ? "None in this period" : "In cash, at today's rate. IBKR's trade commissions are already in its realized P/L",
+            },
           ]}
         />
         <p className="mb-4 text-sm text-muted-foreground">Gains and losses on what you still own are on <Link href="/admin/holdings" className="underline underline-offset-4">Holdings</Link>; estimated results of past coin trades are on <Link href="/admin/history" className="underline underline-offset-4">History</Link>.</p>

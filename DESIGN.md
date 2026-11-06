@@ -78,7 +78,7 @@ Use the component that fits; don't rebuild it from `div`s.
 | Explanation + fix next to a marker | `Popover` (e.g. `CoverageBadge`) |
 | The small print behind a page | `InfoNote` (a labelled `Popover`), not a paragraph on the page |
 | An account's state | `connectionStatus`: one vocabulary (Sync failed, History failed, Out of date, Up to date, Paused, Syncing) on every page |
-| Main navigation | `SideNav` (rail, `lg` up) / `BottomNav` (below `lg`), both from `NAV_DESTINATIONS`; Portfolio's three views use `PortfolioSections` |
+| Main navigation | `SideNav` (rail, `lg` up) / `BottomNav` (below `lg`), both from `NAV_DESTINATIONS`; Portfolio's four views (Holdings, Earnings, History, Goals) use `PortfolioSections` |
 | Charts (trend, allocation, sparkline, tile mini bars) | `ChartContainer` + Recharts; series colors from `ChartConfig` (`var(--chart-N)`), per-row data colors via `<Cell fill>` |
 
 Admin-specific compositions live in `app/admin/_components` (`PageHeader`, `InfoNote`, `StatCards`, `Panel`
@@ -123,7 +123,9 @@ components without re-applying these (`--overwrite` replaces the house style).
 ## 4. Patterns
 
 - **Money**: always `<Money value currency tone? signed?>` — formats with `Intl` and blurs in
-  privacy mode (`group-data-[private=true]/shell:blur-sm`). Portals do not inherit the shell's CSS
+  privacy mode (`group-data-[private=true]/shell:blur-sm`); while amounts are hidden its digits also turn to dots
+  (`Masked`, from `PrivacyHiddenContext`), so they leave the page text too. Quantities and other private figures use
+  `PrivateFigure`; chart axes and tooltips mask theirs the same way. Portals do not inherit the shell's CSS
   ancestor: read-only amounts in a sheet need a live privacy boundary inside the portal, as in
   `CashFlowHistoryDetails` (`group/shell` + `data-private` from `useAdminUi().privacy.hidden`).
 - **Forms**: Server Action + `useFormAction` (admin) → errors from the returned `FormState`,
@@ -166,7 +168,7 @@ components without re-applying these (`--overwrite` replaces the house style).
   in place (`SyncNowButton`, statement import) and a warning icon, not a badge per row; the Accounts
   panel shows no status badges: exclusions are persistent text beside the name, and statement balances
   carry their as-of dates and a stale marker. A month without full statement coverage gets a clear
-  "Statements missing" marker (`CoverageBadge`, with upload buttons), shown beside the month on
+  "Statement due" marker (`CoverageBadge`, with upload buttons; the same words as Accounts and the account rows), shown beside the month on
   desktop and in the recorded-month card on phones. Other panels use concise recorded-only context,
   not repeated provider paragraphs. Empty amounts are unknown (`—`), not zero; a net needs both sides, and charts keep
   unknown months as gaps (`dashboardMonth`). Rows show how the importer filed them as an icon
@@ -186,7 +188,21 @@ components without re-applying these (`--overwrite` replaces the house style).
   (⌘K → Add expense/income opens it from anywhere via `?add=`) — don't build other add forms for
   cash flows. Changing just an entry's category goes through the row's `CategoryPicker`.
 - **Write scope**: new entries still default to today; a date outside the viewed month gets a visible
-  explanation. Budgets are category-level monthly defaults across all months, not historical overrides.
+  explanation. Budgets are category defaults for every month, and a month can set its own (`category_budgets`,
+  the Budgets sheet's "Only <month>" view: blank uses the default, 0 means none that month); alerts use the month's own.
+- **Net worth is everything**: synced accounts, statement balances and manual accounts (`holdings`), minus debts
+  (`liabilities`), all managed on Accounts. Archived ones are left out; values entered by hand over 60 days ago are
+  marked as due, like an old statement. A net needs both sides: the Net tile is a dash until every statement is in.
+- **Returns leave transfers out**: Portfolio's Return (and each account card's) is the balance change minus imported
+  deposits and withdrawals (Modified Dietz), so the cards add up to the total over the same 30 days. Coins moved in
+  or out are valued at today's prices from the accounts' own balances; ones without a price make it "partial".
+- **AI feedback** sits under the cash-flow chart on the Overview (`AiSummaryPanel`). It never scrolls: it takes the
+  height its few lines need and the chart stretches into the rest of the right column; the answer is kept to a
+  glance (a headline, up to three one-line points, two steps) to fit. It is written from totals only (`buildSummaryFacts`: no payees, descriptions or notes), saved in
+  `ai_summaries`, refreshed by its button or by the daily cron when the facts' hash changed, and says how old it
+  is. Its text quotes amounts, so all of it follows Hide amounts.
+- **Goals** are a Portfolio view (`/admin/goals`): live measures (emergency fund in months of spending, net worth,
+  cash, investments) or an amount entered by hand; unknown progress is a dash, never zero.
 - **Accessibility**: every control has a label (`FieldLabel htmlFor` or `aria-label` on icon
   buttons); status text uses `role="status"`; don't remove focus rings. Panels have semantic headings
   and named regions. Category jumps move focus to Activity and respect reduced motion. Controlled

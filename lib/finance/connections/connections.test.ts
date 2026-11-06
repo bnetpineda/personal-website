@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { computeNetWorth } from "../calc";
-import { openCredentials, sealCredentials } from "./crypto";
+import { needsReseal, openCredentials, sealCredentials } from "./crypto";
 import { flexFixture } from "./fixtures";
 import { assertReadOnlyBinance, flexResponse, parseBinanceBalances, parseEarnPage, parseIbkrStatement } from "./parsers";
 import { credentialsSchema, expireAfterSchema, includedPositions, isConnectionStale, type ConnectedPosition, type Credentials } from "./types";
@@ -8,17 +8,39 @@ import { credentialsSchema, expireAfterSchema, includedPositions, isConnectionSt
 describe("account credentials", () => {
   const secret = "only-a-test-encryption-secret-at-least-32-characters";
   const credentials: Credentials = { provider: "binance", apiKey: "test-api-key", apiSecret: "test-api-secret" };
+  const credentialsSecret = "a-separate-credentials-secret-at-least-32-characters";
   test("encrypts with a new IV, authenticates provider, and rejects tampering/rotated keys", () => {
-    const sealed = sealCredentials(credentials, secret);
+    const sealed = sealCredentials(credentials, secret, null);
+    expect(sealed.startsWith("v1.")).toBe(true);
     expect(sealed).not.toContain(credentials.apiSecret);
-    expect(sealCredentials(credentials, secret)).not.toBe(sealed);
-    expect(openCredentials(sealed, "binance", secret)).toEqual(credentials);
-    expect(() => openCredentials(sealed, "ibkr", secret)).toThrow();
-    expect(() => openCredentials(sealed, "binance", secret + "rotated")).toThrow();
+    expect(sealCredentials(credentials, secret, null)).not.toBe(sealed);
+    expect(openCredentials(sealed, "binance", secret, null)).toEqual(credentials);
+    expect(() => openCredentials(sealed, "ibkr", secret, null)).toThrow();
+    expect(() => openCredentials(sealed, "binance", secret + "rotated", null)).toThrow();
     const parts = sealed.split(".");
     parts[3] = (parts[3][0] === "A" ? "B" : "A") + parts[3].slice(1);
-    expect(() => openCredentials(parts.join("."), "binance", secret)).toThrow();
-    expect(() => sealCredentials(credentials, "short")).toThrow();
+    expect(() => openCredentials(parts.join("."), "binance", secret, null)).toThrow();
+    expect(() => sealCredentials(credentials, "short", null)).toThrow();
+  });
+  test("v2 uses the credentials secret alone, so the session secret can rotate", () => {
+    const sealed = sealCredentials(credentials, secret, credentialsSecret);
+    expect(sealed.startsWith("v2.")).toBe(true);
+    expect(openCredentials(sealed, "binance", secret + "rotated", credentialsSecret)).toEqual(credentials);
+    expect(() => openCredentials(sealed, "ibkr", secret, credentialsSecret)).toThrow();
+    expect(() => openCredentials(sealed, "binance", secret, null)).toThrow();
+    expect(() => openCredentials(sealed, "binance", secret, credentialsSecret + "rotated")).toThrow();
+    // Same secret, different version: the keys are derived apart, so a relabelled envelope fails.
+    const sameSecret = sealCredentials(credentials, credentialsSecret, null);
+    expect(() => openCredentials(sameSecret.replace(/^v1\./, "v2."), "binance", secret, credentialsSecret)).toThrow();
+    expect(() => sealCredentials(credentials, secret, "short")).toThrow();
+  });
+  test("v1 envelopes still open with a credentials secret set, and are flagged for re-sealing", () => {
+    const v1 = sealCredentials(credentials, secret, null);
+    expect(openCredentials(v1, "binance", secret, credentialsSecret)).toEqual(credentials);
+    expect(needsReseal(v1, credentialsSecret)).toBe(true);
+    expect(needsReseal(v1, null)).toBe(false);
+    expect(needsReseal(sealCredentials(credentials, secret, credentialsSecret), credentialsSecret)).toBe(false);
+    expect(() => openCredentials(`v3.${v1.slice(3)}`, "binance", secret, credentialsSecret)).toThrow();
   });
   test("IBKR keeps one query ID and drops an older saved history query ID", () => {
     const ibkr = { provider: "ibkr" as const, token: "test-flex-token", queryId: "123" };

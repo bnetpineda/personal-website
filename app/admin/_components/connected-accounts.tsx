@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { computeNetWorth, fxToPhp, knownCost, type FxTable } from "@/lib/finance/calc";
 import { SYNC_PROVIDERS, PROVIDER_META, connectionStatus, needsNewCredentials, plainSyncError, type ConnectionView, type Provider, type SyncProvider } from "@/lib/finance/connections/types";
-import { addMonths, currentMonth, dayLabel, dayRangeLabel, monthLabel, timeAgo } from "@/lib/finance/dates";
+import { addMonths, currentMonth, dayLabel, dayRangeLabel, fullDayLabel, monthLabel, timeAgo } from "@/lib/finance/dates";
 import type { StatementCoverage } from "@/lib/finance/imports/coverage";
 import type { StatementBalance } from "@/lib/finance/statement-balances";
 import { formatQty } from "@/lib/finance/format";
@@ -14,7 +14,7 @@ import { ConnectAccountButton, ConnectionSettings, CredentialExpiryButton, SyncC
 import { FormSheet } from "./form";
 import { ImportMariBankButton, ImportWiseButton } from "./import-controls";
 import { PrivateRegion } from "./shell";
-import { Money } from "./ui";
+import { Money, PrivateFigure } from "./ui";
 
 /** What a bank's uploaded statements cover, so a missing month is easy to spot. */
 /** The bank's state in the same place as a connected account's: is a statement waiting to be uploaded? */
@@ -56,7 +56,8 @@ function BalancesSheet({ connection }: { connection: ConnectionView }) {
               <TableHeader><TableRow><TableHead>Holding</TableHead><TableHead className="text-right">Quantity</TableHead><TableHead className="text-right">Value</TableHead><TableHead className="text-right">Reported cost</TableHead></TableRow></TableHeader>
               <TableBody>{snapshot.positions.map((p) => <TableRow key={p.id}>
                 <TableCell>{p.name}</TableCell>
-                <TableCell className="text-right font-mono"><span className="group-data-[private=true]/shell:blur-sm">{formatQty(p.quantity)}</span></TableCell>
+                {/* Cash is its own value: a quantity would only repeat it with a provider's raw decimals. */}
+                <TableCell className="text-right font-mono">{p.assetClass === "cash" ? <span className="text-muted-foreground">—</span> : <PrivateFigure>{formatQty(p.quantity)}</PrivateFigure>}</TableCell>
                 <TableCell className="text-right font-mono">{p.marketValue == null ? "No price" : <Money value={p.marketValue} currency={p.currency} />}</TableCell>
                 <TableCell className="text-right font-mono">{knownCost(p) == null ? "Not reported" : <Money value={knownCost(p)!} currency={p.currency} />}</TableCell>
               </TableRow>)}</TableBody>
@@ -77,7 +78,7 @@ function ManageSheet({ provider, connection }: { provider: SyncProvider; connect
         <ConnectionSettings provider={provider} enabled={connection.enabled} included={connection.includeInNetWorth} hasSnapshot={Boolean(connection.snapshot)} />
         {provider !== "hyperliquid" && (
           <div className="flex flex-col items-start gap-2">
-            <p className="text-sm text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ? dayLabel(connection.credentialsExpireOn) : "No reminder set"}</p>
+            <p className="text-sm text-muted-foreground">Credential expiry: {connection.credentialsExpireOn ? fullDayLabel(connection.credentialsExpireOn) : "No reminder set"}</p>
             <CredentialExpiryButton provider={provider} expiresOn={connection.credentialsExpireOn} />
           </div>
         )}

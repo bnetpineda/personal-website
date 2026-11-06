@@ -119,7 +119,8 @@ export function SyncConnectionsButton({ provider, disabled = false, compact = fa
   });
   return (
     <div className={cn("flex flex-col items-start gap-1", compact && "relative")}>
-      <Button variant="outline" size="sm" onClick={run} disabled={pending || disabled} aria-label={compact ? (provider ? "Sync now" : "Sync accounts") : undefined}>
+      {/* Each account's button names its account, so a list of them doesn't read as three identical "Sync now"s. */}
+      <Button variant="outline" size="sm" onClick={run} disabled={pending || disabled} aria-label={provider ? `Sync ${PROVIDER_META[provider].name} now` : compact ? "Sync accounts" : undefined}>
         {pending ? <Spinner /> : <RefreshCw />}
         <span className={cn(compact && "hidden 2xl:inline")}>{pending ? "Syncing…" : provider ? "Sync now" : "Sync accounts"}</span>
       </Button>
@@ -141,7 +142,7 @@ export function SyncNowButton({ provider, label = false, disabled = false }: { p
   });
   if (label) {
     return (
-      <Button variant="outline" size="xs" onClick={run} disabled={pending || disabled}>
+      <Button variant="outline" size="xs" onClick={run} disabled={pending || disabled} aria-label={`Sync ${name} now`}>
         {pending ? <Spinner /> : <RefreshCw />}
         {pending ? "Syncing…" : "Sync now"}
       </Button>

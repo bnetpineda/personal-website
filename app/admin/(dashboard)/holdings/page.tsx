@@ -3,20 +3,22 @@ import Link from "next/link";
 import { after } from "next/server";
 import { Button } from "@/components/ui/button";
 import { Swatch } from "@/components/ui/swatch";
-import { getConnections, getFx, getPortfolioSnapshots } from "@/lib/dal";
+import { getConnections, getFx, getPortfolioSnapshots, getSnapshots } from "@/lib/dal";
 import { allocation, computeNetWorth, fxToPhp, isSmallHolding, knownCost, type FxTable } from "@/lib/finance/calc";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
 import { connectionStatus, PROVIDER_META, type ConnectionView, type SyncProvider } from "@/lib/finance/connections/types";
 import { addDays, dayLabel, dayRangeLabel, timeAgo, todayManila } from "@/lib/finance/dates";
-import { getBinanceHoldingCosts } from "@/lib/finance/imports/dal";
+import { getBinanceHoldingCosts, getInvestmentFlows } from "@/lib/finance/imports/dal";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
-import { accountTotals, changeSince, combineChanges, moverRows, profitLossCoverage, snapshotDay, topMovers, withCurrent, type PortfolioPoint } from "@/lib/finance/performance";
+import { RANGES, accountTotals, changeSince, moverRows, profitLossCoverage, snapshotDay, topMovers, withCurrent, type PortfolioPoint } from "@/lib/finance/performance";
 import { portfolioRows, savePortfolioRows } from "@/lib/finance/portfolio";
+import { amountInUsd, combineReturns, marketReturn, returnBase, unitPricesUsd } from "@/lib/finance/returns";
 import { PortfolioSections } from "../../_components/admin-nav";
 import { AllocationChart } from "../../_components/charts";
 import { ConnectedValuationNotice } from "../../_components/connected-accounts";
 import { SyncConnectionsButton } from "../../_components/connection-controls";
 import { ConnectionStatus, HoldingsTable } from "../../_components/holdings-table";
+import { NetWorthHistory } from "../../_components/net-worth-history";
 import { PortfolioAccounts, type PortfolioAccount } from "../../_components/portfolio-accounts";
 import { EmptyState, MissingFxAlert, Money, PageHeader, Panel, Pct, StatCards } from "../../_components/ui";
 
@@ -64,10 +66,12 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
   const showSmall = params.small === "1";
   const filter = ASSET_CLASSES.includes(params.class as AssetClass) ? (params.class as AssetClass) : null;
 
-  const [connections, fx, history] = await Promise.all([getConnections(), getFx(), getPortfolioSnapshots()]);
   const now = new Date();
   const today = todayManila(now);
+  const [connections, fx, history, flowRows, netWorthHistory] = await Promise.all([getConnections(), getFx(), getPortfolioSnapshots(), getInvestmentFlows(addDays(today, -400)), getSnapshots()]);
   const binanceCosts = await getBinanceHoldingCosts(connections.find((c) => c.provider === "binance")?.snapshot ?? null);
+  // Transfers in coins are valued at today's prices, from the accounts' own balances.
+  const prices = unitPricesUsd(connections.flatMap((c) => c.snapshot?.positions ?? []), fx);
 
   // Keep today's point current; balances only change on sync, so this is cheap to repeat.
   after(async () => {
@@ -92,10 +96,16 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       .filter((h) => h.provider === connection.provider)
       .map((h): PortfolioPoint => ({ date: h.snapshotDate, valueUsd: h.valueUsd, pnlUsd: h.pnlUsd }));
     const points = withCurrent(saved, { date: snapshotDay(connection.provider, snapshot.asOf), valueUsd: totals.valueUsd, pnlUsd: totals.pnlUsd });
-    return [{ connection, costs, totals, points, coverage }];
+    const mine = flowRows.filter((f) => f.provider === connection.provider);
+    const flows = mine.flatMap((f) => {
+      const usd = amountInUsd(f.amount, f.currency, prices, fx);
+      return usd == null ? [] : [{ date: f.date, value: toPage(usd) }];
+    });
+    const unpricedFlows = mine.length - flows.length;
+    return [{ connection, costs, totals, points, coverage, flows, unpricedFlows }];
   });
 
-  const accounts: PortfolioAccount[] = tracked.map(({ connection, costs, totals, points, coverage }) => {
+  const accounts: PortfolioAccount[] = tracked.map(({ connection, costs, totals, points, coverage, flows, unpricedFlows }) => {
     const { winners, losers } = topMovers(moverRows(connection.provider, connection.snapshot!.positions, fx, costs));
     const mover = (m: (typeof winners)[number]) => ({ symbol: m.symbol, pnl: toPage(m.pnlUsd), pnlPct: m.pnlPct });
     return {
@@ -118,6 +128,8 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       pnlPct: totals.pnlUsd != null && totals.costUsd ? totals.pnlUsd / totals.costUsd : null,
       pnlPartial: coverage.missing > 0,
       points: points.map((p) => ({ date: p.date, value: toPage(p.valueUsd), pnl: p.pnlUsd == null ? null : toPage(p.pnlUsd) })),
+      flows,
+      unpricedFlows,
       winners: winners.map(mover),
       losers: losers.map(mover),
       note: costNote(connection, fx, costs),
@@ -131,14 +143,20 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
   const missingCosts = tracked.reduce((sum, a) => sum + a.coverage.missing, 0);
   const missingCostValue = tracked.reduce((sum, a) => sum + a.coverage.missingValue, 0);
   const estimatedPnl = withCost.some((a) => a.connection.provider !== "ibkr");
+  // The same 30 days, page currency and transfers as each account card's 1M view, so the cards add up to this.
+  const since = addDays(today, -(RANGES.find((r) => r.value === "1M")?.days ?? 30));
   const changes = tracked.flatMap((a) => {
-    const change = changeSince(a.points.map((p) => ({ date: p.date, value: p.valueUsd })), addDays(today, -30));
-    return change ? [{ change, to: a.points.at(-1)!.date }] : [];
+    const series = a.points.map((p) => ({ date: p.date, value: toPage(p.valueUsd) }));
+    const change = changeSince(series, since);
+    if (!change) return [];
+    const start = { date: change.from, value: change.base }, end = series.at(-1)!;
+    return [{ result: marketReturn(start, end, a.flows), base: returnBase(start, end, a.flows), from: change.from, to: end.date, unpriced: a.unpricedFlows }];
   });
-  const month = combineChanges(changes.map((a) => a.change));
-  const windows = new Set(changes.map((a) => `${a.change.from}|${a.to}`));
-  const periodHint = changes.length < tracked.length ? "Some accounts have no comparison history" : windows.size > 1
-    ? "Account date ranges differ · shown below" : changes.length ? dayRangeLabel(changes[0].change.from, changes[0].to) : "History starts today";
+  const month = combineReturns(changes);
+  const unpricedFlows = changes.reduce((sum, c) => sum + c.unpriced, 0);
+  const windows = new Set(changes.map((a) => `${a.from}|${a.to}`));
+  const periodHint = changes.length < tracked.length ? "Some accounts have no history to compare yet" : windows.size > 1
+    ? `Sum of the ${changes.length} account cards below, each over its own latest 30 days` : changes.length ? dayRangeLabel(changes[0].from, changes[0].to) : "History starts today";
 
   // Visibility is independent of net-worth inclusion; pausing sync keeps the last positions visible.
   const positions = connections.flatMap((connection) =>
@@ -190,9 +208,15 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
             </>,
           },
           {
-            label: "Balance change",
-            value: month ? <Money value={toPage(month.change)} currency={currency} signed /> : "—",
-            hint: month ? <><Pct value={month.pct} /> · includes deposits<span className="mt-1 block">{periodHint}</span></> : "History starts today",
+            // What the investments did by themselves: the balance change minus money moved in or out.
+            label: unpricedFlows > 0 ? "Return · 30 days, partial" : "Return · 30 days",
+            value: month ? <Money value={month.market} currency={currency} signed tone /> : "—",
+            hint: month ? <>
+              <Pct value={month.pct} tone /> · transfers left out
+              <span className="mt-1 block">Balance <Money value={month.change} currency={currency} signed /> · moved in or out <Money value={month.flows} currency={currency} signed /></span>
+              {unpricedFlows > 0 && <span className="mt-1 block">{unpricedFlows} {unpricedFlows === 1 ? "transfer has" : "transfers have"} no price today and {unpricedFlows === 1 ? "is" : "are"} counted as gains</span>}
+              <span className="mt-1 block">{periodHint}</span>
+            </> : "History starts today",
           },
         ]}
       />
@@ -209,6 +233,10 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       ) : (
         <PortfolioAccounts accounts={accounts} currency={currency} today={today} />
       )}
+
+      <div className="mb-6">
+        <NetWorthHistory today={today} points={netWorthHistory.map((s) => ({ date: s.snapshotDate, netWorth: s.netWorthPhp, byClass: s.byClass }))} />
+      </div>
 
       {alloc.length > 0 && (
         <div className="mb-6">

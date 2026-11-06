@@ -11,7 +11,7 @@ import { connectionStatus, PROVIDER_META, type ConnectionView } from "@/lib/fina
 import { formatQty } from "@/lib/finance/format";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { BinanceCostDetails } from "./holding-cost-details";
-import { Money, Pct, TokenAmount } from "./ui";
+import { Money, Pct, PrivateFigure, TokenAmount } from "./ui";
 
 /** One row of the table: a synced balance or position. */
 interface Row {
@@ -92,11 +92,11 @@ export function HoldingsTable({ connections, fx, filter, showSmall, binanceCosts
   </span>;
   const lead = (row: Row) => row.cost ? <BinanceCostDetails cost={row.cost}>{summary(row)}</BinanceCostDetails> : summary(row);
   const cells = (row: Row) => <>
-    <TableCell className="text-right font-mono">{row.quantity == null ? dash : <span className="group-data-[private=true]/shell:blur-sm">{row.quantity}</span>}</TableCell>
+    <TableCell className="text-right font-mono">{row.quantity == null ? dash : <PrivateFigure>{row.quantity}</PrivateFigure>}</TableCell>
     <TableCell className="text-right font-mono">{row.value()}</TableCell>
     <TableCell className="text-right font-mono">{row.pnl ? <span className="flex flex-col items-end">{row.pnl()}<span className="text-xs"><Pct value={row.pnlPct} tone /></span></span> : dash}</TableCell>
   </>;
-  const description = (row: Row) => <>{row.quantity && <span className="group-data-[private=true]/shell:blur-sm">{row.quantity}</span>}{row.quantity && row.meta && " · "}{row.meta}</>;
+  const description = (row: Row) => <>{row.quantity && <PrivateFigure>{row.quantity}</PrivateFigure>}{row.quantity && row.meta && " · "}{row.meta}</>;
   const aside = (row: Row) => <span className="flex flex-col items-end font-mono text-sm">
     {row.value()}
     {row.pnl != null && <span className="text-xs"><Pct value={row.pnlPct} tone /></span>}

@@ -1,13 +1,13 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, like, lt, or } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { accountConnections } from "@/lib/db/schema";
 import { env } from "@/lib/env";
-import { openCredentials } from "./crypto";
+import { needsReseal, openCredentials, sealCredentials } from "./crypto";
 import { fetchAccountSnapshot } from "./providers";
 import { normalizeBinanceSnapshot } from "./binance-positions";
-import { ConnectionError, type ConnectionView, type SyncProvider, type SyncResult } from "./types";
+import { ConnectionError, type ConnectionView, type Credentials, type SyncProvider, type SyncResult } from "./types";
 import { fetchHistory } from "../imports/providers";
 import { ingestEntries } from "../imports/service";
 import { ImportError, type HistoryCoverage } from "../imports/types";
@@ -30,6 +30,49 @@ export async function loadConnectionViews(): Promise<ConnectionView[]> {
   }));
 }
 
+/**
+ * Moves an opened v1 envelope (session-secret key) to v2 (CREDENTIALS_SECRET) once that secret is set.
+ * Only replaces the exact envelope it opened, so a reconnect in the meantime wins. Best effort: never fails a sync.
+ */
+async function resealCredential(provider: SyncProvider, sealed: string, credentials: Credentials): Promise<boolean> {
+  try {
+    const credentialsSecret = env.credentialsSecret() ?? null;
+    if (!needsReseal(sealed, credentialsSecret)) return false;
+    const resealed = sealCredentials(credentials, env.sessionSecret(), credentialsSecret);
+    const updated = await getDb().update(accountConnections).set({ encryptedCredentials: resealed })
+      .where(and(eq(accountConnections.provider, provider), eq(accountConnections.encryptedCredentials, sealed)))
+      .returning({ provider: accountConnections.provider });
+    return updated.length > 0;
+  } catch (error) {
+    console.error(`[admin] ${provider} credential re-encryption failed`, error instanceof Error ? error.message : "unknown error");
+    return false;
+  }
+}
+
+/** Daily cron: re-encrypts any account still on a v1 envelope, synced or not. Returns how many moved to v2. */
+export async function resealAllCredentials(): Promise<number> {
+  try {
+    if (!env.credentialsSecret()) return 0;
+    const rows = await getDb().select({ provider: accountConnections.provider, encryptedCredentials: accountConnections.encryptedCredentials })
+      .from(accountConnections).where(like(accountConnections.encryptedCredentials, "v1.%"));
+    let moved = 0;
+    for (const row of rows) {
+      let credentials;
+      try {
+        credentials = openCredentials(row.encryptedCredentials, row.provider, env.sessionSecret());
+      } catch {
+        console.error(`[admin] ${row.provider} credential could not be opened for re-encryption`);
+        continue;
+      }
+      if (await resealCredential(row.provider, row.encryptedCredentials, credentials)) moved++;
+    }
+    return moved;
+  } catch (error) {
+    console.error("[admin] credential re-encryption failed", error instanceof Error ? error.message : "unknown error");
+    return 0;
+  }
+}
+
 export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
   const db = getDb();
   const lease = randomUUID();
@@ -48,10 +91,11 @@ export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
   try {
     let credentials;
     try {
-      credentials = openCredentials(connection.encryptedCredentials, provider, env.sessionSecret());
+      credentials = openCredentials(connection.encryptedCredentials, provider, env.sessionSecret(), env.credentialsSecret() ?? null);
     } catch {
       throw new ConnectionError("The saved credential could not be unlocked. Reconnect this account.");
     }
+    await resealCredential(provider, connection.encryptedCredentials, credentials);
     const snapshot = await fetchAccountSnapshot(credentials);
     if (connection.snapshot && snapshot.asOf < connection.snapshot.asOf) {
       throw new ConnectionError("The provider returned an older report. The newer saved balances were kept.");

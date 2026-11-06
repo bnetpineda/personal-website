@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Swatch } from "@/components/ui/swatch";
 import { useDashboardFilters } from "./dashboard-filters";
@@ -54,12 +55,20 @@ export function CategoryBreakdown({ expense, income, coverageNote, action }: { e
   );
 }
 
+/** In a busy month the rest fold behind "N more", so the biggest categories are never the ones scrolled out of view. */
+const FOLD_AFTER = 6;
+
 /** A hairline for budget progress; without a budget the percentage says it all and the row stays one line. */
 function Rows({ rows, active, onPick }: { rows: BreakdownItem[]; active: number | null; onPick: (id: number, keyboard: boolean) => void }) {
+  const [expanded, setExpanded] = useState(false);
   const total = rows.reduce((sum, r) => sum + (r.value ?? 0), 0);
+  // Over budget, or the filtered category, always shows, even when folded.
+  const folds = rows.length > FOLD_AFTER + 1;
+  const shown = !folds || expanded ? rows : rows.filter((row, i) => i < FOLD_AFTER || row.id === active || (row.budget != null && row.value != null && row.value > row.budget));
+  const hidden = rows.length - shown.length;
   return (
     <ul className="flex flex-col">
-      {rows.map((row) => {
+      {shown.map((row) => {
         const budget = row.budget != null && row.budget > 0 ? row.budget : null;
         const ratio = row.value == null ? null : budget ? row.value / budget : total > 0 ? row.value / total : 0;
         const variant = budget && ratio != null ? (ratio > 1 ? "destructive" : ratio >= 0.85 ? "warning" : "default") : "default";
@@ -105,6 +114,13 @@ function Rows({ rows, active, onPick }: { rows: BreakdownItem[]; active: number 
           </li>
         );
       })}
+      {folds && (hidden > 0 || expanded) && (
+        <li>
+          <Button variant="subtle" size="xs" className="-mx-2" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+            {expanded ? "Show fewer" : `${hidden} more`}
+          </Button>
+        </li>
+      )}
     </ul>
   );
 }

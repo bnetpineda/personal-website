@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { SlidersHorizontal, TriangleAlert } from "lucide-react";
@@ -6,15 +7,18 @@ import { Button } from "@/components/ui/button";
 import {
   SEARCH_LIMIT,
   getAccounts,
+  getAiSummary,
   getCashFlows,
   getCategories,
   getCategoryTotals,
   getConnections,
-  getEntrySuggestions,
+  getDebts,
   getFx,
   getImportedIncome,
   getLastEntryDefaults,
   getLatestPortfolioSnapshots,
+  getManualAccounts,
+  getMonthBudgets,
   getMonthlyTotals,
   getPeriodTotals,
   getRecordedMonths,
@@ -24,7 +28,7 @@ import {
   getStatementImports,
   getTeachGroups,
 } from "@/lib/dal";
-import { computeNetWorth, monthlySeries, savingsRate } from "@/lib/finance/calc";
+import { computeNetWorth, fxToPhp, holdingMetrics, monthBudget, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, connectionStatus, includedPositions, isConnectionStale, needsNewCredentials } from "@/lib/finance/connections/types";
 import { dashboardMonth } from "@/lib/finance/dashboard";
@@ -35,8 +39,10 @@ import { getNotifications } from "@/lib/finance/notifications-dal";
 import { dueOccurrences } from "@/lib/finance/recurrence";
 import { importedIncomeSince, repeatIncomeByMonth, repeatPayers, typicalIncome } from "@/lib/finance/repeat-income";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
+import { env } from "@/lib/env";
 import { statementPositions } from "@/lib/finance/statement-balances";
 import { ActivityFeed, type ActivityEntry } from "../../_components/activity-feed";
+import { AiSummaryPanel } from "../../_components/ai-summary";
 import { AddEntry } from "../../_components/add-entry";
 import { BudgetsForm } from "../../_components/budgets-form";
 import type { FormCategory } from "../../_components/cash-flow-form";
@@ -61,6 +67,8 @@ type Params = { month?: string; q?: string; kind?: string; category?: string; ad
 
 /** A statement balance older than this reads as out of date next to net worth. */
 const STALE_BALANCE_DAYS = 40;
+/** A value or debt balance typed in by hand this long ago is worth updating. */
+const STALE_MANUAL_DAYS = 60;
 
 /**
  * Everything on one screen: net worth and the month's numbers on top, then what needs you,
@@ -99,11 +107,14 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     teach,
     statements,
     notifications,
-    suggestions,
     lastExpense,
     lastIncome,
     selectedPeriod,
     previousPeriod,
+    manual,
+    debts,
+    monthBudgets,
+    feedback,
   ] = await Promise.all([
     getConnections(),
     getFx(),
@@ -121,11 +132,14 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     getTeachGroups(),
     getStatementImports(),
     getNotifications(),
-    getEntrySuggestions(),
     getLastEntryDefaults("expense"),
     getLastEntryDefaults("income"),
     comparison?.monthToDate ? getPeriodTotals(comparison.selected.start, comparison.selected.end) : null,
     comparison?.monthToDate ? getPeriodTotals(comparison.previous.start, comparison.previous.end) : null,
+    getManualAccounts(),
+    getDebts(),
+    getMonthBudgets(month),
+    getAiSummary(),
   ]);
 
   // Backfill today's history point after responding, in case the daily cron hasn't run yet.
@@ -137,11 +151,14 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     }
   });
 
+  const aiConfigured = Boolean(env.aiGatewayApiKey());
   const formCategories: Record<CashFlowKind, FormCategory[]> = { expense: [], income: [] };
   for (const c of allCategories) formCategories[c.kind].push({ id: c.id, name: c.name, color: c.color, archived: c.archived });
 
   // ---- net worth, and how fresh each of its sources is ----
-  const nw = computeNetWorth([], [], fx, [...includedPositions(connections), ...statementPositions(balances)]);
+  const owned = manual.filter((h) => !h.archived);
+  const owed = debts.filter((l) => !l.archived);
+  const nw = computeNetWorth(owned, owed, fx, [...includedPositions(connections), ...statementPositions(balances)]);
   const missingBalances = missingBalanceProviders(statements, balances);
   const monthAgo = [...snapshots].reverse().find((s) => s.snapshotDate <= addDays(today, -30));
   const change = monthAgo ? nw.netWorthPhp - monthAgo.netWorthPhp : null;
@@ -161,6 +178,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       .map((c) => `${PROVIDER_META[c.provider].name} ${c.lastSyncedAt ? timeAgo(c.lastSyncedAt, now).replace(" ago", "") : "never synced"}`),
     ...banks.filter((b) => daysBetween(b.asOf, today) > STALE_BALANCE_DAYS).map((b) => `${PROVIDER_META[b.provider].name} ${shortDayLabel(b.asOf)}`),
     ...missingBalances.map((p) => `${PROVIDER_META[p].name} missing`),
+    ...owned.filter((h) => daysBetween(todayManila(h.priceUpdatedAt ?? h.updatedAt), today) > STALE_MANUAL_DAYS).map((h) => `${h.name} ${shortDayLabel(todayManila(h.priceUpdatedAt ?? h.updatedAt))}`),
+    ...owed.filter((l) => daysBetween(todayManila(l.updatedAt), today) > STALE_MANUAL_DAYS).map((l) => `${l.name} ${shortDayLabel(todayManila(l.updatedAt))}`),
   ];
   const excluded = connections.filter((c) => !c.includeInNetWorth && c.snapshot).map((c) => PROVIDER_META[c.provider].name);
 
@@ -227,17 +246,17 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const breakdown = (k: CashFlowKind): BreakdownItem[] => {
     const totals = k === "expense" ? expenseTotals : incomeTotals;
     return allCategories
-      .filter((c) => c.kind === k && ((totals.get(c.id) ?? 0) > 0 || (k === "expense" && !c.archived && (c.monthlyBudget ?? 0) > 0)))
+      .filter((c) => c.kind === k && ((totals.get(c.id) ?? 0) > 0 || (k === "expense" && !c.archived && (monthBudget(c, monthBudgets) ?? 0) > 0)))
       .map((c) => {
         const value = totals.get(c.id) ?? 0;
-        return { id: c.id, label: c.name, color: c.color, value: provisional && value === 0 ? null : value, budget: k === "expense" ? c.monthlyBudget : null };
+        return { id: c.id, label: c.name, color: c.color, value: provisional && value === 0 ? null : value, budget: k === "expense" ? monthBudget(c, monthBudgets) : null };
       })
       .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
   };
   const budgetsSheet = (
     <FormSheet
-      title="Monthly budget defaults"
-      description="These category defaults apply across all months, not just the month on screen. Amounts are in PHP; leave blank for no budget."
+      title="Budgets"
+      description="Set defaults for every month, or budgets for just the month on screen. Amounts are in PHP."
       trigger={
         <Button variant="ghost" size="sm">
           <SlidersHorizontal /> Budgets
@@ -248,7 +267,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         month={month}
         categories={allCategories
           .filter((c) => c.kind === "expense" && !c.archived)
-          .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, spent: expenseTotals.get(c.id) ?? 0 }))}
+          .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, override: monthBudgets.has(c.id) ? (monthBudgets.get(c.id) ?? null) : undefined, spent: expenseTotals.get(c.id) ?? 0 }))}
       />
     </FormSheet>
   );
@@ -278,7 +297,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       key: b.provider,
       name: PROVIDER_META[b.provider].name,
       href: `/admin/connections#${b.provider}`,
-      description: `${daysBetween(b.asOf, today) > STALE_BALANCE_DAYS ? "Old statement" : "Statement"} · ${shortDayLabel(b.asOf)}`,
+      description: `${daysBetween(b.asOf, today) > STALE_BALANCE_DAYS ? "Statement due" : "Statement"} · ${shortDayLabel(b.asOf)}`,
       inNetWorth: true,
       attention: daysBetween(b.asOf, today) > STALE_BALANCE_DAYS,
       value: b.total.netWorthPhp,
@@ -293,6 +312,35 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       value: null,
       pnlPct: null,
     })),
+    // Entered by hand: as current as their last edit, which the row says.
+    ...owned.map((h): AccountRow => {
+      const valuePhp = holdingMetrics(h, fx).valuePhp;
+      const day = todayManila(h.priceUpdatedAt ?? h.updatedAt);
+      return {
+        key: `manual:${h.id}`,
+        name: h.name,
+        href: "/admin/connections#manual",
+        description: `${daysBetween(day, today) > STALE_MANUAL_DAYS ? "Value due" : "Entered by hand"} · ${shortDayLabel(day)}`,
+        attention: daysBetween(day, today) > STALE_MANUAL_DAYS,
+        inNetWorth: true,
+        value: valuePhp,
+        pnlPct: null,
+      };
+    }),
+    ...owed.map((l): AccountRow => {
+      const rate = fxToPhp(fx, l.currency);
+      const day = todayManila(l.updatedAt);
+      return {
+        key: `debt:${l.id}`,
+        name: l.name,
+        href: "/admin/connections#debts",
+        description: `${daysBetween(day, today) > STALE_MANUAL_DAYS ? "Balance due" : "Debt"} · ${shortDayLabel(day)}`,
+        attention: daysBetween(day, today) > STALE_MANUAL_DAYS,
+        inNetWorth: true,
+        value: rate == null ? null : -l.balance * rate,
+        pnlPct: null,
+      };
+    }),
   ];
 
   // ---- activity ----
@@ -341,7 +389,6 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             viewedMonth={month}
             categories={formCategories}
             accounts={accounts}
-            suggestions={suggestions}
             defaults={{ expense: entryDefaults(lastExpense), income: entryDefaults(lastIncome) }}
           />
         </div>
@@ -358,10 +405,12 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             value: outOfDate.length ? <>≈ <Money value={nw.netWorthPhp} compact /></> : <Money value={nw.netWorthPhp} />,
             detail: (
               <>
-                <p>The latest synced balances plus the most recent bank statement balances{outOfDate.length > 0 && <>: exactly <Money value={nw.netWorthPhp} /></>}. It doesn&apos;t change with the month you&apos;re viewing.</p>
-                {change != null && <p>The change since {shortDayLabel(trendFrom)} includes deposits and withdrawals. An account that hasn&apos;t synced can&apos;t add to it, so it reflects the accounts that have.</p>}
+                <p>The latest synced balances, the most recent bank statement balances and the accounts you entered by hand, minus your debts{outOfDate.length > 0 && <>: exactly <Money value={nw.netWorthPhp} /></>}. It doesn&apos;t change with the month you&apos;re viewing.</p>
+                {(owed.length > 0 || nw.liabilitiesPhp > 0) && <p>Owned <Money value={nw.assetsPhp} />, owed <Money value={nw.liabilitiesPhp} />.</p>}
+                {change != null && <p>The change since {shortDayLabel(trendFrom)} counts every peso in or out: pay, spending and deposits as well as market moves. For investments alone, see the Return on Portfolio. An account that hasn&apos;t synced can&apos;t add to it.</p>}
                 {outOfDate.length > 0 && <div><p className="font-medium">Out of date or missing</p><ul className="list-inside list-disc">{outOfDate.map((source) => <li key={source}>{source}</li>)}</ul></div>}
                 {excluded.length > 0 && <p>Left out of this total by your own setting: {excluded.join(", ")}. Change it in Accounts → Manage.</p>}
+                <p><Link href="/admin/holdings#net-worth" className="underline underline-offset-4">Net worth over time</Link>, by month and by asset class.</p>
               </>
             ),
             // The 30-day change once there is that much history; then what in the total is out of date.
@@ -369,7 +418,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
               <>
                 {change != null && (
                   <span>
-                    <Money value={change} signed compact={outOfDate.length > 0} /> since {shortDayLabel(monthAgo!.snapshotDate)}, deposits included
+                    <Money value={change} signed compact={outOfDate.length > 0} /> since {shortDayLabel(monthAgo!.snapshotDate)}, all money in and out
                   </span>
                 )}
                 {outOfDate.length > 0 ? (
@@ -429,10 +478,11 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             {
               label: `Net · ${monthLabel(month, "short")}`,
               shortLabel: "Net",
-              unknown: recorded.net == null,
+              // A net needs both sides: until every statement is in, it waits instead of showing a partial difference.
+              unknown: recorded.net == null || provisional,
               provisional,
-              value: recorded.net == null ? <span aria-label="Net unknown: incomplete records">—</span> : <Money value={recorded.net} signed tone={!provisional} />,
-              chart: <MiniBars label="Recorded net" tone points={bars(recordedSeries.map((p) => ({ ...p, value: p.net })))} highlight={month} />,
+              value: recorded.net == null || provisional ? <span aria-label="Net unknown: incomplete records">—</span> : <Money value={recorded.net} signed tone />,
+              chart: <MiniBars label="Recorded net" tone points={bars(recordedSeries.map((p) => ({ ...p, value: p.incomplete ? null : p.net })))} highlight={month} />,
               historyLabel: "12-month history",
               detail: (
                 <>
@@ -441,7 +491,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                 </>
               ),
               hint:
-                recorded.net == null ? "Net unknown · missing records" : provisional ? "Recorded net · incomplete records" : rate != null ? (
+                recorded.net == null ? "Net unknown · missing records" : provisional ? "Waits for every statement" : rate != null ? (
                   <span>
                     Saved <Pct value={rate} />
                     {month === current && " so far"}
@@ -471,7 +521,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             coverageNote={coverageNote}
             lastRecordedMonth={lastRecordedMonth}
             today={today}
-            categories={allCategories.map(({ id, kind, name, color, monthlyBudget }) => ({ id, kind, name, color, monthlyBudget }))}
+            categories={allCategories.map((c) => ({ id: c.id, kind: c.kind, name: c.name, color: c.color, monthlyBudget: monthBudget(c, monthBudgets) }))}
             formCategories={formCategories}
             accounts={accounts}
             totals={{
@@ -481,9 +531,23 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             }}
           />
           <AccountsPanel rows={accountRows} className="min-w-0 xl:col-span-3 xl:col-start-1 xl:row-span-5 xl:row-start-5 xl:min-h-0" />
-          <Panel fill scroll={false} title="Cash flow" action={historyAction} toolbar={<p className="text-xs text-muted-foreground">12 months · recorded totals; gaps mean missing data.</p>} className="min-w-0 md:col-span-2 xl:col-span-3 xl:col-start-10 xl:row-span-9 xl:row-start-1 xl:min-h-40">
-            {history}
-          </Panel>
+          {/*
+            The right column: AI feedback takes the height its few lines need, so it never scrolls; the
+            chart stretches into whatever is left.
+          */}
+          <div className="flex min-w-0 flex-col gap-3 md:col-span-2 xl:col-span-3 xl:col-start-10 xl:row-span-9 xl:row-start-1 xl:min-h-0">
+            <Panel fill scroll={false} title="Cash flow" action={historyAction} toolbar={<p className="text-xs text-muted-foreground">12 months · recorded totals; gaps mean missing data.</p>} className="min-w-0 xl:min-h-40 xl:flex-1">
+              {history}
+            </Panel>
+            {/* Under the chart it reads: what the numbers above add up to, and what to do about them. */}
+            <AiSummaryPanel
+              summary={feedback?.summary ?? null}
+              updated={feedback ? `Updated ${timeAgo(feedback.createdAt, now)}` : null}
+              model={feedback?.model ?? null}
+              configured={aiConfigured}
+              className="min-w-0 shrink-0"
+            />
+          </div>
         </div>
       </main>
     </>

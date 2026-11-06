@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
 import { verifyPassword } from "@/lib/auth/password";
 import { clientIpHash, isLockedOut, recordLoginAttempt } from "@/lib/auth/rate-limit";
-import { createSession, deleteSession } from "@/lib/auth/session";
+import { bumpSessionEpoch, createSession, deleteSession, requireAdmin } from "@/lib/auth/session";
 
 export interface LoginState {
   error?: string;
@@ -37,6 +37,14 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 }
 
 export async function logout(): Promise<void> {
+  await deleteSession();
+  redirect("/admin/login");
+}
+
+/** Revokes every session, this one included: other devices are asked for the password on their next request. */
+export async function signOutEverywhere(): Promise<void> {
+  await requireAdmin();
+  await bumpSessionEpoch();
   await deleteSession();
   redirect("/admin/login");
 }

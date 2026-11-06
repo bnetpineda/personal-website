@@ -5,7 +5,9 @@ import { getDb } from "@/lib/db";
 import {
   cashFlows,
   categories,
+  categoryBudgets,
   fxRates,
+  goals,
   holdings,
   liabilities,
   netWorthSnapshots,
@@ -24,7 +26,8 @@ import { addMonths, monthRange } from "@/lib/finance/dates";
 import { IMPORTER_NOTE_PATTERNS } from "@/lib/finance/notes";
 import { statementCoverage } from "@/lib/finance/imports/coverage";
 import { teachGroups } from "@/lib/finance/imports/teach";
-import { loadFxTable } from "@/lib/finance/service";
+import { currentNetWorth, loadFxTable } from "@/lib/finance/service";
+import { latestAiSummary } from "@/lib/finance/ai-summary-service";
 import { loadConnectionViews } from "@/lib/finance/connections/service";
 
 /*
@@ -272,6 +275,42 @@ export async function getImportedIncome(since: string) {
     .where(and(eq(cashFlows.kind, "income"), gte(cashFlows.occurredOn, since)));
 }
 
+/** Things you own that no account syncs, archived ones last. Only unarchived ones count in net worth. */
+export async function getManualAccounts() {
+  await requireAdmin();
+  return getDb().select().from(holdings).orderBy(asc(holdings.archived), asc(holdings.name));
+}
+
+/** Credit cards, loans and other debts, archived ones last. Only unarchived ones count in net worth. */
+export async function getDebts() {
+  await requireAdmin();
+  return getDb().select().from(liabilities).orderBy(asc(liabilities.archived), desc(liabilities.balance));
+}
+
+/** A month's own budgets by category; null means "no budget this month". Categories missing from it use their default. */
+export async function getMonthBudgets(month: string): Promise<Map<number, number | null>> {
+  await requireAdmin();
+  const rows = await getDb().select({ categoryId: categoryBudgets.categoryId, amount: categoryBudgets.amount }).from(categoryBudgets).where(eq(categoryBudgets.month, month));
+  return new Map(rows.map((r) => [r.categoryId, r.amount]));
+}
+
+/** The Overview's latest AI feedback, or null before the first one. */
+export async function getAiSummary() {
+  await requireAdmin();
+  return latestAiSummary();
+}
+
+export async function getGoals() {
+  await requireAdmin();
+  return getDb().select().from(goals).orderBy(asc(goals.archived), asc(goals.sortOrder), asc(goals.createdAt));
+}
+
+/** Net worth right now, the same total the Overview shows (debts and manual accounts included). */
+export async function getNetWorthNow() {
+  await requireAdmin();
+  return currentNetWorth();
+}
+
 export async function getSnapshots() {
   await requireAdmin();
   return getDb().select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate));
@@ -297,7 +336,7 @@ export async function getLatestPortfolioSnapshots() {
 export async function getExportData() {
   await requireAdmin();
   const db = getDb();
-  const [h, l, c, f, s, p, x, r, connections, imports, rules, dismissals, reports, historyStreams] = await Promise.all([
+  const [h, l, c, f, s, p, x, r, connections, imports, rules, dismissals, reports, historyStreams, g, b] = await Promise.all([
     db.select().from(holdings).orderBy(asc(holdings.createdAt)),
     db.select().from(liabilities).orderBy(asc(liabilities.createdAt)),
     db.select().from(categories).orderBy(asc(categories.id)),
@@ -312,6 +351,8 @@ export async function getExportData() {
     db.select().from(notificationDismissals),
     db.select().from(investmentReports).orderBy(asc(investmentReports.createdAt)),
     db.select().from(investmentSyncs).orderBy(asc(investmentSyncs.createdAt)),
+    db.select().from(goals).orderBy(asc(goals.sortOrder), asc(goals.createdAt)),
+    db.select().from(categoryBudgets).orderBy(asc(categoryBudgets.month), asc(categoryBudgets.categoryId)),
   ]);
-  return { holdings: h, liabilities: l, categories: c, cashFlows: f, recurring: r, netWorthSnapshots: s, portfolioSnapshots: p, fxRates: x, connections, importedEntries: imports, categoryRules: rules, notificationDismissals: dismissals, investmentReports: reports, investmentSyncs: historyStreams };
+  return { holdings: h, liabilities: l, categories: c, cashFlows: f, recurring: r, netWorthSnapshots: s, portfolioSnapshots: p, fxRates: x, connections, importedEntries: imports, categoryRules: rules, notificationDismissals: dismissals, investmentReports: reports, investmentSyncs: historyStreams, goals: g, categoryBudgets: b };
 }

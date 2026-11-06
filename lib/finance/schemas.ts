@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CASH_FLOW_KINDS, CURRENCIES, RECURRENCE_FREQUENCIES } from "./constants";
+import { ASSET_CLASSES, CASH_FLOW_KINDS, CURRENCIES, GOAL_MEASURES, LIABILITY_KINDS, RECURRENCE_FREQUENCIES } from "./constants";
 import { defaultSecondDay } from "./recurrence";
 
 /*
@@ -101,6 +101,53 @@ export const categorySchema = z.object({
   monthlyBudget: optionalAmount(),
 });
 export type CategoryInput = z.output<typeof categorySchema>;
+
+/** A debt: credit card, loan, buy now pay later. Its balance is taken off net worth. */
+export const liabilitySchema = z.object({
+  kind: z.enum(LIABILITY_KINDS, { error: "Pick a type" }),
+  name: text(120, "Name is required"),
+  lender: optionalText(80),
+  balance: amount("Enter the current balance"),
+  currency,
+  creditLimit: optionalAmount(),
+  interestRate: z.preprocess(toNumber, z.number({ error: "Enter a number" }).min(0, "Can't be negative").max(1000, "Too large").optional()),
+  dueDay: z.preprocess(toNumber, z.number({ error: "Enter a day" }).int("Whole day only").min(1, "Use a day from 1 to 31").max(31, "Use a day from 1 to 31").optional()),
+  minPayment: optionalAmount(),
+  notes: optionalText(500),
+});
+export type LiabilityInput = z.output<typeof liabilitySchema>;
+
+/** Something you own that no account syncs: cash at home, a car, property, a fund elsewhere. */
+export const manualAccountSchema = z.object({
+  name: text(120, "Name is required"),
+  assetClass: z.enum(ASSET_CLASSES, { error: "Pick a type" }),
+  value: amount("Enter what it's worth today"),
+  currency,
+  platform: optionalText(80),
+  notes: optionalText(500),
+});
+export type ManualAccountInput = z.output<typeof manualAccountSchema>;
+
+export const goalSchema = z
+  .object({
+    name: text(80, "Name the goal"),
+    measure: z.enum(GOAL_MEASURES, { error: "Pick what it tracks" }),
+    target: amount("Enter a target").refine((n) => n > 0, "Must be more than 0"),
+    saved: optionalAmount(),
+    targetOn: z.preprocess(blank, z.iso.date({ error: "Pick a date" }).optional()),
+  })
+  .superRefine((v, ctx) => {
+    if (v.measure === "emergency_fund" && v.target > 36) ctx.addIssue({ code: "custom", path: ["target"], message: "Use a number of months, up to 36" });
+    if (v.measure === "manual" && v.saved == null) ctx.addIssue({ code: "custom", path: ["saved"], message: "Enter how much is saved so far" });
+  });
+export type GoalInput = z.output<typeof goalSchema>;
+
+/** One category's budget for one month; blank means "no budget this month". */
+export const monthBudgetSchema = z.object({
+  categoryId: z.coerce.number().int().positive(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  amount: optionalAmount(),
+});
 
 /* ---------- form state ---------- */
 

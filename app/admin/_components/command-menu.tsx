@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Coins,
+  CreditCard,
   Download,
   Eye,
   EyeOff,
@@ -22,6 +23,7 @@ import {
   Search,
   Settings,
   Sun,
+  Target,
   Wallet,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
@@ -39,8 +41,10 @@ const PAGES = [
   { href: "/admin/holdings", label: "Portfolio", icon: Wallet },
   { href: "/admin/earnings", label: "Portfolio earnings", icon: Coins },
   { href: "/admin/history", label: "Portfolio history", icon: History },
+  { href: "/admin/goals", label: "Goals", icon: Target },
   { href: "/admin/recurring", label: "Recurring", icon: Repeat },
   { href: "/admin/connections", label: "Accounts", icon: Landmark },
+  { href: "/admin/connections#debts", label: "Debts and other accounts", icon: CreditCard },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;
 

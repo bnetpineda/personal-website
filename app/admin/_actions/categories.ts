@@ -1,12 +1,13 @@
 "use server";
 
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { pgCode } from "@/lib/db/errors";
-import { cashFlows, categories, recurringCashFlows } from "@/lib/db/schema";
-import { categorySchema, failure, invalid, type FormState } from "@/lib/finance/schemas";
+import { cashFlows, categories, categoryBudgets, recurringCashFlows } from "@/lib/db/schema";
+import { isMonth, monthLabel } from "@/lib/finance/dates";
+import { categorySchema, failure, invalid, monthBudgetSchema, type FormState } from "@/lib/finance/schemas";
 
 export async function saveCategory(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireAdmin();
@@ -78,6 +79,45 @@ export async function deleteCategory(id: number): Promise<FormState> {
   }
   revalidatePath("/admin", "layout");
   return { ok: true, message: "Deleted." };
+}
+
+/**
+ * One month's budgets, replacing the defaults for that month only: fields named `month:<categoryId>`.
+ * Blank goes back to the category's default; 0 means no budget this month.
+ */
+export async function updateMonthBudgets(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireAdmin();
+  const month = formData.get("month");
+  if (typeof month !== "string" || !isMonth(month)) return failure("Pick a month.", formData);
+
+  const set: { categoryId: number; amount: number | null }[] = [];
+  const cleared: number[] = [];
+  const errors: Record<string, string[]> = {};
+  for (const [key, value] of formData) {
+    if (!key.startsWith("month:") || typeof value !== "string") continue;
+    const parsed = monthBudgetSchema.safeParse({ categoryId: key.slice("month:".length), month, amount: value });
+    if (!parsed.success) {
+      errors[key] = ["Enter a valid amount"];
+      continue;
+    }
+    if (value.trim() === "") cleared.push(parsed.data.categoryId);
+    else set.push({ categoryId: parsed.data.categoryId, amount: parsed.data.amount === 0 ? null : (parsed.data.amount ?? null) });
+  }
+  if (Object.keys(errors).length > 0) return failure("Fix the highlighted budgets.", formData, errors);
+
+  const db = getDb();
+  const expense = new Set((await db.select({ id: categories.id }).from(categories).where(eq(categories.kind, "expense"))).map((c) => c.id));
+  const writes = [
+    ...set.filter((s) => expense.has(s.categoryId)).map((s) =>
+      db.insert(categoryBudgets).values({ categoryId: s.categoryId, month, amount: s.amount })
+        .onConflictDoUpdate({ target: [categoryBudgets.categoryId, categoryBudgets.month], set: { amount: s.amount, updatedAt: new Date() } })),
+    ...(cleared.length ? [db.delete(categoryBudgets).where(and(eq(categoryBudgets.month, month), inArray(categoryBudgets.categoryId, cleared)))] : []),
+  ];
+  if (writes.length === 0) return { ok: true, message: "No changes." };
+  const [first, ...rest] = writes;
+  await db.batch([first, ...rest]);
+  revalidatePath("/admin", "layout");
+  return { ok: true, message: `Saved ${monthLabel(month)}'s budgets.` };
 }
 
 /** All expense budgets in one form: fields named `budget:<categoryId>`; blank clears a budget. */

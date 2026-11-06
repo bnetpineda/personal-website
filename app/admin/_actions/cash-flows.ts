@@ -44,6 +44,12 @@ export async function getAddEntryData(): Promise<AddEntryData> {
   };
 }
 
+/** The Overview preloads the rest of the Add sheet; only past entries to suggest from wait until it opens. */
+export async function getAddEntrySuggestions() {
+  await requireAdmin();
+  return getEntrySuggestions();
+}
+
 export async function saveCashFlow(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireAdmin();
 

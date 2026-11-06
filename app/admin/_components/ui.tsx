@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { addMonths, monthLabel } from "@/lib/finance/dates";
 import { formatMoney, formatPct } from "@/lib/finance/format";
 import { LinkIcon } from "./link-icon";
+import { Masked } from "./privacy";
 
 /* Admin building blocks composed from components/ui. Server-safe (no hooks). */
 
@@ -38,7 +39,16 @@ export function Money({
         tone && value < 0 && "text-destructive group-data-[private=true]/shell:text-foreground"
       )}
     >
-      {formatMoney(value, currency, { signed, compact })}
+      <Masked text={formatMoney(value, currency, { signed, compact })} />
+    </span>
+  );
+}
+
+/** A private figure that isn't a money amount (a coin quantity): blurred and dotted out with Hide amounts. */
+export function PrivateFigure({ children }: { children: string }) {
+  return (
+    <span className="tabular-nums transition group-data-[private=true]/shell:blur-sm">
+      <Masked text={children} />
     </span>
   );
 }
@@ -48,7 +58,7 @@ export function Pct({ value, tone = false, lowerIsBetter = false }: { value: num
   const improvement = lowerIsBetter ? -value : value;
   return (
     <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm group-data-[variant=primary]/card:text-primary-foreground", tone && improvement > 0 && "text-success group-data-[private=true]/shell:text-foreground", tone && improvement < 0 && "text-destructive group-data-[private=true]/shell:text-foreground")}>
-      {formatPct(value, { signed: tone })}
+      <Masked text={formatPct(value, { signed: tone })} />
     </span>
   );
 }
@@ -69,8 +79,8 @@ export function TokenAmount({ value, currency, signed = false, tone = false }: {
   value: number; currency: string; signed?: boolean; tone?: boolean;
 }) {
   return <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm", tone && value > 0 && "text-success", tone && value < 0 && "text-destructive")}>
-    {value.toLocaleString("en-US", { signDisplay: signed ? "exceptZero" : "auto", ...(value !== 0 && Math.abs(value) < 1
-      ? { minimumSignificantDigits: 2, maximumSignificantDigits: 4 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })} {currency}
+    <Masked text={`${value.toLocaleString("en-US", { signDisplay: signed ? "exceptZero" : "auto", ...(value !== 0 && Math.abs(value) < 1
+      ? { minimumSignificantDigits: 2, maximumSignificantDigits: 4 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })} ${currency}`} />
   </span>;
 }
 

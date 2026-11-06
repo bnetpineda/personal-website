@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
-import { getCategories, getCategoryTotals, getCategoryUsage } from "@/lib/dal";
+import { getCategories, getCategoryTotals, getCategoryUsage, getMonthBudgets } from "@/lib/dal";
 import { PROVIDER_META } from "@/lib/finance/connections/types";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { currentMonth } from "@/lib/finance/dates";
@@ -14,7 +14,9 @@ import { BudgetsForm } from "../../_components/budgets-form";
 import { CategoryForm } from "../../_components/category-form";
 import { FormSheet } from "../../_components/form";
 import { AddRuleButton, RuleToggle } from "../../_components/import-controls";
+import { RestoreBackup } from "../../_components/restore-backup";
 import { EditableRow } from "../../_components/row-actions";
+import { SignOutEverywhere } from "../../_components/sign-out-everywhere";
 import { Money, PageHeader, Panel } from "../../_components/ui";
 
 export const metadata: Metadata = {
@@ -23,11 +25,12 @@ export const metadata: Metadata = {
 
 export default async function SettingsPage() {
   const month = currentMonth();
-  const [categories, usage, spent, rules] = await Promise.all([
+  const [categories, usage, spent, rules, monthBudgets] = await Promise.all([
     getCategories(),
     getCategoryUsage(),
     getCategoryTotals("expense", month),
     getCategoryRules(),
+    getMonthBudgets(month),
   ]);
 
   const categoryList = (kind: CashFlowKind) => (
@@ -75,7 +78,7 @@ export default async function SettingsPage() {
     <FormSheet
       title={kind === "expense" ? "New expense category" : "New income category"}
       trigger={
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" aria-label={kind === "expense" ? "Add spending category" : "Add income category"}>
           <Plus /> Add
         </Button>
       }
@@ -94,8 +97,8 @@ export default async function SettingsPage() {
           action={
             <div className="flex items-center gap-2">
               <FormSheet
-                title="Monthly budget defaults"
-                description="These category defaults apply across all months. Amounts are in PHP; leave blank for no budget."
+                title="Budgets"
+                description="Set defaults for every month, or budgets for this month only. Amounts are in PHP."
                 trigger={
                   <Button variant="ghost" size="sm">
                     <SlidersHorizontal /> Budgets
@@ -106,7 +109,7 @@ export default async function SettingsPage() {
                   month={month}
                   categories={categories
                     .filter((c) => c.kind === "expense" && !c.archived)
-                    .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, spent: spent.get(c.id) ?? 0 }))}
+                    .map((c) => ({ id: c.id, name: c.name, budget: c.monthlyBudget, override: monthBudgets.has(c.id) ? (monthBudgets.get(c.id) ?? null) : undefined, spent: spent.get(c.id) ?? 0 }))}
                 />
               </FormSheet>
               {addButton("expense")}
@@ -138,7 +141,7 @@ export default async function SettingsPage() {
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
-                    <RuleToggle id={r.id} enabled={r.enabled} />
+                    <RuleToggle id={r.id} enabled={r.enabled} name={r.contains} />
                   </ItemActions>
                 </Item>
               ))}
@@ -150,12 +153,26 @@ export default async function SettingsPage() {
       <div className="mt-6">
         <Panel title="Backup">
           <div className="flex flex-col items-start gap-4">
-            <p className="text-sm text-muted-foreground">Download everything as a JSON file. Grab a copy now and then.</p>
-            <Button asChild variant="outline">
-              <a href="/admin/export" download>
-                <Download /> Export JSON
-              </a>
-            </Button>
+            <p className="text-sm text-muted-foreground">
+              Download everything as a JSON file. Grab a copy now and then. Restoring one only adds what&apos;s missing.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline">
+                <a href="/admin/export" download>
+                  <Download /> Export JSON
+                </a>
+              </Button>
+              <RestoreBackup />
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="mt-6">
+        <Panel title="Sign-in">
+          <div className="flex flex-col items-start gap-4">
+            <p className="text-sm text-muted-foreground">Lost a phone or signed in somewhere shared? End every session, this one included.</p>
+            <SignOutEverywhere />
           </div>
         </Panel>
       </div>

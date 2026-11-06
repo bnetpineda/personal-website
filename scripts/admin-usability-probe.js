@@ -87,7 +87,7 @@
     /** Open, and done sliding in: an occluded browser window doesn't tick animations, and the snapshot skips what's off screen. */
     dialog: async () => {
       if (!(await dialogOpen())) return false;
-      await evaluate(() => document.getAnimations().forEach((a) => a.finish()));
+      await evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* A looping animation, like a loading skeleton, has no end. */ } }));
       await sleep(200);
       return true;
     },
@@ -314,7 +314,7 @@
     await open("/admin");
     await page.click((await find(ADD, ["button"])).ref);
     // Let the sheet finish sliding in, as a person would, before typing into it.
-    await evaluate(() => document.getAnimations().forEach((a) => a.finish()));
+    await evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* A looping animation, like a loading skeleton, has no end. */ } }));
     await sleep(400);
     await page.fill((await find(/^amount$/i, FIELD)).ref, "abc");
     r.addAnother = (await controls()).some((c) => /add another/i.test(c.name));
@@ -348,7 +348,7 @@
     await sleep(300);
     // An occluded browser window produces no frames, so exit animations never report ending. Skip only that wait.
     await evaluate(() => {
-      document.getAnimations().forEach((a) => a.finish());
+      document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* A looping animation, like a loading skeleton, has no end. */ } });
       document.querySelectorAll("[data-state=closed]").forEach((el) => el.dispatchEvent(new AnimationEvent("animationend", { animationName: getComputedStyle(el).animationName })));
     });
     await sleep(300);
