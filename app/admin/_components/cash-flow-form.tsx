@@ -170,7 +170,7 @@ function CashFlowFields({
         <Field data-invalid={error("categoryId") ? true : undefined} className="sm:col-span-2">
           <FieldLabel id={id("category")}>Category</FieldLabel>
           {options.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No {expense ? "expense" : "income"} categories yet — add one in Settings.</p>
+            <p className="text-sm text-muted-foreground">No {expense ? "expense" : "income"} categories yet — add one from Manage categories.</p>
           ) : (
             <ToggleGroup
               type="single"

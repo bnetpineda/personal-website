@@ -31,7 +31,7 @@ Start each from `/admin`. Note clicks, what you tried first, and any moment you 
 9. Hide all amounts, confirm they are hidden, show them again.
 10. On two pages other than the Overview, is it obvious where you are and how to get elsewhere?
 
-Then look at every main page once: Overview, Portfolio with its Earnings and History views, Recurring, Accounts, Settings.
+Then look at every main page once: Overview, Portfolio with its Earnings and History views, Recurring, Accounts, and Categories (from the Overview's By category panel).
 
 ## Report
 

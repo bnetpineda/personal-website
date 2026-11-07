@@ -158,9 +158,13 @@ components without re-applying these (`--overwrite` replaces the house style).
 - **Fit at laptop size**: at 1440x900 every category and account shows without scrolling inside its panel (rows use dense `Item size="2xs"` and `Progress thin`); longer lists scroll with a visible scrollbar.
 - **History reads first**: activity with account, type and word filters; imports and cost estimates live in sheets from the page header.
 - **Say how sure a figure is**: recorded entries keep the rate from when they were recorded, while a total worked out at today's rate is labelled an estimate; with out-of-date sources, net worth reads "latest known" and "≈" with the exact sum in its detail; figures built on incomplete records are muted; nothing scheduled is a dash, not a zero.
-- **Always visible navigation**: Overview, Portfolio, Recurring, Accounts and Settings are labelled links on
+- **Always visible navigation**: Overview, Portfolio, Recurring and Accounts are labelled links on
   every page: a rail from `lg`, a bottom bar below that. ⌘K is the fast way, never the only way. Accounts
-  is the name everywhere (the route stays `/admin/connections`). Every page has Add in its header, opening in
+  is the name everywhere (the route stays `/admin/connections`). There is no Settings page: categories and
+  merchant rules live on `/admin/categories`, opened from the By category panel's Manage categories button
+  (and ⌘K), with Budgets beside it on the Overview; backup, restore, Sign out everywhere and Log out sit in
+  the account menu (`AccountMenu`: the rail's bottom on desktop, More on phones). Old `/admin/settings`
+  links redirect to Categories. Every page has Add in its header, opening in
   place: the Overview preloads its data, other pages fetch it when opened (`AddEntryAnywhere`, and `NeedsYouAnywhere` for Needs you).
 - **Quiet by default**: the headline tiles keep the hard border and offset shadow; panels are
   `Card variant="quiet"` (via `Panel fill`). Things that need a decision live behind the header's

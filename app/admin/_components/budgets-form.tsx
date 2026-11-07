@@ -36,7 +36,7 @@ export function BudgetsForm({ categories, month }: { categories: BudgetRowDTO[];
   const short = monthLabel(month, "short");
 
   if (categories.length === 0) {
-    return <EmptyState title="No expense categories">Add categories in Settings first.</EmptyState>;
+    return <EmptyState title="No expense categories">Add some first, from Manage categories.</EmptyState>;
   }
 
   return (

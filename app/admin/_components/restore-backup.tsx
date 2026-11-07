@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { Upload } from "lucide-react";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
-import { Sheet, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { MAX_UPLOAD_BYTES } from "@/lib/finance/backup-limits";
 import { previewRestore, restoreFromBackup, type RestorePreview } from "../_actions/backup";
@@ -24,9 +23,16 @@ async function backupFormData(file: File): Promise<FormData> {
   return formData;
 }
 
-/** Settings -> Backup: check a backup file, then add what's missing after a confirm. Never overwrites or deletes. */
-export function RestoreBackup() {
-  const [open, setOpen] = useState(false);
+/**
+ * Account menu → Restore from backup: check a backup file, then add what's missing after a confirm.
+ * Never overwrites or deletes. Opened by the menu (no trigger of its own).
+ */
+export function RestoreBackup({ open, onOpenChange, onCloseAutoFocus }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Without a trigger of its own, the opener says where focus goes back to. */
+  onCloseAutoFocus?: (event: Event) => void;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [upload, setUpload] = useState<FormData | null>(null);
   const [preview, setPreview] = useState<RestorePreview | null>(null);
@@ -40,7 +46,7 @@ export function RestoreBackup() {
     setConfirming(false);
   };
   const change = (next: boolean) => {
-    setOpen(next);
+    onOpenChange(next);
     if (!next) reset();
   };
 
@@ -79,18 +85,14 @@ export function RestoreBackup() {
   const fresh = preview?.fresh ?? 0;
   return (
     <Sheet open={open} onOpenChange={change}>
-      <SheetTrigger asChild>
-        <Button variant="outline">
-          <Upload /> Restore from backup
-        </Button>
-      </SheetTrigger>
       <FormSheetContent
         title="Restore from backup"
         description="Adds what's missing from an exported JSON file. Nothing already here is changed or deleted, and account credentials are never part of a backup."
         onClose={() => change(false)}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         <form onSubmit={check} className="flex flex-col gap-6">
-          <FormField id="restore-backup" label="Backup file" error={error} description="A finance-export JSON downloaded from this page.">
+          <FormField id="restore-backup" label="Backup file" error={error} description="A finance-export JSON from Export a backup.">
             <Input id="restore-backup" name="backup" type="file" accept=".json,application/json" required disabled={pending}
               aria-invalid={Boolean(error)} onChange={() => { setPreview(null); setUpload(null); setError(undefined); }} />
           </FormField>

@@ -1,15 +1,22 @@
 "use client";
 
 import { useTransition } from "react";
-import { LogOut } from "lucide-react";
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { signOutEverywhere } from "../_actions/auth";
 import { notify } from "./form";
 
-/** Settings: revoke every session (a lost phone, a shared computer). Ends with this device at the login page. */
-export function SignOutEverywhere() {
+/**
+ * Account menu → Sign out everywhere: revoke every session (a lost phone, a shared computer). Ends with
+ * this device at the login page. Opened by the menu (no trigger of its own).
+ */
+export function SignOutEverywhere({ open, onOpenChange, onCloseAutoFocus }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Without a trigger of its own, the opener says where focus goes back to. */
+  onCloseAutoFocus?: (event: Event) => void;
+}) {
   const [pending, startTransition] = useTransition();
   const run = () => startTransition(async () => {
     // Success redirects to the login page.
@@ -20,13 +27,8 @@ export function SignOutEverywhere() {
     }
   });
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline" disabled={pending}>
-          <LogOut /> Sign out everywhere
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
+    <AlertDialog open={open} onOpenChange={(next) => { if (!pending) onOpenChange(next); }}>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>Sign out on every device?</AlertDialogTitle>
           <AlertDialogDescription>

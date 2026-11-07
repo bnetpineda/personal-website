@@ -34,7 +34,7 @@ describe("dashboard navigation", () => {
     expect(isNavActive("/admin/holdings", "/admin/earnings")).toBe(true);
     expect(isNavActive("/admin/holdings", "/admin/history")).toBe(true);
     expect(isNavActive("/admin/holdings", "/admin/goals")).toBe(true);
-    expect(isNavActive("/admin", "/admin/settings")).toBe(false);
+    expect(isNavActive("/admin", "/admin/categories")).toBe(false);
     expect(isNavActive("/admin", "/admin")).toBe(true);
     expect(isNavActive("/admin/recurring", "/admin/holdings")).toBe(false);
   });

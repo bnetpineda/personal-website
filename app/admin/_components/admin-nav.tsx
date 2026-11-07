@@ -1,24 +1,25 @@
 "use client";
 
-import { useTransition } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, Landmark, LogOut, Moon, MoreHorizontal, Repeat, Settings, Sun, Wallet, type LucideIcon } from "lucide-react";
+import { CircleUserRound, Download, House, Landmark, LogOut, MonitorSmartphone, Moon, MoreHorizontal, Repeat, Sun, Upload, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { logout } from "../_actions/auth";
 import { isNavActive, NAV_DESTINATIONS, PORTFOLIO_SECTIONS } from "./nav";
+import { RestoreBackup } from "./restore-backup";
+import { SignOutEverywhere } from "./sign-out-everywhere";
 
 const ICONS: Record<(typeof NAV_DESTINATIONS)[number]["href"], LucideIcon> = {
   "/admin": House,
   "/admin/holdings": Wallet,
   "/admin/recurring": Repeat,
   "/admin/connections": Landmark,
-  "/admin/settings": Settings,
 };
 
 /** One destination: icon over its name, the same in the side rail and the phone's bottom bar. */
@@ -56,18 +57,82 @@ export function SideNav() {
       </nav>
       <div className="mt-auto mb-3 flex flex-col items-center gap-1">
         <ThemeToggle />
-        <form action={logout}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button type="submit" variant="ghost" size="icon" aria-label="Log out">
-                <LogOut />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Log out</TooltipContent>
-          </Tooltip>
-        </form>
+        <AccountMenu side="right" align="end" tooltip="Backup and sign-in">
+          <Button variant="ghost" size="icon" aria-label="Backup and sign-in">
+            <CircleUserRound />
+          </Button>
+        </AccountMenu>
       </div>
     </aside>
+  );
+}
+
+/**
+ * What used to fill a Settings page, none of it needed often: backup, restore, ending every session,
+ * and log out. Its dialogs open once the menu has closed, and have no trigger of their own, so
+ * closing one hands focus back to the menu's button.
+ */
+function AccountMenu({ side, align, tooltip, before, children }: {
+  side?: "right" | "bottom";
+  align?: "start" | "end";
+  tooltip?: string;
+  /** Items above the account ones (the phone's theme switch). */
+  before?: ReactNode;
+  children: ReactNode;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [dialog, setDialog] = useState<"restore" | "sign-out" | null>(null);
+  const next = useRef<typeof dialog>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const returnFocus = (event: Event) => {
+    event.preventDefault();
+    triggerRef.current?.focus();
+  };
+  const trigger = (
+    <DropdownMenuTrigger asChild ref={triggerRef}>
+      {children}
+    </DropdownMenuTrigger>
+  );
+  return (
+    <>
+      <DropdownMenu>
+        {tooltip ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+            <TooltipContent side={side}>{tooltip}</TooltipContent>
+          </Tooltip>
+        ) : (
+          trigger
+        )}
+        <DropdownMenuContent
+          side={side}
+          align={align}
+          onCloseAutoFocus={() => {
+            if (next.current) setDialog(next.current);
+            next.current = null;
+          }}
+        >
+          {before}
+          <DropdownMenuItem asChild>
+            <a href="/admin/export" download>
+              <Download /> Export a backup
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => { next.current = "restore"; }}>
+            <Upload /> Restore from backup…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => { next.current = "sign-out"; }}>
+            <MonitorSmartphone /> Sign out everywhere…
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={pending} onSelect={() => startTransition(async () => { await logout(); })}>
+            <LogOut /> Log out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <RestoreBackup open={dialog === "restore"} onOpenChange={(open) => setDialog(open ? "restore" : null)} onCloseAutoFocus={returnFocus} />
+      <SignOutEverywhere open={dialog === "sign-out"} onOpenChange={(open) => setDialog(open ? "sign-out" : null)} onCloseAutoFocus={returnFocus} />
+    </>
   );
 }
 
@@ -80,27 +145,26 @@ export function BottomNav() {
   );
 }
 
-/** Theme and log out, for screens without the rail. */
+/** Theme, backup and sign-in, for screens without the rail. */
 export function MoreMenu() {
   const { resolvedTheme, setTheme } = useTheme();
-  const [pending, startTransition] = useTransition();
   return (
     <div className="lg:hidden">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="More options">
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
-            {resolvedTheme === "dark" ? <Sun /> : <Moon />} Use {resolvedTheme === "dark" ? "light" : "dark"} theme
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={pending} onSelect={() => startTransition(async () => { await logout(); })}>
-            <LogOut /> Log out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <AccountMenu
+        align="end"
+        before={
+          <>
+            <DropdownMenuItem onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
+              {resolvedTheme === "dark" ? <Sun /> : <Moon />} Use {resolvedTheme === "dark" ? "light" : "dark"} theme
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        }
+      >
+        <Button variant="ghost" size="icon" aria-label="More options">
+          <MoreHorizontal />
+        </Button>
+      </AccountMenu>
     </div>
   );
 }

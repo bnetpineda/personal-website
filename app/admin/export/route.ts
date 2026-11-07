@@ -4,7 +4,7 @@ import { statementBalances } from "@/lib/db/schema";
 import { getExportData } from "@/lib/dal";
 import { todayManila } from "@/lib/finance/dates";
 
-/** JSON backup of every finance table (auth-checked inside getExportData). Restored by Settings -> Backup. */
+/** JSON backup of every finance table (auth-checked inside getExportData). Restored from the account menu's Restore from backup. */
 export async function GET() {
   const data = await getExportData();
   // Bank statement balances count as cash in net worth; queried after getExportData's auth check.

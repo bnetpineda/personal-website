@@ -21,8 +21,8 @@ import {
   RefreshCw,
   Repeat,
   Search,
-  Settings,
   Sun,
+  Tags,
   Target,
   Wallet,
 } from "lucide-react";
@@ -45,12 +45,12 @@ const PAGES = [
   { href: "/admin/recurring", label: "Recurring", icon: Repeat },
   { href: "/admin/connections", label: "Accounts", icon: Landmark },
   { href: "/admin/connections#debts", label: "Debts and other accounts", icon: CreditCard },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
+  { href: "/admin/categories", label: "Categories and rules", icon: Tags },
 ] as const;
 
 const noSubscribe = () => () => {};
 
-/** The same download as Settings → Backup (a route handler that sends the file). */
+/** The same download as the account menu's Export a backup (a route handler that sends the file). */
 function downloadBackup() {
   const link = document.createElement("a");
   link.href = "/admin/export";

@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { SlidersHorizontal, Tags, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   SEARCH_LIMIT,
   getAccounts,
@@ -271,6 +272,22 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       />
     </FormSheet>
   );
+  // Adding, renaming or archiving categories, and merchant rules, live on their own page.
+  const categoriesAction = (
+    <>
+      {budgetsSheet}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button asChild variant="ghost" size="icon-sm">
+            <Link href="/admin/categories" aria-label="Manage categories">
+              <Tags />
+            </Link>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Manage categories</TooltipContent>
+      </Tooltip>
+    </>
+  );
 
   // ---- accounts: synced connections (each with its own sync), then banks by their latest statement ----
   const saved = new Map(portfolio.map((p) => [p.provider, p]));
@@ -510,7 +527,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         */}
         <div className="grid gap-3 md:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-12 xl:grid-rows-9">
           <div className="min-w-0 xl:col-span-3 xl:row-span-4 xl:min-h-0">
-            <CategoryBreakdown expense={breakdown("expense")} income={breakdown("income")} coverageNote={coverageNote} action={budgetsSheet} />
+            <CategoryBreakdown expense={breakdown("expense")} income={breakdown("income")} coverageNote={coverageNote} action={categoriesAction} />
           </div>
           <ActivityFeed
             className="min-w-0 scroll-mt-20 md:col-span-2 xl:col-span-6 xl:row-span-9 xl:min-h-0"

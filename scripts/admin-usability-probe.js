@@ -15,7 +15,7 @@
 /* eslint-disable-next-line @typescript-eslint/no-unused-expressions */
 (async (browser, page, inputs = {}) => {
   const BASE = inputs.base ?? "http://localhost:4101";
-  const PAGE_PATHS = { overview: "/admin", portfolio: "/admin/holdings", earnings: "/admin/earnings", history: "/admin/history", recurring: "/admin/recurring", accounts: "/admin/connections", settings: "/admin/settings" };
+  const PAGE_PATHS = { overview: "/admin", portfolio: "/admin/holdings", earnings: "/admin/earnings", history: "/admin/history", recurring: "/admin/recurring", accounts: "/admin/connections", categories: "/admin/categories" };
 
   let phone = false;
   const setViewport = async (viewport) => {
@@ -134,7 +134,7 @@
       [{ c: /^open navigation/i, r: ["button"], tries: 2 }, { exists: name, r: ["option"] }, { count: 1 }],
     ],
   });
-  const PORTFOLIO = /^portfolio\b/i, RECURRING = /^recurring\b/i, ACCOUNTS = /^(accounts|connected accounts|connections)\b/i, SETTINGS = /^settings$/i;
+  const PORTFOLIO = /^portfolio\b/i, RECURRING = /^recurring\b/i, ACCOUNTS = /^(accounts|connected accounts|connections)\b/i, CATEGORIES = /^(manage categories|categories and rules)$/i;
   const ADD = /^\+?\s*add$/i;
   const NEEDS = /^needs you/i;
   const seeMonth = (viewport) => ({ start: "/admin", viewport, paths: [[{ check: "kpis" }], [{ exists: /^view .*20\d\d$/i, r: LINK }, { count: 1 }]] });
@@ -151,7 +151,7 @@
     "go-portfolio": nav(PORTFOLIO, /\/admin\/holdings/, "desktop"),
     "go-recurring": nav(RECURRING, /\/admin\/recurring/, "desktop"),
     "go-accounts": nav(ACCOUNTS, /\/admin\/connections/, "desktop"),
-    "go-settings": nav(SETTINGS, /\/admin\/settings/, "desktop"),
+    "manage-categories": nav(CATEGORIES, /\/admin\/categories/, "desktop"),
     "reach-earnings": { start: "/admin", viewport: "desktop", paths: [[{ c: /^earnings$/i, r: LINK }, { at: /\/admin\/earnings/ }], [{ c: PORTFOLIO, r: LINK }, { at: /holdings/ }, { c: /^earnings$/i, r: LINK }, { at: /\/admin\/earnings/ }]] },
     "add-expense": { start: "/admin", viewport: "desktop", paths: [[{ c: ADD, r: ["button"] }, { check: "dialog" }, { f: /^amount$/i, r: FIELD, v: "1" }, { exists: /^(?!expense$|income$|today$|yesterday$|all$|spent$|earned$|spending$).+/i, r: ["radio"] }, { count: 1 }, { exists: /^add expense$/i, r: ["button"] }, { count: 1 }]] },
     "add-anywhere": addAnywhere("desktop"),
@@ -168,7 +168,6 @@
     "p-go-portfolio": nav(PORTFOLIO, /\/admin\/holdings/, "phone"),
     "p-go-recurring": nav(RECURRING, /\/admin\/recurring/, "phone"),
     "p-go-accounts": nav(ACCOUNTS, /\/admin\/connections/, "phone"),
-    "p-go-settings": nav(SETTINGS, /\/admin\/settings/, "phone"),
     "p-add-anywhere": addAnywhere("phone"),
     "p-explain-alert": explainAlert("phone"),
     "p-search-entry": searchEntry("phone"),
@@ -232,7 +231,7 @@
   };
 
   const pageMetrics = () => {
-    const DEST = { "/admin": /overview/i, "/admin/holdings": /portfolio/i, "/admin/recurring": /recurring/i, "/admin/connections": /accounts|connections/i, "/admin/settings": /settings/i };
+    const DEST = { "/admin": /overview/i, "/admin/holdings": /portfolio/i, "/admin/recurring": /recurring/i, "/admin/connections": /accounts|connections/i };
     const shown = (el) => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return r.width > 1 && r.height > 1 && s.visibility !== "hidden" && s.display !== "none"; };
     const inView = (el) => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
     const words = (t) => t.split(/\s+/).filter(Boolean).length;
@@ -287,7 +286,7 @@
 
   /** Scrolls down a long page: a persistent nav is still on screen. */
   const navAfterScroll = () => {
-    const DEST = { "/admin": 1, "/admin/holdings": 1, "/admin/recurring": 1, "/admin/connections": 1, "/admin/settings": 1 };
+    const DEST = { "/admin": 1, "/admin/holdings": 1, "/admin/recurring": 1, "/admin/connections": 1 };
     window.scrollTo(0, document.documentElement.scrollHeight);
     const visible = [...document.querySelectorAll("header a[href], nav a[href], aside a[href]")].filter((a) => {
       const r = a.getBoundingClientRect();
@@ -533,7 +532,7 @@
     await setViewport("desktop");
     await open("/admin");
     const times = [];
-    for (const name of [/^portfolio\b/i, /^settings$/i, /^recurring\b/i, /^overview\b/i]) {
+    for (const name of [/^portfolio\b/i, ACCOUNTS, /^recurring\b/i, /^overview\b/i]) {
       await evaluate(() => {
         const heading = () => document.querySelector("main h1")?.innerText;
         const from = location.pathname, before = heading();

@@ -1,13 +1,16 @@
 /** Cookie holding the privacy-blur preference; read on the server so there's no flash of numbers. */
 export const PRIVACY_COOKIE = "adm_private";
 
-/** The admin's main destinations, always visible (side rail on wide screens, bottom bar below that). */
+/**
+ * The admin's main destinations, always visible (side rail on wide screens, bottom bar below that).
+ * Categories is reached from the Overview's By category panel and ⌘K; backup and sign-in from the
+ * account menu.
+ */
 export const NAV_DESTINATIONS = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/holdings", label: "Portfolio" },
   { href: "/admin/recurring", label: "Recurring" },
   { href: "/admin/connections", label: "Accounts" },
-  { href: "/admin/settings", label: "Settings" },
 ] as const;
 
 export const PORTFOLIO_SECTIONS = [

@@ -34,7 +34,7 @@ export const TASKS = {
   "go-portfolio": { label: "Go to Portfolio", budget: 1 },
   "go-recurring": { label: "Go to Recurring", budget: 1 },
   "go-accounts": { label: "Go to Accounts", budget: 1 },
-  "go-settings": { label: "Go to Settings", budget: 1 },
+  "manage-categories": { label: "Open category management", budget: 1 },
   "reach-earnings": { label: "Reach Earnings", budget: 2 },
   "add-expense": { label: "Add an expense", budget: 4 },
   "add-anywhere": { label: "Start adding from another page", budget: 1 },
@@ -53,7 +53,6 @@ export const TASKS = {
   "p-go-portfolio": { label: "Phone: go to Portfolio", budget: 1 },
   "p-go-recurring": { label: "Phone: go to Recurring", budget: 1 },
   "p-go-accounts": { label: "Phone: go to Accounts", budget: 1 },
-  "p-go-settings": { label: "Phone: go to Settings", budget: 1 },
   "p-add-anywhere": { label: "Phone: start adding from another page", budget: 1 },
   "p-explain-alert": { label: "Phone: read why an account needs attention", budget: 1 },
   "p-search-entry": { label: "Phone: find a past entry by word", budget: 3 },
@@ -103,12 +102,12 @@ export interface ColdTest {
   remaining: string[];
 }
 
-export const PAGES = ["overview", "portfolio", "earnings", "history", "recurring", "accounts", "settings"] as const;
+export const PAGES = ["overview", "portfolio", "earnings", "history", "recurring", "accounts", "categories"] as const;
 export type PageId = (typeof PAGES)[number];
-const DESTINATIONS = 5;
+const DESTINATIONS = 4;
 
 export interface PageMetrics {
-  /** Primary destinations reachable from here by a visible, labelled, persistent link (of 5). */
+  /** Primary destinations reachable from here by a visible, labelled, persistent link (of 4). */
   labelledDestinations: number;
   currentMarked: boolean;
   addReachable: boolean;

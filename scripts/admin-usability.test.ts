@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { AREAS, PAGES, RECOVERY_CHECKS, TASKS, TRUST_CHECKS, linear, overallScore, scoreUsability, taskScore, type ColdTest, type Measurement, type PageMetrics, type TaskId } from "./admin-usability";
 
 const easyPage: PageMetrics = {
-  labelledDestinations: 5, currentMarked: true, addReachable: true, proseWords: 100, longParagraphs: 0, jargonHits: 0, rawDates: 0,
+  labelledDestinations: 4, currentMarked: true, addReachable: true, proseWords: 100, longParagraphs: 0, jargonHits: 0, rawDates: 0,
   clippedText: 0, overflow: false, tapTargets: 20, tapTargetsOk: 20, navStaysVisible: true,
 };
 
