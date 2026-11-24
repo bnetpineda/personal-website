@@ -73,6 +73,7 @@ export function DueList({ due, today, categories, accounts, size = "sm" }: DuePr
             <DueActions
               name={r.description}
               occurrence={{ id: r.id, on: date }}
+              cursor={r.nextOn}
               onSkip={skipRecurring.bind(null, r.id, date)}
               form={
                 <CashFlowForm
@@ -101,7 +102,8 @@ export function DueList({ due, today, categories, accounts, size = "sm" }: DuePr
 
 /** Posts every due occurrence at its saved amount. */
 export function PostAllDue({ due }: { due: Occurrence<RecurringRow>[] }) {
-  return <PostAllButton occurrences={due.map(({ item, date }) => ({ id: item.id, on: date }))} />;
+  const cursors = [...new Map(due.map(({ item }) => [item.id, { id: item.id, nextOn: item.nextOn }])).values()];
+  return <PostAllButton occurrences={due.map(({ item, date }) => ({ id: item.id, on: date }))} cursors={cursors} />;
 }
 
 /**

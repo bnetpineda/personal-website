@@ -43,7 +43,7 @@ export function restoreRowFocus(target: RowFocusReturn | null, event: Event): vo
   if (event.defaultPrevented) return;
   event.preventDefault();
   if (!target) return;
-  const { trigger, href, main, next, previous } = target;
+  const { trigger, href, main } = target;
   const doc = trigger.ownerDocument;
   // A route change can unmount the row before Next has finished managing the new page's focus.
   if (doc.location.href !== href || (main && !main.isConnected)) return;

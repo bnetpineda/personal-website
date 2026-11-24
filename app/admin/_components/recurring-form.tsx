@@ -15,6 +15,7 @@ import {
 import { todayManila } from "@/lib/finance/dates";
 import { saveRecurring } from "../_actions/recurring";
 import { FormField, FormFooter, useFormAction } from "./form";
+import { backfillNote } from "./recurring-backfill";
 
 export interface RecurringDTO {
   id: string;
@@ -47,6 +48,9 @@ export function RecurringForm({
   const { state, pending, onSubmit, formKey, error } = useFormAction(saveRecurring);
   const [frequency, setFrequency] = useState<RecurrenceFrequency>(item?.frequency ?? "monthly");
   const [ends, setEnds] = useState(item?.endOn ? "on" : "never");
+  const [startOn, setStartOn] = useState(item?.startOn ?? todayManila());
+  const [endOn, setEndOn] = useState(item?.endOn ?? "");
+  const [posting, setPosting] = useState(item && !item.autoPost ? "confirm" : "auto");
   const uid = useId();
   const id = (name: string) => `${uid}-${name}`;
   const expense = kind === "expense";
@@ -111,9 +115,13 @@ export function RecurringForm({
           id={id("start")}
           label={item ? "Starts" : "First date"}
           error={error("startOn")}
-          description={item ? "Changes apply to upcoming entries." : "Pick a past date to fill in entries since then."}
+          description={
+            item
+              ? "Changes apply to upcoming entries."
+              : (backfillNote({ frequency, startOn, endOn: ends === "on" ? endOn || null : null }, today, posting === "auto") ?? "Pick a past date to fill in entries since then.")
+          }
         >
-          <DatePicker id={id("start")} name="startOn" defaultValue={item?.startOn ?? today} today={today} aria-invalid={Boolean(error("startOn"))} />
+          <DatePicker id={id("start")} name="startOn" value={startOn} onValueChange={setStartOn} today={today} aria-invalid={Boolean(error("startOn"))} />
         </FormField>
         {frequency === "semimonthly" && (
           <FormField id={id("second")} label="Second day" error={error("secondDay")} description="The other day each month, e.g. 15th & 30th.">
@@ -155,7 +163,7 @@ export function RecurringForm({
           </datalist>
         </FormField>
         <FormField id={id("posting")} label="When it's due" error={error("posting")}>
-          <Select name="posting" defaultValue={item && !item.autoPost ? "confirm" : "auto"}>
+          <Select name="posting" value={posting} onValueChange={setPosting}>
             <SelectTrigger id={id("posting")} className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -178,7 +186,7 @@ export function RecurringForm({
         </FormField>
         {ends === "on" && (
           <FormField id={id("end")} label="Last date" error={error("endOn")}>
-            <DatePicker id={id("end")} name="endOn" defaultValue={item?.endOn ?? undefined} today={today} aria-invalid={Boolean(error("endOn"))} />
+            <DatePicker id={id("end")} name="endOn" value={endOn} onValueChange={setEndOn} today={today} aria-invalid={Boolean(error("endOn"))} />
           </FormField>
         )}
         <FormField id={id("notes")} label="Notes" error={error("notes")} wide>

@@ -72,7 +72,7 @@ export function GoalForm({ goal }: { goal?: GoalDTO }) {
           <Input id={id("target")} name="target" inputMode="decimal" placeholder={measure === "emergency_fund" ? "6" : undefined} defaultValue={state.values?.target ?? goal?.target} aria-invalid={Boolean(error("target"))} />
         </FormField>
         <FormField id={id("targetOn")} label="By" error={error("targetOn")} description="Optional: shows what to save each month">
-          <DatePicker id={id("targetOn")} name="targetOn" value={targetOn} onValueChange={setTargetOn} />
+          <DatePicker id={id("targetOn")} name="targetOn" value={targetOn} onValueChange={setTargetOn} clearable placeholder="No date" />
         </FormField>
         {measure === "manual" && (
           <FormField id={id("saved")} label="Saved so far, in PHP" error={error("saved")} wide>
