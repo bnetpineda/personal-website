@@ -98,6 +98,19 @@ export const fxRates = pgTable("fx_rates", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** The provider's PHP rate on a past day, so an entry dated then converts at that day's rate. A refetchable cache. */
+export const fxRateHistory = pgTable(
+  "fx_rate_history",
+  {
+    currency: varchar("currency", { length: 3 }).notNull(),
+    /** Reference date published by the FX provider. */
+    on: date("on").notNull(),
+    /** PHP per 1 unit of `currency` on that day. */
+    rateToPhp: decimal("rate_to_php").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.currency, t.on] }), check("fx_rate_history_rate_positive", sql`${t.rateToPhp} > 0`)]
+);
+
 export const categories = pgTable(
   "categories",
   {
@@ -176,6 +189,8 @@ export const recurringCashFlows = pgTable(
     endOn: date("end_on"),
     /** Oldest occurrence not yet posted, confirmed or skipped; null once the schedule has ended. */
     nextOn: date("next_on"),
+    /** Occurrences after `next_on` already posted or skipped out of order, so they stop showing as due. */
+    handledOn: date("handled_on").array().notNull().default(sql`'{}'::date[]`),
     /** true: post entries automatically on their date; false: wait for confirmation (variable bills). */
     autoPost: boolean("auto_post").notNull().default(true),
     paused: boolean("paused").notNull().default(false),
@@ -320,9 +335,13 @@ export const importedEntries = pgTable("imported_entries", {
   aiSuggestion: text("ai_suggestion").$type<AiSuggestion>(),
   // Set once the model has seen the entry, so scheduled runs never pay to re-ask.
   aiAttemptedAt: timestamp("ai_attempted_at", { withTimezone: true }),
+  // The logged entry (by hand or from a schedule) this import matched as "already in Transactions".
+  // Unique, so one logged entry can stand in for one import only.
+  twinCashFlowId: uuid("twin_cash_flow_id").references((): AnyPgColumn => cashFlows.id, { onDelete: "set null" }),
   ...timestamps,
 }, (t) => [
   uniqueIndex("imported_entries_source_unique").on(t.provider, t.accountKey, t.externalId),
+  uniqueIndex("imported_entries_twin_unique").on(t.twinCashFlowId),
   index("imported_entries_status_date_idx").on(t.status, t.occurredOn),
   index("imported_entries_transfer_idx").on(t.transferId),
   index("imported_entries_binance_trades_idx").on(t.accountKey, t.updatedAt).where(sql`${t.provider} = 'binance' and ${t.trade} is not null`),

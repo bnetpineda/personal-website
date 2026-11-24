@@ -7,7 +7,7 @@ import { allowedDecisions, buildCategorizePrompt, buildEvaluationQuestion, evalu
 
 const entry = (overrides: Partial<ImportedEntry> = {}): ImportedEntry => ({ id: crypto.randomUUID(), provider: "wise", accountKey: "personal", externalId: "CARD-1:USD:out",
   occurredOn: "2026-09-20", amount: -15, currency: "USD", kind: "payment", description: "Spotify premium", realizedPnl: null,
-  status: "pending", categoryId: null, transferId: null, trade: null, categorizedBy: null, aiReason: null, aiSuggestion: null, aiAttemptedAt: null,
+  status: "pending", categoryId: null, transferId: null, trade: null, categorizedBy: null, aiReason: null, aiSuggestion: null, aiAttemptedAt: null, twinCashFlowId: null,
   createdAt: new Date(), updatedAt: new Date(), ...overrides });
 const category = (overrides: Partial<Category> = {}): Category => ({ id: 1, kind: "expense", name: "Subscriptions", color: "#FF4D50", monthlyBudget: null,
   sortOrder: 0, archived: false, createdAt: new Date(), updatedAt: new Date(), ...overrides });

@@ -141,6 +141,13 @@
       "when": 1795557603341,
       "tag": "0019_gotyme_provider",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795561026045,
+      "tag": "0020_dated_fx_twins_handled",
+      "breakpoints": true
     }
   ]
 }

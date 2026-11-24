@@ -38,7 +38,8 @@ const liabilityRow = z.object({
 const recurringRow = z.object({
   id: uuid, kind: z.enum(CASH_FLOW_KINDS), amount: amount.positive(), currency, categoryId, description: z.string(), account: maybe(z.string()),
   notes: maybe(z.string()), frequency: z.enum(RECURRENCE_FREQUENCIES), startOn: day, secondDay: maybe(z.number().int().min(1).max(31)),
-  endOn: maybe(day), nextOn: maybe(day), autoPost: z.boolean().default(true), paused: z.boolean().default(false), ...timestamps,
+  endOn: maybe(day), nextOn: maybe(day), handledOn: z.array(day).max(500).default([]), autoPost: z.boolean().default(true),
+  paused: z.boolean().default(false), ...timestamps,
 });
 const cashFlowRow = z.object({
   id: uuid, kind: z.enum(CASH_FLOW_KINDS), occurredOn: day, amount: amount.positive(), currency, amountPhp: amount, categoryId,
