@@ -5,8 +5,9 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { addDays, dayLabel, shortDayLabel } from "@/lib/finance/dates";
+import { addDays, dayLabel, daysBetween, shortDayLabel } from "@/lib/finance/dates";
 import { formatMoney } from "@/lib/finance/format";
+import { projectLine, trendPerMonth } from "@/lib/finance/goals";
 import { changeSince } from "@/lib/finance/performance";
 import { Masked, PrivacyHiddenContext, maskDigits } from "./privacy";
 import { NetWorthDetails } from "./net-worth-details";
@@ -43,10 +44,21 @@ export function NetWorthHistory({ points, today }: { points: NetWorthPoint[]; to
   const config = {
     // Ink, so the line reads on paper in both themes (lime on paper is 1.5:1).
     netWorth: { label: "Net worth", color: "var(--foreground)" },
+    projected: { label: "At the recent pace", color: "var(--foreground)" },
     ...Object.fromEntries(classes.map((c) => [c, { label: ASSET_CLASS_META[c].plural, color: ASSET_CLASS_META[c].color }])),
   } satisfies ChartConfig;
+  // Where the total heads if the last 90 days' pace holds, drawn on from the latest point.
+  const last = points.at(-1);
+  const pace = last ? trendPerMonth(points.map((p) => ({ date: p.date, value: p.netWorth })), last.date) : null;
+  // Ahead by half the span on show (a month at least, three at most), so history keeps most of the chart.
+  const spanDays = shown.length ? daysBetween(shown[0].date, shown.at(-1)!.date) : 0;
+  const ahead = Math.min(92, Math.max(30, Math.round(spanDays / 2)));
+  const projection = view === "total" && last && pace != null ? projectLine(last.netWorth, pace, last.date, ahead).slice(1) : [];
   // Spaced by date, not by point, so a gap in the history reads as a gap in time.
-  const data = shown.map((p) => ({ date: p.date, time: Date.parse(p.date), netWorth: p.netWorth, ...Object.fromEntries(classes.map((c) => [c, p.byClass[c] ?? 0])) }));
+  const data = [
+    ...shown.map((p) => ({ date: p.date, time: Date.parse(p.date), netWorth: p.netWorth, projected: projection.length && p === last ? p.netWorth : undefined, ...Object.fromEntries(classes.map((c) => [c, p.byClass[c] ?? 0])) })),
+    ...projection.map((p) => ({ date: p.date, time: Date.parse(p.date), projected: p.value })),
+  ];
   const tick = (v: number) => (hidden ? maskDigits(formatMoney(v, "PHP", { compact: true })) : formatMoney(v, "PHP", { compact: true }));
 
   return (
@@ -74,6 +86,11 @@ export function NetWorthHistory({ points, today }: { points: NetWorthPoint[]; to
           <p className="text-xs text-muted-foreground">
             <Money value={change.change} signed /> (<Pct value={change.pct} />) {stableDayRange(change.from, shown.at(-1)!.date)} · everything in and out, deposits and spending included
             {view === "classes" && " · assets only, before debts"}
+            {projection.length > 0 && (
+              <>
+                {" · "}dashed: <Money value={projection.at(-1)!.value} compact /> by {shortDayLabel(projection.at(-1)!.date)} if the last 90 days&apos; pace holds
+              </>
+            )}
           </p>
         ) : undefined
       }
@@ -102,7 +119,10 @@ export function NetWorthHistory({ points, today }: { points: NetWorthPoint[]; to
               />
               {view === "total" ? (
                 // A line: the axis doesn't start at zero, so a fill would exaggerate the moves.
-                <Area dataKey="netWorth" type="monotone" fill="none" stroke="var(--color-netWorth)" strokeWidth={3} isAnimationActive={false} />
+                <>
+                  <Area dataKey="netWorth" type="monotone" fill="none" stroke="var(--color-netWorth)" strokeWidth={3} isAnimationActive={false} />
+                  {projection.length > 0 && <Area dataKey="projected" type="linear" fill="none" stroke="var(--color-projected)" strokeWidth={2} strokeDasharray="6 4" connectNulls isAnimationActive={false} />}
+                </>
               ) : (
                 classes.map((c) => <Area key={c} dataKey={c} type="monotone" stackId="classes" fill={`var(--color-${c})`} fillOpacity={0.6} stroke={`var(--color-${c})`} isAnimationActive={false} />)
               )}

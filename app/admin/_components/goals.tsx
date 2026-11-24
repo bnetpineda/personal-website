@@ -29,6 +29,8 @@ export interface GoalDTO {
   progress: GoalProgress;
   /** "by Dec 31, 2027" */
   due: string | null;
+  /** When it is reached at the recent pace, in words ("At the recent pace: around Mar 4, 2027"). */
+  pace?: string | null;
 }
 
 const MEASURE_HINT: Record<GoalMeasure, string> = {
@@ -144,6 +146,7 @@ export function GoalList({ goals }: { goals: GoalDTO[] }) {
                   {p.perMonth != null && <> · save <Money value={p.perMonth} compact /> a month</>}
                   {p.unit === "months" && p.remaining != null && p.remaining > 0 && <> · <Figure value={p.remaining} unit="months" /> to go</>}
                 </ItemDescription>
+                {g.pace && !g.archived && <ItemDescription clamp={1} title={g.pace}>{g.pace}</ItemDescription>}
                 {p.ratio != null && !g.archived && (
                   <span className="block group-data-[private=true]/shell:blur-sm">
                     <Progress thin aria-hidden value={Math.min(p.ratio, 1) * 100} variant={p.reached ? "success" : "default"} />
