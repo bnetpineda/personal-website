@@ -28,6 +28,8 @@ const manifest: MetadataRoute.Manifest = {
   ],
   // Long-press the home-screen icon.
   shortcuts: [
+    // Opens the Add sheet on the Overview (see AddEntryAnywhere), ready for a cash expense.
+    { name: "Add expense", short_name: "Add", url: "/admin?add=expense" },
     { name: "Connections", url: "/admin/connections" },
     { name: "Portfolio", url: "/admin/holdings" },
   ],

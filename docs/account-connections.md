@@ -149,7 +149,8 @@ Wise does not sync. Personal Wise API tokens cannot read statements (Wise docume
 for personal tokens only in a few countries, and no longer accepts signed SCA requests from personal
 accounts), so the API connection was removed and its saved token deleted (migration
 `0011_drop_wise_connection`). The Wise card on Connections imports balance statement CSVs instead;
-see below. Wise balances are not part of net worth.
+see below. Each currency's closing balance from those CSVs is saved as a statement balance and counts
+as cash in net worth.
 
 ## MariBank
 
@@ -166,7 +167,9 @@ used for monthly interest, is the last day of that month), and every account's r
 AI can file them as income or spending; money from the account holder's own name is a transfer, and net
 interest is interest. Statements carry no transaction
 IDs, so a row is identified by date, direction, amount and counterparty: re-importing a month, or a
-re-downloaded copy of it, skips what is already there. Balances are not saved.
+re-downloaded copy of it, skips what is already there. Each account's ending balance is saved as a
+statement balance dated the period's last day and counts as cash in net worth; an older statement never
+replaces a newer balance.
 
 ## GoTyme
 
@@ -220,8 +223,17 @@ principal and fee while preserving the original signed total. All files import a
 with a previous import (same ID, different amount or date) rejects the whole batch and changes nothing.
 CSV data is never evaluated as spreadsheet formulas, and uploaded files are not retained.
 
-Closing balances in **Running Balance** are checked for a consistent order but not saved: statements
-import transactions only.
+Closing balances in **Running Balance** are checked for a consistent order, then the latest one per
+currency is saved as a statement balance (table `statement_balances`) and counts as cash in net worth. An
+older statement never replaces a newer balance. When the running balances don't settle on one order, or
+a file has no Running Balance column, only the transactions are imported and the import says so.
+
+Rules and AI file every imported line without a review step. **Bank activity** (`/admin/connections/activity`,
+the button on Accounts) lists every Wise, MariBank and GoTyme line with how it was filed and why, including
+transfers, ignored lines and twins of something already logged, and re-files any of them: post in a category,
+file as a transfer, ignore, or unlink a wrong transfer pair. Moving a posted line elsewhere removes its
+entry from Transactions. A re-filed line is marked as your decision, so AI and automatic transfer pairing
+leave it alone.
 
 Source identity is provider + account + external transaction ID. Wise adds currency and direction
 to distinguish conversion legs and reversals. Binance uses the account UID and provider history
