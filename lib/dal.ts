@@ -165,16 +165,6 @@ export async function getEntrySuggestions(limit = 150): Promise<EntrySuggestion[
     .limit(limit);
 }
 
-export async function getRecentCashFlows(limit = 8) {
-  await requireAdmin();
-  return getDb()
-    .select(cashFlowWithCategory)
-    .from(cashFlows)
-    .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
-    .orderBy(desc(cashFlows.occurredOn), desc(cashFlows.createdAt))
-    .limit(limit);
-}
-
 /** PHP totals per category for one month. */
 export async function getCategoryTotals(kind: CashFlowKind, month: string): Promise<Map<number, number>> {
   await requireAdmin();

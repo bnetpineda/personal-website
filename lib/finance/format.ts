@@ -26,19 +26,6 @@ export function formatMoney(
   return formatter(`m|${currency}|${signed}|${compact}`, options).format(value);
 }
 
-/** Unit prices: small prices (e.g. meme coins) keep significant digits instead of rounding to 0.00. */
-export function formatPrice(value: number, currency: string = BASE_CURRENCY): string {
-  if (value !== 0 && Math.abs(value) < 1) {
-    return formatter(`p|${currency}`, {
-      style: "currency",
-      currency,
-      minimumSignificantDigits: 2,
-      maximumSignificantDigits: 4,
-    }).format(value);
-  }
-  return formatMoney(value, currency);
-}
-
 export function formatQty(value: number): string {
   return formatter("q", { maximumFractionDigits: 8 }).format(value);
 }

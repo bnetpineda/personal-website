@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConnectedPosition } from "./connections/types";
 import type { HoldingCost } from "./imports/holding-costs";
-import { accountTotals, changeSince, combineChanges, fxToUsd, moverRows, navTotals, profitLossCoverage, snapshotDay, topMovers, withCurrent } from "./performance";
+import { accountTotals, changeSince, fxToUsd, moverRows, navTotals, profitLossCoverage, snapshotDay, topMovers, withCurrent } from "./performance";
 
 const fx = { USD: 56, EUR: 62 };
 const position = (overrides: Partial<ConnectedPosition>): ConnectedPosition => ({
@@ -118,11 +118,6 @@ describe("history", () => {
     expect(changeSince(points.slice(0, 1), "2026-08-01")).toBeNull();
     expect(changeSince(points, "2026-10-05")).toBeNull();
     expect(changeSince([{ date: "2026-09-01", value: 0 }, { date: "2026-09-02", value: 5 }], "2026-09-01")).toMatchObject({ change: 5, pct: null });
-  });
-  test("combineChanges adds amounts and weighs the percentage by starting value", () => {
-    const combined = combineChanges([{ change: 10, base: 100, pct: 0.1, from: "2026-09-05" }, null, { change: -5, base: 400, pct: -5 / 400, from: "2026-09-02" }]);
-    expect(combined).toEqual({ change: 5, base: 500, pct: 0.01, from: "2026-09-02" });
-    expect(combineChanges([null])).toBeNull();
   });
 });
 

@@ -134,15 +134,6 @@ export function changeSince(points: readonly { date: string; value: number }[], 
   return { change, base: base.value, pct: base.value > 0 ? change / base.value : null, from: base.date };
 }
 
-/** Adds up several accounts' changes; the percentage is of their combined starting value. */
-export function combineChanges(changes: readonly (Change | null)[]): Change | null {
-  const known = changes.filter((c): c is Change => c != null);
-  if (!known.length) return null;
-  const change = known.reduce((sum, c) => sum + c.change, 0);
-  const base = known.reduce((sum, c) => sum + c.base, 0);
-  return { change, base, pct: base > 0 ? change / base : null, from: known.map((c) => c.from).sort()[0] };
-}
-
 export interface Mover {
   symbol: string;
   pnlUsd: number;
