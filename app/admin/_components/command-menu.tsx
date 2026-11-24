@@ -19,6 +19,7 @@ import {
   Landmark,
   ListChecks,
   Moon,
+  Receipt,
   RefreshCw,
   Repeat,
   Search,
@@ -45,6 +46,7 @@ const PAGES = [
   { href: "/admin/connections#debts", label: "Debts and other accounts", icon: CreditCard },
   { href: "/admin/connections/activity", label: "Bank activity (re-file imports)", icon: ListChecks },
   { href: "/admin/categories", label: "Categories and rules", icon: Tags },
+  { href: "/admin/tax", label: "Tax estimate", icon: Receipt },
 ] as const;
 
 /** The same download as the account menu's Export a backup (a route handler that sends the file). */

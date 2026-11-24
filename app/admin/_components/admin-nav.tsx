@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleUserRound, Download, House, Landmark, LogOut, MonitorSmartphone, Moon, MoreHorizontal, Repeat, Sun, Tags, Upload, Wallet, type LucideIcon } from "lucide-react";
+import { CircleUserRound, Download, House, Landmark, LogOut, MonitorSmartphone, Moon, MoreHorizontal, Receipt, Repeat, Sun, Tags, Upload, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -11,7 +11,7 @@ import { useTheme } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { logout } from "../_actions/auth";
-import { isNavActive, NAV_DESTINATIONS, PORTFOLIO_SECTIONS } from "./nav";
+import { isNavActive, NAV_DESTINATIONS, PORTFOLIO_SECTIONS, SECONDARY_DESTINATIONS } from "./nav";
 import { RestoreBackup } from "./restore-backup";
 import { SignOutEverywhere } from "./sign-out-everywhere";
 
@@ -114,6 +114,14 @@ function AccountMenu({ side, align, tooltip, before, children }: {
           }}
         >
           {before}
+          {SECONDARY_DESTINATIONS.map(({ href, label }) => (
+            <DropdownMenuItem key={href} asChild>
+              <Link href={href}>
+                <Receipt /> {label}
+              </Link>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <a href="/admin/export" download>
               <Download /> Export a backup
