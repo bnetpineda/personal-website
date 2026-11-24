@@ -21,7 +21,7 @@ const MONTH_STEP: Partial<Record<RecurrenceFrequency, number>> = { monthly: 1, q
 const DAY_STEP: Partial<Record<RecurrenceFrequency, number>> = { weekly: 7, biweekly: 14 };
 
 /** Hard stop so a bad schedule can never loop forever or flood the table. */
-const MAX_OCCURRENCES = 500;
+export const MAX_OCCURRENCES = 500;
 
 function lastDayOf(month: string): number {
   const [y, m] = month.split("-").map(Number);
@@ -163,7 +163,48 @@ export interface RecurringState {
   autoPost: boolean;
   /** Oldest occurrence not yet posted/confirmed/skipped; null when ended. */
   nextOn: string | null;
+  /** Later occurrences already posted or skipped out of order. */
+  handledOn?: readonly string[] | null;
 }
+
+/**
+ * Records occurrences as posted or skipped. The cursor only moves past handled occurrences at its front,
+ * so posting Nov 1 while Oct 1 still waits keeps Oct 1 due (and Nov 1 stops showing).
+ */
+export function markHandled(s: Schedule, state: Pick<RecurringState, "nextOn" | "handledOn">, days: readonly string[]): { nextOn: string | null; handledOn: string[] } {
+  let nextOn = state.nextOn;
+  if (nextOn == null) return { nextOn: null, handledOn: [] };
+  const handled = new Set([...(state.handledOn ?? []), ...days].filter((d) => d >= nextOn!));
+  while (nextOn != null && handled.has(nextOn)) {
+    handled.delete(nextOn);
+    nextOn = nextOccurrence(s, addDays(nextOn, 1));
+  }
+  return { nextOn, handledOn: nextOn == null ? [] : [...handled].filter((d) => d > nextOn!).sort() };
+}
+
+/**
+ * The cursor after a schedule change. Edits reschedule from today, except for "ask me" items that still
+ * have past occurrences waiting: those keep waiting instead of vanishing unposted.
+ */
+export function cursorAfterEdit(s: Schedule, existing: { nextOn: string | null; autoPost: boolean }, autoPost: boolean, today: string): string | null {
+  const keepWaiting = !existing.autoPost && !autoPost && existing.nextOn != null && existing.nextOn < today;
+  const from = keepWaiting ? existing.nextOn! : today;
+  return nextOccurrence(s, s.startOn > from ? s.startOn : from);
+}
+
+/**
+ * Auto-post catch-up: the occurrences due from `nextOn` through `today` (oldest first, capped) and the
+ * cursor after them. A capped run stops right after its last occurrence, so the next run picks up the rest.
+ */
+export function dueThrough(s: Schedule, state: Pick<RecurringState, "nextOn" | "handledOn">, today: string): { days: string[]; nextOn: string | null; more: boolean } {
+  if (state.nextOn == null) return { days: [], nextOn: null, more: false };
+  const all = occurrencesBetween(s, state.nextOn, today);
+  const more = all.length === MAX_OCCURRENCES;
+  const nextOn = nextOccurrence(s, addDays(more ? all[all.length - 1] : today, 1));
+  return { days: all.filter((d) => !state.handledOn?.includes(d)), nextOn, more };
+}
+
+const notHandled =<T extends RecurringState>(o: Occurrence<T>) => !o.item.handledOn?.includes(o.date);
 
 const live = <T extends Schedule & RecurringState>(items: T[]) => items.filter((r) => !r.paused && r.nextOn != null);
 
@@ -174,12 +215,12 @@ export function dueOccurrences<T extends Schedule & RecurringState>(items: T[], 
     (r) => ({ ...scheduleOf(r), from: r.nextOn }),
     "0001-01-01",
     today
-  );
+  ).filter(notHandled);
 }
 
 /** What's scheduled in [from, to]; confirm-mode items already due are left to dueOccurrences. */
 export function upcomingOccurrences<T extends Schedule & RecurringState>(items: T[], today: string, from: string, to: string): Occurrence<T>[] {
   return occurrencesOf(live(items), (r) => ({ ...scheduleOf(r), from: r.nextOn }), from, to).filter(
-    (o) => o.item.autoPost || o.date > today
+    (o) => (o.item.autoPost || o.date > today) && notHandled(o)
   );
 }

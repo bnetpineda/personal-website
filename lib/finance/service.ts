@@ -1,14 +1,15 @@
 import "server-only";
-import { and, eq, isNotNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accountConnections, cashFlows, fxRates, holdings, liabilities, netWorthSnapshots, recurringCashFlows, statementBalances } from "@/lib/db/schema";
+import { accountConnections, cashFlows, fxRateHistory, fxRates, holdings, liabilities, netWorthSnapshots, recurringCashFlows, statementBalances } from "@/lib/db/schema";
 import { includedPositions } from "./connections/types";
 import { statementPositions } from "./statement-balances";
 import { computeNetWorth, fxToPhp, round2, type FxTable, type NetWorth } from "./calc";
 import { BASE_CURRENCY } from "./constants";
 import { addDays, todayManila } from "./dates";
-import { nextOccurrence, occurrencesBetween, scheduleOf } from "./recurrence";
-import { fetchFxRate } from "./prices";
+import { datedPairs, LOOKBACK_DAYS, missingRanges, rateKey, rateOn, ratesToFetch, type WantedRate } from "./fx-history";
+import { dueThrough, scheduleOf } from "./recurrence";
+import { fetchFxRate, fetchFxRates } from "./prices";
 
 /*
  * FX/snapshot operations. No auth check here: this is shared by the cron route
@@ -60,24 +61,70 @@ export async function refreshFxRates(currencies: Iterable<string>): Promise<{ up
   return { updated, failed };
 }
 
-/** FX table guaranteed to contain `currencies` (fetches only the missing ones). */
-export async function ensureFx(currencies: string[]): Promise<FxTable> {
-  const fx = await loadFxTable();
-  const missing = currencies.filter((c) => c !== BASE_CURRENCY && fx[c] == null);
-  if (missing.length === 0) return fx;
-  await refreshFxRates(missing);
+/** FX table guaranteed to contain `currencies`: fetches missing rates and refreshes stale ones (a failed refresh keeps the old rate). */
+export async function ensureFx(currencies: string[], now: Date = new Date()): Promise<FxTable> {
+  const rows = await getDb().select().from(fxRates);
+  const fetch = ratesToFetch(currencies, rows, now);
+  if (fetch.length === 0) return Object.fromEntries(rows.map((r) => [r.currency, r.rateToPhp]));
+  await refreshFxRates(fetch);
   return loadFxTable();
 }
 
-/** Refreshes FX for every currency the synced accounts and recurring items use, then records today's net worth. */
+/**
+ * PHP per unit for each (currency, day): entries convert at their own date's rate. Recent days use the
+ * current rate; older days use the provider's rate for that day (saved for next time). When a dated rate
+ * can't be had, the current rate stands in, so posting never waits on history.
+ */
+export async function phpRatesOn(wanted: readonly WantedRate[], today: string = todayManila()): Promise<(currency: string, on: string) => number | null> {
+  let fx: FxTable = {};
+  try {
+    fx = await ensureFx([...new Set(wanted.map((w) => w.currency))]);
+  } catch {
+    // Callers report the currencies left without a rate.
+  }
+  const dated = new Map<string, number>();
+  const pairs = datedPairs(wanted, today);
+  if (pairs.length) {
+    try {
+      const db = getDb();
+      const currencies = [...new Set(pairs.map((p) => p.currency))];
+      const days = pairs.map((p) => p.on).sort();
+      const load = () => db.select({ currency: fxRateHistory.currency, on: fxRateHistory.on, rate: fxRateHistory.rateToPhp }).from(fxRateHistory).where(and(inArray(fxRateHistory.currency, currencies),
+        gte(fxRateHistory.on, addDays(days[0], -LOOKBACK_DAYS)), lte(fxRateHistory.on, days[days.length - 1])));
+      let history = await load();
+      const ranges = missingRanges(pairs, history);
+      if (ranges.size) {
+        const fetched = await Promise.allSettled([...ranges].map(async ([currency, { from, to }]) =>
+          (await fetchFxRates(currency, from, to)).map((r) => ({ currency, on: r.on, rateToPhp: r.rate }))));
+        const rows = fetched.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+        for (let i = 0; i < rows.length; i += 1000) {
+          await db.insert(fxRateHistory).values(rows.slice(i, i + 1000)).onConflictDoUpdate({
+            target: [fxRateHistory.currency, fxRateHistory.on], set: { rateToPhp: sql`excluded.rate_to_php` } });
+        }
+        if (rows.length) history = await load();
+      }
+      for (const p of pairs) {
+        const rate = rateOn(history, p.currency, p.on);
+        if (rate != null) dated.set(rateKey(p.currency, p.on), rate);
+      }
+    } catch (err) {
+      console.error("[admin] dated FX lookup failed; using current rates", err);
+    }
+  }
+  return (currency, on) => dated.get(rateKey(currency, on)) ?? fxToPhp(fx, currency);
+}
+
+/** Refreshes every saved FX rate plus every currency the accounts and recurring items use, then records today's net worth. */
 export async function refreshRates(): Promise<RefreshSummary> {
   const db = getDb();
-  const [connections, recurring, balances, manual, debts] = await Promise.all([
+  const [connections, recurring, balances, manual, debts, saved] = await Promise.all([
     db.select({ snapshot: accountConnections.snapshot }).from(accountConnections),
     db.selectDistinct({ currency: recurringCashFlows.currency }).from(recurringCashFlows),
     db.selectDistinct({ currency: statementBalances.currency }).from(statementBalances),
     db.selectDistinct({ currency: holdings.currency }).from(holdings),
     db.selectDistinct({ currency: liabilities.currency }).from(liabilities),
+    // Rates fetched once for a one-off entry (a JPY expense) must not freeze at that day's value.
+    db.select({ currency: fxRates.currency }).from(fxRates),
   ]);
   const fx = await refreshFxRates([
     ...connections.flatMap((c) => c.snapshot?.positions.map((p) => p.currency) ?? []),
@@ -85,6 +132,7 @@ export async function refreshRates(): Promise<RefreshSummary> {
     ...balances.map((b) => b.currency),
     ...manual.map((h) => h.currency),
     ...debts.map((l) => l.currency),
+    ...saved.map((r) => r.currency),
   ]);
   await upsertTodaySnapshot();
   return { fxUpdated: fx.updated.length, failed: fx.failed, at: new Date().toISOString() };
@@ -112,7 +160,8 @@ export async function currentNetWorth(): Promise<NetWorth & { empty: boolean }> 
 /** Upserts today's (Manila date) net-worth point. Safe to run repeatedly. */
 export async function upsertTodaySnapshot(): Promise<void> {
   const nw = await currentNetWorth();
-  if (nw.empty) return;
+  // A currency without a rate would be left out of the total and show as a fake drop; keep the last good point.
+  if (nw.empty || nw.missingFx.length > 0) return;
   const values = {
     assetsPhp: nw.assetsPhp,
     liabilitiesPhp: nw.liabilitiesPhp,
@@ -159,6 +208,25 @@ export interface RecurringRunSummary {
  * the cursor update only applies if nobody moved it first. Entries deleted later stay deleted.
  */
 export async function postDueRecurring(today: string = todayManila()): Promise<RecurringRunSummary> {
+  const total: RecurringRunSummary = { posted: 0, failed: [] };
+  // A very old schedule can owe more than one capped batch; each pass resumes where the last stopped.
+  for (let pass = 0; pass < 20; pass++) {
+    const run = await postDueRecurringOnce(today);
+    total.posted += run.posted;
+    if (!run.more) return { posted: total.posted, failed: run.failed };
+  }
+  return total;
+}
+
+/** The guarded cursor move for a recurring item: applies only if nobody moved the cursor first. */
+export function moveRecurringCursor(row: { id: string; nextOn: string | null; handledOn: readonly string[] }, next: { nextOn: string | null; handledOn: string[] }) {
+  const t = recurringCashFlows;
+  return getDb().update(t).set(next).where(and(eq(t.id, row.id),
+    row.nextOn == null ? isNull(t.nextOn) : eq(t.nextOn, row.nextOn),
+    sql`array_to_string(${t.handledOn}, ',') = ${row.handledOn.join(",")}`));
+}
+
+async function postDueRecurringOnce(today: string): Promise<RecurringRunSummary & { more: boolean }> {
   const db = getDb();
   const due = await db
     .select()
@@ -171,58 +239,49 @@ export async function postDueRecurring(today: string = todayManila()): Promise<R
         lte(recurringCashFlows.nextOn, today)
       )
     );
-  if (due.length === 0) return { posted: 0, failed: [] };
+  if (due.length === 0) return { posted: 0, failed: [], more: false };
 
-  let fx: FxTable = {};
-  try {
-    fx = await ensureFx([...new Set(due.map((r) => r.currency))]);
-  } catch {
-    // Non-PHP items fail below and retry on the next run.
-  }
+  const plans = due.map((r) => ({ r, ...dueThrough(scheduleOf(r), r, today) }));
+  // Each occurrence converts at its own date's rate (the current one for recent days).
+  const rateOf = await phpRatesOn(plans.flatMap((p) => p.days.map((on) => ({ currency: p.r.currency, on }))), today);
 
   const failed: RefreshFailure[] = [];
   const entries: (typeof cashFlows.$inferInsert)[] = [];
   const cursors = [];
-  for (const r of due) {
-    const rate = fxToPhp(fx, r.currency);
-    if (rate == null) {
+  let more = false;
+  for (const { r, days, nextOn, more: capped } of plans) {
+    const rates = days.map((day) => rateOf(r.currency, day));
+    if (rates.some((rate) => rate == null)) {
       failed.push({ name: r.description, reason: `No ${r.currency}→PHP rate` });
       continue;
     }
-    const s = scheduleOf(r);
-    for (const day of occurrencesBetween(s, r.nextOn!, today)) {
-      entries.push({
-        kind: r.kind,
-        occurredOn: day,
-        amount: r.amount,
-        currency: r.currency,
-        amountPhp: round2(r.amount * rate),
-        categoryId: r.categoryId,
-        description: r.description,
-        account: r.account,
-        notes: r.notes,
-        recurringId: r.id,
-        recurringOn: day,
-      });
-    }
-    cursors.push(
-      db
-        .update(recurringCashFlows)
-        .set({ nextOn: nextOccurrence(s, addDays(today, 1)) })
-        .where(and(eq(recurringCashFlows.id, r.id), eq(recurringCashFlows.nextOn, r.nextOn!)))
-    );
+    days.forEach((day, i) => entries.push({
+      kind: r.kind,
+      occurredOn: day,
+      amount: r.amount,
+      currency: r.currency,
+      amountPhp: round2(r.amount * rates[i]!),
+      categoryId: r.categoryId,
+      description: r.description,
+      account: r.account,
+      notes: r.notes,
+      recurringId: r.id,
+      recurringOn: day,
+    }));
+    more ||= capped;
+    cursors.push(moveRecurringCursor(r, { nextOn, handledOn: [] }));
   }
-  if (cursors.length === 0) return { posted: 0, failed };
+  if (cursors.length === 0) return { posted: 0, failed, more: false };
 
   if (entries.length === 0) {
     const [first, ...rest] = cursors;
     await db.batch([first, ...rest]);
-    return { posted: 0, failed };
+    return { posted: 0, failed, more };
   }
   // One atomic batch: entries (duplicates skipped) + cursor moves.
   const insert = db.insert(cashFlows).values(entries).onConflictDoNothing().returning({ id: cashFlows.id });
   const [inserted] = await db.batch([insert, ...cursors]);
-  return { posted: inserted.length, failed };
+  return { posted: inserted.length, failed, more };
 }
 
 /** For after(): posting failures must never break a request. */

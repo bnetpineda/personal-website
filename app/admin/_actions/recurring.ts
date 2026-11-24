@@ -1,16 +1,16 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { cashFlows, categories, recurringCashFlows } from "@/lib/db/schema";
-import { fxToPhp, round2 } from "@/lib/finance/calc";
-import { addDays, todayManila } from "@/lib/finance/dates";
-import { nextOccurrence, scheduleOf } from "@/lib/finance/recurrence";
+import { round2 } from "@/lib/finance/calc";
+import { todayManila } from "@/lib/finance/dates";
+import { cursorAfterEdit, markHandled, nextOccurrence, scheduleOf } from "@/lib/finance/recurrence";
 import { failure, idSchema, invalid, recurringSchema, type FormState } from "@/lib/finance/schemas";
-import { ensureFx, postDueRecurring } from "@/lib/finance/service";
+import { moveRecurringCursor, phpRatesOn, postDueRecurring } from "@/lib/finance/service";
 
 const daySchema = z.iso.date();
 
@@ -52,12 +52,14 @@ export async function saveRecurring(_prev: FormState, formData: FormData): Promi
     existing.endOn !== input.endOn ||
     existing.secondDay !== input.secondDay;
   // New items start at their first date, so a past start fills in the entries since then.
-  // Edits only reschedule what's still ahead; past entries are left as they are.
+  // Edits only reschedule what's still ahead; past entries are left as they are, and past
+  // "ask me" occurrences that still wait for an answer keep waiting.
   const nextOn = !existing
     ? nextOccurrence(schedule, input.startOn)
     : scheduleChanged
-      ? nextOccurrence(schedule, input.startOn > today ? input.startOn : today)
+      ? cursorAfterEdit(schedule, existing, input.autoPost, today)
       : existing.nextOn;
+  const handledOn = existing && nextOn ? existing.handledOn.filter((d) => d > nextOn) : [];
 
   const values = {
     kind: input.kind,
@@ -72,6 +74,7 @@ export async function saveRecurring(_prev: FormState, formData: FormData): Promi
     secondDay: input.secondDay,
     endOn: input.endOn,
     nextOn,
+    handledOn,
     autoPost: input.autoPost,
   };
 
@@ -93,7 +96,7 @@ export async function setRecurringPaused(id: string, paused: boolean): Promise<F
 
   const today = todayManila();
   // Resuming skips whatever fell due while paused.
-  const set = paused ? { paused } : { paused, nextOn: nextOccurrence(scheduleOf(row), row.startOn > today ? row.startOn : today) };
+  const set = paused ? { paused } : { paused, nextOn: nextOccurrence(scheduleOf(row), row.startOn > today ? row.startOn : today), handledOn: [] };
   await db.update(recurringCashFlows).set(set).where(eq(recurringCashFlows.id, row.id));
 
   const message = paused ? "Paused." : await postNow("Resumed.");
@@ -111,11 +114,9 @@ export async function skipRecurring(id: string, on: string): Promise<FormState> 
   const [row] = await db.select().from(recurringCashFlows).where(eq(recurringCashFlows.id, parsedId.data)).limit(1);
   if (!row) return failure("That item no longer exists.");
 
+  // Skipping a later occurrence leaves earlier ones due; the cursor moves only past the oldest.
   if (row.nextOn && row.nextOn <= parsedOn.data) {
-    await db
-      .update(recurringCashFlows)
-      .set({ nextOn: nextOccurrence(scheduleOf(row), addDays(parsedOn.data, 1)) })
-      .where(and(eq(recurringCashFlows.id, row.id), eq(recurringCashFlows.nextOn, row.nextOn)));
+    await moveRecurringCursor(row, markHandled(scheduleOf(row), row, [parsedOn.data]));
   }
   revalidatePath("/admin", "layout");
   return { ok: true, message: "Skipped." };
@@ -147,47 +148,35 @@ export async function postRecurring(occurrences: { id: string; on: string }[]): 
   const rows = await db.select().from(recurringCashFlows).where(inArray(recurringCashFlows.id, ids));
   if (rows.length === 0) return failure("Those items no longer exist.");
 
-  let fx: Awaited<ReturnType<typeof ensureFx>> = {};
-  try {
-    fx = await ensureFx([...new Set(rows.map((r) => r.currency))]);
-  } catch {
-    // Non-PHP items are reported below.
-  }
+  const daysOf = (id: string) => [...new Set(parsed.data.filter((o) => o.id === id).map((o) => o.on))].sort();
+  // Each occurrence converts at its own date's rate.
+  const rateOf = await phpRatesOn(rows.flatMap((r) => daysOf(r.id).map((on) => ({ currency: r.currency, on }))));
 
   const entries: (typeof cashFlows.$inferInsert)[] = [];
   const cursors = [];
   const skipped: string[] = [];
   for (const r of rows) {
-    const rate = fxToPhp(fx, r.currency);
-    if (rate == null) {
+    const days = daysOf(r.id);
+    const rates = days.map((on) => rateOf(r.currency, on));
+    if (rates.some((rate) => rate == null)) {
       skipped.push(r.description);
       continue;
     }
-    const days = parsed.data.filter((o) => o.id === r.id).map((o) => o.on).sort();
-    for (const on of days) {
-      entries.push({
-        kind: r.kind,
-        occurredOn: on,
-        amount: r.amount,
-        currency: r.currency,
-        amountPhp: round2(r.amount * rate),
-        categoryId: r.categoryId,
-        description: r.description,
-        account: r.account,
-        notes: r.notes,
-        recurringId: r.id,
-        recurringOn: on,
-      });
-    }
-    const last = days[days.length - 1];
-    if (r.nextOn && r.nextOn <= last) {
-      cursors.push(
-        db
-          .update(recurringCashFlows)
-          .set({ nextOn: nextOccurrence(scheduleOf(r), addDays(last, 1)) })
-          .where(and(eq(recurringCashFlows.id, r.id), eq(recurringCashFlows.nextOn, r.nextOn)))
-      );
-    }
+    days.forEach((on, i) => entries.push({
+      kind: r.kind,
+      occurredOn: on,
+      amount: r.amount,
+      currency: r.currency,
+      amountPhp: round2(r.amount * rates[i]!),
+      categoryId: r.categoryId,
+      description: r.description,
+      account: r.account,
+      notes: r.notes,
+      recurringId: r.id,
+      recurringOn: on,
+    }));
+    // Posting a later occurrence leaves earlier ones due; the cursor moves only past the oldest.
+    if (r.nextOn && r.nextOn <= days[days.length - 1]) cursors.push(moveRecurringCursor(r, markHandled(scheduleOf(r), r, days)));
   }
   if (entries.length === 0) return failure(`No FX rate for ${skipped.join(", ")} yet — try again.`);
 

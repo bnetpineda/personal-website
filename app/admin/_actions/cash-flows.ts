@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { AddEntryData } from "../_components/add-entry";
 import { requireAdmin } from "@/lib/auth/session";
@@ -8,10 +8,10 @@ import { getAccounts, getCategories, getEntrySuggestions, getLastEntryDefaults }
 import { getDb } from "@/lib/db";
 import { pgCode } from "@/lib/db/errors";
 import { cashFlows, categories, liabilities, recurringCashFlows } from "@/lib/db/schema";
-import { fxToPhp, round2 } from "@/lib/finance/calc";
+import { round2 } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { addDays, todayManila } from "@/lib/finance/dates";
-import { nextOccurrence, scheduleOf } from "@/lib/finance/recurrence";
+import { todayManila } from "@/lib/finance/dates";
+import { markHandled, scheduleOf } from "@/lib/finance/recurrence";
 import {
   cashFlowSchema,
   failure,
@@ -21,7 +21,7 @@ import {
   type FormState,
   type RestoreCashFlowInput,
 } from "@/lib/finance/schemas";
-import { ensureFx } from "@/lib/finance/service";
+import { moveRecurringCursor, phpRatesOn } from "@/lib/finance/service";
 
 /** What the Add sheet needs, fetched when it opens so other pages don't pay for it on every load. */
 export async function getAddEntryData(): Promise<AddEntryData> {
@@ -85,7 +85,8 @@ export async function saveCashFlow(_prev: FormState, formData: FormData): Promis
 
   let rate: number | null;
   try {
-    rate = fxToPhp(await ensureFx([input.currency]), input.currency);
+    // A late entry converts at its own date's rate, not today's.
+    rate = (await phpRatesOn([{ currency: input.currency, on: input.occurredOn }]))(input.currency, input.occurredOn);
   } catch {
     rate = null;
   }
@@ -121,14 +122,9 @@ export async function saveCashFlow(_prev: FormState, formData: FormData): Promis
     createdId = crypto.randomUUID();
     const insert = db.insert(cashFlows).values({ ...values, id: createdId, recurringId: recurring.id, recurringOn: on });
     try {
+      // Posting a later occurrence leaves earlier ones due; the cursor moves only past the oldest.
       if (recurring.nextOn && recurring.nextOn <= on) {
-        await db.batch([
-          insert,
-          db
-            .update(recurringCashFlows)
-            .set({ nextOn: nextOccurrence(scheduleOf(recurring), addDays(on, 1)) })
-            .where(and(eq(recurringCashFlows.id, recurring.id), eq(recurringCashFlows.nextOn, recurring.nextOn))),
-        ]);
+        await db.batch([insert, moveRecurringCursor(recurring, markHandled(scheduleOf(recurring), recurring, [on]))]);
       } else {
         await insert;
       }

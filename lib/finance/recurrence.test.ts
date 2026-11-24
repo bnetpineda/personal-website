@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { addDays } from "./dates";
 import {
+  cursorAfterEdit,
   defaultSecondDay,
   describeSchedule,
   dueOccurrences,
+  dueThrough,
+  markHandled,
+  MAX_OCCURRENCES,
   monthlyEquivalent,
   nextOccurrence,
   occurrencesBetween,
@@ -144,5 +149,80 @@ describe("helpers", () => {
     ];
     const got = occurrencesOf(items, (i) => i.s, "2026-09-01", "2026-10-10").map((o) => `${o.date} ${o.item.name}`);
     expect(got).toEqual(["2026-09-05 rent", "2026-09-30 pay", "2026-10-05 rent"]);
+  });
+});
+
+describe("handling due occurrences out of order", () => {
+  const bill = { frequency: "monthly" as const, startOn: "2026-01-01", endOn: null, secondDay: null };
+  const item = { ...bill, id: "bill", paused: false, autoPost: false, nextOn: "2026-10-01", handledOn: [] as string[] };
+
+  test("posting or skipping a later occurrence keeps the earlier one due", () => {
+    const state = markHandled(bill, item, ["2026-11-01"]);
+    expect(state).toEqual({ nextOn: "2026-10-01", handledOn: ["2026-11-01"] });
+    expect(dueOccurrences([{ ...item, ...state }], "2026-11-20").map((o) => o.date)).toEqual(["2026-10-01"]);
+  });
+
+  test("handling the oldest moves the cursor past every handled one after it", () => {
+    expect(markHandled(bill, { nextOn: "2026-10-01", handledOn: ["2026-11-01"] }, ["2026-10-01"])).toEqual({ nextOn: "2026-12-01", handledOn: [] });
+  });
+
+  test("handling the oldest alone moves to the next occurrence", () => {
+    expect(markHandled(bill, item, ["2026-10-01"])).toEqual({ nextOn: "2026-11-01", handledOn: [] });
+  });
+
+  test("handled dates stay out of upcoming too", () => {
+    const upcoming = upcomingOccurrences([{ ...item, nextOn: "2026-12-01", handledOn: ["2027-01-01"] }], "2026-11-20", "2026-11-20", "2027-02-28");
+    expect(upcoming.map((o) => o.date)).toEqual(["2026-12-01", "2027-02-01"]);
+  });
+
+  test("an ended schedule clears what was handled", () => {
+    expect(markHandled({ ...bill, endOn: "2026-10-31" }, item, ["2026-10-01"])).toEqual({ nextOn: null, handledOn: [] });
+  });
+});
+
+describe("cursorAfterEdit", () => {
+  const s = { frequency: "monthly" as const, startOn: "2026-01-01", endOn: "2027-06-30", secondDay: null };
+  const today = "2026-11-20";
+
+  test("an 'ask me' item keeps its waiting past occurrences", () => {
+    expect(cursorAfterEdit(s, { nextOn: "2026-10-01", autoPost: false }, false, today)).toBe("2026-10-01");
+  });
+
+  test("a changed day starts at the first new occurrence after the old cursor", () => {
+    expect(cursorAfterEdit({ ...s, startOn: "2026-01-15" }, { nextOn: "2026-10-01", autoPost: false }, false, today)).toBe("2026-10-15");
+  });
+
+  test("auto-post items, and items switched to auto-post, reschedule from today", () => {
+    expect(cursorAfterEdit(s, { nextOn: "2026-10-01", autoPost: true }, true, today)).toBe("2026-12-01");
+    expect(cursorAfterEdit(s, { nextOn: "2026-10-01", autoPost: false }, true, today)).toBe("2026-12-01");
+  });
+
+  test("a later start date wins", () => {
+    expect(cursorAfterEdit({ ...s, startOn: "2027-02-01" }, { nextOn: "2026-10-01", autoPost: false }, false, today)).toBe("2027-02-01");
+  });
+});
+
+describe("dueThrough", () => {
+  test("covers every occurrence through today and moves the cursor past it", () => {
+    const s = { frequency: "monthly" as const, startOn: "2026-01-31", endOn: null, secondDay: null };
+    expect(dueThrough(s, { nextOn: "2026-01-31" }, "2026-03-31")).toEqual({ days: ["2026-01-31", "2026-02-28", "2026-03-31"], nextOn: "2026-04-30", more: false });
+  });
+
+  test("a capped catch-up resumes right after its last occurrence instead of jumping to today", () => {
+    const s = { frequency: "weekly" as const, startOn: "2010-01-04", endOn: null, secondDay: null };
+    const first = dueThrough(s, { nextOn: s.startOn }, "2026-11-20");
+    expect(first.days).toHaveLength(MAX_OCCURRENCES);
+    expect(first.more).toBe(true);
+    expect(first.nextOn).toBe(nextOccurrence(s, addDays(first.days[first.days.length - 1], 1)));
+    const second = dueThrough(s, { nextOn: first.nextOn }, "2026-11-20");
+    expect(second.more).toBe(false);
+    expect(second.days[0]).toBe(first.nextOn!);
+    expect(second.days[second.days.length - 1] <= "2026-11-20").toBe(true);
+    expect(second.nextOn! > "2026-11-20").toBe(true);
+  });
+
+  test("skips dates already handled", () => {
+    const s = { frequency: "monthly" as const, startOn: "2026-01-01", endOn: null, secondDay: null };
+    expect(dueThrough(s, { nextOn: "2026-01-01", handledOn: ["2026-02-01"] }, "2026-03-15").days).toEqual(["2026-01-01", "2026-03-01"]);
   });
 });

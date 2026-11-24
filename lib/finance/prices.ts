@@ -69,3 +69,13 @@ export async function fetchFxRate(currency: string): Promise<{ rate: number; asO
   }
   return { rate: r.rate, asOf: r.date };
 }
+
+/** PHP per 1 unit of `currency` on each day the provider published from `from` to `to` (inclusive). */
+export async function fetchFxRates(currency: string, from: string, to: string): Promise<{ on: string; rate: number }[]> {
+  const params = new URLSearchParams({ base: currency, quotes: "PHP", from, to });
+  const { status, body } = await getJson(`https://api.frankfurter.dev/v2/rates?${params}`);
+  if (status !== 200 || !Array.isArray(body)) throw new PriceError(`No FX history for ${currency} (HTTP ${status})`);
+  return body.flatMap((row: { date?: unknown; rate?: unknown; quote?: unknown }) =>
+    typeof row?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.date) && typeof row.rate === "number" && row.rate > 0 && (row.quote ?? "PHP") === "PHP"
+      ? [{ on: row.date, rate: row.rate }] : []);
+}
