@@ -5,11 +5,12 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { addDays, dayLabel, dayRangeLabel, shortDayLabel } from "@/lib/finance/dates";
+import { addDays, dayLabel, shortDayLabel } from "@/lib/finance/dates";
 import { formatMoney } from "@/lib/finance/format";
 import { changeSince } from "@/lib/finance/performance";
 import { Masked, PrivacyHiddenContext, maskDigits } from "./privacy";
 import { NetWorthDetails } from "./net-worth-details";
+import { stableDayRange } from "./stable-dates";
 import { EmptyState, Money, Panel, Pct } from "./ui";
 
 export interface NetWorthPoint {
@@ -71,7 +72,7 @@ export function NetWorthHistory({ points, today }: { points: NetWorthPoint[]; to
       toolbar={
         change ? (
           <p className="text-xs text-muted-foreground">
-            <Money value={change.change} signed /> (<Pct value={change.pct} />) {dayRangeLabel(change.from, shown.at(-1)!.date)} · everything in and out, deposits and spending included
+            <Money value={change.change} signed /> (<Pct value={change.pct} />) {stableDayRange(change.from, shown.at(-1)!.date)} · everything in and out, deposits and spending included
             {view === "classes" && " · assets only, before debts"}
           </p>
         ) : undefined

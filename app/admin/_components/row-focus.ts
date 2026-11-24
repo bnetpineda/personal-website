@@ -13,12 +13,17 @@ export function captureRowFocus(trigger: HTMLElement | null): RowFocusReturn | n
   const list = trigger.closest<HTMLElement>('[role="list"], tbody') ?? main;
   const controls = Array.from(list?.querySelectorAll<HTMLElement>("[data-row-focus]") ?? []);
   const index = controls.indexOf(trigger);
+  // A list can hold a single row (Activity groups entries by day), so carry on into the rows after
+  // and before it elsewhere on the page.
+  const page = list === main ? [] : Array.from(main?.querySelectorAll<HTMLElement>("[data-row-focus]") ?? []);
+  const at = page.indexOf(trigger);
+  const outside = (rows: HTMLElement[]) => rows.filter((row) => !controls.includes(row));
   return {
     trigger,
     href: trigger.ownerDocument.location.href,
     main,
-    next: index < 0 ? [] : controls.slice(index + 1),
-    previous: index < 0 ? [] : controls.slice(0, index).reverse(),
+    next: index < 0 ? [] : [...controls.slice(index + 1), ...(at < 0 ? [] : outside(page.slice(at + 1)))],
+    previous: index < 0 ? [] : [...controls.slice(0, index).reverse(), ...(at < 0 ? [] : outside(page.slice(0, at).reverse()))],
   };
 }
 

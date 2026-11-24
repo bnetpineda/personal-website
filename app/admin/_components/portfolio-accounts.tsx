@@ -7,10 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Swatch } from "@/components/ui/swatch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { SyncProvider } from "@/lib/finance/connections/meta";
-import { addDays, dayRangeLabel } from "@/lib/finance/dates";
+import { addDays } from "@/lib/finance/dates";
 import { RANGES, changeSince } from "@/lib/finance/performance";
 import { marketReturn, type Flow } from "@/lib/finance/returns";
 import { PortfolioChart } from "./charts";
+import { stableDayRange } from "./stable-dates";
 import { EmptyState, Money, Pct } from "./ui";
 
 /** One investment account, already converted to the page currency on the server. */
@@ -165,7 +166,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
                 Balance <Money value={result.change} currency={currency} signed /> · moved in or out <Money value={result.flows} currency={currency} signed />
               </dd>
             )}
-            {change && <dd className="text-xs text-muted-foreground">{dayRangeLabel(change.from, series.at(-1)!.date)}</dd>}
+            {change && <dd className="text-xs text-muted-foreground">{stableDayRange(change.from, series.at(-1)!.date)}</dd>}
           </div>
         </dl>
 
@@ -174,7 +175,7 @@ function AccountCard({ account: a, since, view, currency }: { account: Portfolio
         ) : (
           <EmptyChart account={a} view={view} />
         )}
-        {zeroDay && <p className="text-xs text-muted-foreground">The value saved for {dayRangeLabel(zeroDay.date, zeroDay.date)} is zero, with balances before and after it: usually a sync that returned no balances that day.</p>}
+        {zeroDay && <p className="text-xs text-muted-foreground">The value saved for {stableDayRange(zeroDay.date, zeroDay.date)} is zero, with balances before and after it: usually a sync that returned no balances that day.</p>}
 
         {(a.winners.length > 0 || a.losers.length > 0) && (
           <div className="grid grid-cols-2 gap-4">

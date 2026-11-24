@@ -140,7 +140,7 @@ export function FormSheetContent({
       <AlertDialog open={confirmingClose} onOpenChange={setConfirmingClose}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Discard what you typed?</AlertDialogTitle>
+            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
             <AlertDialogDescription>Nothing has been saved yet.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
