@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ListChecks } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getConnections, getDebts, getFx, getManualAccounts, getStatementBalances, getStatementImports } from "@/lib/dal";
-import { holdingMetrics } from "@/lib/finance/calc";
+import { Button } from "@/components/ui/button";
+import { getCategories, getConnections, getDebts, getFx, getManualAccounts, getStatementBalances, getStatementImports } from "@/lib/dal";
+import { fxToPhp, holdingMetrics } from "@/lib/finance/calc";
 import { PROVIDER_META, untriedAccounts } from "@/lib/finance/connections/meta";
 import { dayLabel, daysBetween, fullDayLabel, todayManila } from "@/lib/finance/dates";
 import { env } from "@/lib/env";
 import { ConnectedAccounts } from "../../_components/connected-accounts";
 import { SyncConnectionsButton } from "../../_components/connection-controls";
+import type { PlannerDebt } from "../../_components/debt-planner";
 import { ManualBalances, type DebtDTO, type ManualAccountDTO } from "../../_components/manual-balances";
 import { PageHeader } from "../../_components/ui";
 
@@ -17,7 +21,7 @@ export const maxDuration = 120;
 const STALE_MANUAL_DAYS = 60;
 
 export default async function ConnectionsPage() {
-  const [connections, fx, statements, balances, manual, debts] = await Promise.all([getConnections(), getFx(), getStatementImports(), getStatementBalances(), getManualAccounts(), getDebts()]);
+  const [connections, fx, statements, balances, manual, debts, expenseCategories] = await Promise.all([getConnections(), getFx(), getStatementImports(), getStatementBalances(), getManualAccounts(), getDebts(), getCategories("expense")]);
   const untried = untriedAccounts(connections);
   const today = todayManila();
   const updated = (at: Date) => {
@@ -32,8 +36,17 @@ export default async function ConnectionsPage() {
     id: l.id, kind: l.kind, name: l.name, lender: l.lender, balance: l.balance, currency: l.currency, creditLimit: l.creditLimit,
     interestRate: l.interestRate, dueDay: l.dueDay, minPayment: l.minPayment, notes: l.notes, archived: l.archived, ...updated(l.updatedAt),
   }));
+  // The payoff plan works in PHP at today's rate; a debt without a rate waits until one loads.
+  const missingFx = new Set<string>();
+  const planDebts: PlannerDebt[] = debts.filter((l) => !l.archived && l.balance > 0).flatMap((l) => {
+    const rate = fxToPhp(fx, l.currency);
+    if (rate == null) { missingFx.add(l.currency); return []; }
+    return [{ id: l.id, name: l.name, balance: l.balance * rate, rate: l.interestRate, minPayment: l.minPayment == null ? null : l.minPayment * rate }];
+  });
+  const categories = expenseCategories.map(({ id, name, color, archived }) => ({ id, name, color, archived }));
   return <>
     <PageHeader title="Accounts">
+      <Button asChild variant="outline" size="sm"><Link href="/admin/connections/activity"><ListChecks /> Bank activity</Link></Button>
       <SyncConnectionsButton disabled={!connections.some((c) => c.enabled)} />
     </PageHeader>
     <p className="mb-6 max-w-3xl text-sm text-muted-foreground">
@@ -44,6 +57,6 @@ export default async function ConnectionsPage() {
     {!env.cronSecret() && <Alert variant="warning" className="mb-6"><AlertTitle>Daily sync needs setup</AlertTitle>
       <AlertDescription>Set CRON_SECRET in the hosting environment to enable the daily job. Manual sync is available after connecting.</AlertDescription></Alert>}
     <ConnectedAccounts connections={connections} fx={fx} statements={statements} balances={balances} />
-    <ManualBalances accounts={manualRows} debts={debtRows} />
+    <ManualBalances accounts={manualRows} debts={debtRows} categories={categories} today={today} plan={{ debts: planDebts, missingFx: [...missingFx] }} />
   </>;
 }

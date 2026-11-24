@@ -150,6 +150,20 @@ export const monthBudgetSchema = z.object({
   amount: optionalAmount(),
 });
 
+/** "Pay" on a debt: lowers its balance and, unless unticked, logs the payment as an expense linked to it. */
+export const debtPaymentSchema = z
+  .object({
+    amount: amount("Enter the amount paid").refine((n) => n > 0, "Must be more than 0"),
+    occurredOn: z.iso.date({ error: "Pick a date" }),
+    logExpense: z.preprocess((v) => v === "on" || v === "true", z.boolean()),
+    categoryId: z.preprocess(blank, z.coerce.number().int().positive().optional()),
+    account: optionalText(60),
+  })
+  .superRefine((v, ctx) => {
+    if (v.logExpense && !v.categoryId) ctx.addIssue({ code: "custom", path: ["categoryId"], message: "Pick a category" });
+  });
+export type DebtPaymentInput = z.output<typeof debtPaymentSchema>;
+
 /* ---------- form state ---------- */
 
 export { failure, formValues, initialFormState, type FieldErrors, type FormState } from "./form-state";

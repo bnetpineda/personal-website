@@ -1,16 +1,22 @@
 "use client";
 
-import { useId } from "react";
-import { Plus } from "lucide-react";
+import { useId, useState } from "react";
+import { HandCoins, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FieldGroup } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Swatch } from "@/components/ui/swatch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ASSET_CLASSES, ASSET_CLASS_META, CURRENCIES, LIABILITY_KINDS, LIABILITY_KIND_LABELS, type AssetClass, type LiabilityKind } from "@/lib/finance/constants";
-import { deleteDebt, deleteManualAccount, saveDebt, saveManualAccount, setDebtArchived, setManualAccountArchived } from "../_actions/balances";
+import { deleteDebt, deleteManualAccount, payDebt, saveDebt, saveManualAccount, setDebtArchived, setManualAccountArchived, undoDebtPayment, type DebtPaymentResult } from "../_actions/balances";
+import type { FormCategory } from "./cash-flow-form";
+import { DebtPlanner, type PlannerDebt } from "./debt-planner";
 import { FormField, FormFooter, FormSheet, useFormAction } from "./form";
 import { staleLabel } from "./labels";
 import { EditableRow } from "./row-actions";
@@ -169,8 +175,75 @@ export function DebtForm({ debt }: { debt?: DebtDTO }) {
   );
 }
 
-/** Manual accounts and debts side by side on Accounts, each with its own Add. */
-export function ManualBalances({ accounts, debts }: { accounts: ManualAccountDTO[]; debts: DebtDTO[] }) {
+/** A category that sounds like debt repayment, to start the picker on. */
+const DEBT_CATEGORY = /debt|loan|credit|card|bnpl|install?ment/i;
+
+/** "Pay": records a payment towards a debt. It lowers the balance and, unless unticked, logs it as spending. */
+export function DebtPaymentForm({ debt, categories, today }: { debt: DebtDTO; categories: FormCategory[]; today: string }) {
+  const { state, pending, onSubmit, formKey, error } = useFormAction<DebtPaymentResult>(payDebt, {
+    undo: (result) => (result.undo ? () => undoDebtPayment(result.undo!) : undefined),
+  });
+  const uid = useId();
+  const id = (name: string) => `${uid}-${name}`;
+  const options = categories.filter((c) => !c.archived);
+  const [logExpense, setLogExpense] = useState(state.values ? state.values.logExpense === "on" : true);
+  const [date, setDate] = useState(state.values?.occurredOn ?? today);
+  const [categoryId, setCategoryId] = useState(state.values?.categoryId ?? String(options.find((c) => DEBT_CATEGORY.test(c.name))?.id ?? ""));
+  return (
+    <form key={formKey} onSubmit={onSubmit} noValidate>
+      <input type="hidden" name="id" value={debt.id} />
+      <input type="hidden" name="categoryId" value={logExpense ? categoryId : ""} />
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
+        <FormField id={id("amount")} label={`Amount paid (${debt.currency})`} error={error("amount")} description={debt.minPayment ? "Starts at the minimum payment" : undefined}>
+          <Input id={id("amount")} name="amount" inputMode="decimal" autoComplete="off" placeholder="0.00" defaultValue={state.values?.amount ?? debt.minPayment ?? undefined} aria-invalid={Boolean(error("amount"))} />
+        </FormField>
+        <FormField id={id("date")} label="Paid on" error={error("occurredOn")}>
+          <DatePicker id={id("date")} name="occurredOn" value={date} onValueChange={setDate} today={today} aria-invalid={Boolean(error("occurredOn"))} />
+        </FormField>
+        <Field orientation="horizontal" className="sm:col-span-2">
+          <Checkbox id={id("log")} name="logExpense" checked={logExpense} onCheckedChange={(checked) => setLogExpense(checked === true)} />
+          <FieldLabel htmlFor={id("log")}>Count it as spending</FieldLabel>
+        </Field>
+        {logExpense && (
+          <Field data-invalid={error("categoryId") ? true : undefined} className="sm:col-span-2">
+            <FieldLabel id={id("category")}>Spending category</FieldLabel>
+            {options.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No spending categories yet. Add one on Categories, or untick the box above.</p>
+            ) : (
+              <ToggleGroup type="single" variant="outline" size="sm" spacing={2} value={categoryId} onValueChange={(value) => value && setCategoryId(value)}
+                aria-labelledby={id("category")} aria-invalid={Boolean(error("categoryId"))} className="flex-wrap">
+                {options.map((c) => (
+                  <ToggleGroupItem key={c.id} value={String(c.id)}>
+                    <Swatch color={c.color} />
+                    {c.name}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            )}
+            {error("categoryId") && <FieldError>{error("categoryId")}</FieldError>}
+          </Field>
+        )}
+        {logExpense && (
+          <FormField id={id("account")} label="Paid from" error={error("account")} description="Optional" wide>
+            <Input id={id("account")} name="account" maxLength={60} placeholder="GoTyme" defaultValue={state.values?.account} />
+          </FormField>
+        )}
+        <FormFooter state={state} pending={pending}>Record payment</FormFooter>
+      </FieldGroup>
+    </form>
+  );
+}
+
+/** Manual accounts and debts side by side on Accounts, each with its own Add, and the debts' payoff plan. */
+export function ManualBalances({ accounts, debts, categories, today, plan }: {
+  accounts: ManualAccountDTO[];
+  debts: DebtDTO[];
+  /** Spending categories, for logging a debt payment. */
+  categories: FormCategory[];
+  today: string;
+  /** Open debts in PHP for the payoff plan; those without an exchange rate are left out. */
+  plan: { debts: PlannerDebt[]; missingFx: string[] };
+}) {
   return (
     <section aria-label="Manual accounts and debts" className="mb-6 grid gap-4 lg:grid-cols-2">
       <Card id="manual" className="scroll-mt-24">
@@ -244,6 +317,12 @@ export function ManualBalances({ accounts, debts }: { accounts: ManualAccountDTO
                     onDelete={() => deleteDebt(d.id)}
                     deleteWarning="It stops coming off net worth. Archive it instead once it's paid off."
                     aside={<span className="font-mono text-sm"><Money value={-d.balance} currency={d.currency} /></span>}
+                    extra={!d.archived && d.balance > 0 ? (
+                      <FormSheet title={`Pay ${d.name}`} description="Takes the payment off the balance. Counted as spending, it shows on the Overview too."
+                        trigger={<Button variant="outline" size="sm" aria-label={`Pay ${d.name}`}><HandCoins /> Pay</Button>}>
+                        <DebtPaymentForm debt={d} categories={categories} today={today} />
+                      </FormSheet>
+                    ) : undefined}
                   >
                     <ItemContent>
                       <ItemTitle>{d.name}{d.archived && <span className="text-xs font-normal text-muted-foreground">Archived · not in net worth</span>}</ItemTitle>
@@ -264,6 +343,7 @@ export function ManualBalances({ accounts, debts }: { accounts: ManualAccountDTO
           )}
         </CardContent>
       </Card>
+      {plan.debts.length > 0 && <DebtPlanner debts={plan.debts} missingFx={plan.missingFx} today={today} className="lg:col-span-2" />}
     </section>
   );
 }
