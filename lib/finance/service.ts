@@ -109,7 +109,7 @@ export async function phpRatesOn(wanted: readonly WantedRate[], today: string = 
         if (rate != null) dated.set(rateKey(p.currency, p.on), rate);
       }
     } catch (err) {
-      console.error("[admin] dated FX lookup failed; using current rates", err);
+      logError("dated FX lookup failed; using current rates", err);
     }
   }
   return (currency, on) => dated.get(rateKey(currency, on)) ?? fxToPhp(fx, currency);

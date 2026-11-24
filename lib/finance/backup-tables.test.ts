@@ -15,6 +15,7 @@ const NOT_BACKED_UP: Record<string, string> = {
   spot_fifo: "cache, rebuilt from imported trades",
   spot_fifo_meta: "cache fingerprint, rebuilt from imported trades",
   ai_summaries: "regenerated from the data by the daily job",
+  fx_rate_history: "cache of past exchange rates, refetched from Frankfurter",
 };
 /** Backup keys that differ from the schema export's name. */
 const KEY_TO_EXPORT: Record<string, string> = { recurring: "recurringCashFlows" };
