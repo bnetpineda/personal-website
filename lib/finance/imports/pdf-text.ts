@@ -24,12 +24,17 @@ export async function pdfPages(bytes: Uint8Array, { maxPages = 30, password }: {
     if (e?.name === "PasswordException") throw new PdfPasswordError(e.code === 2 || Boolean(password));
     throw new ImportError("The file could not be read as a PDF.");
   }
-  if (pdf.numPages > maxPages) throw new ImportError(`Upload a statement of at most ${maxPages} pages.`);
-  const pages: PdfPage[] = [];
-  for (let n = 1; n <= pdf.numPages; n++) {
-    const { items } = await (await pdf.getPage(n)).getTextContent();
-    pages.push(items.flatMap((item) => "str" in item && item.str.trim()
-      ? [{ text: item.str, x: item.transform[4], y: item.transform[5], width: item.width }] : []));
+  try {
+    if (pdf.numPages > maxPages) throw new ImportError(`Upload a statement of at most ${maxPages} pages.`);
+    const pages: PdfPage[] = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const { items } = await (await pdf.getPage(n)).getTextContent();
+      pages.push(items.flatMap((item) => "str" in item && item.str.trim()
+        ? [{ text: item.str, x: item.transform[4], y: item.transform[5], width: item.width }] : []));
+    }
+    return pages;
+  } finally {
+    // A warm serverless instance serves many requests; free the parsed document instead of keeping it in memory.
+    await pdf.loadingTask.destroy().catch(() => {});
   }
-  return pages;
 }
