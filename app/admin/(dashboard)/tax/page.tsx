@@ -22,6 +22,9 @@ import {
 } from "@/lib/finance/tax";
 import { EmptyState, InfoNote, MissingFxAlert, Money, PageHeader, Panel, Pct, StatCards } from "../../_components/ui";
 
+/** Server Actions run under the calling page's limit (⌘K can sync from any page); see lib/finance/deadline.ts. */
+export const maxDuration = 120;
+
 export const metadata: Metadata = { title: "Tax estimate" };
 
 type Params = { year?: string; skip?: string };

@@ -27,7 +27,7 @@ import { IMPORTER_NOTE_PATTERNS } from "@/lib/finance/notes";
 import { loadStatementMonths } from "@/lib/finance/imports/statement-months";
 import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE, isSearching, type EntryFilters } from "@/lib/finance/entry-filters";
 import type { EntryKind } from "@/lib/finance/imports/types";
-import { STATEMENT_PROVIDERS, statementCoverage } from "@/lib/finance/imports/coverage";
+import { statementCoverage } from "@/lib/finance/imports/coverage";
 import { teachGroups } from "@/lib/finance/imports/teach";
 import { currentNetWorth, loadFxTable } from "@/lib/finance/service";
 import { latestAiSummary } from "@/lib/finance/ai-summary-service";
