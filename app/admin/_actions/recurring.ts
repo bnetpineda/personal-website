@@ -1,7 +1,6 @@
 "use server";
 
 import { eq, inArray } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
@@ -11,6 +10,7 @@ import { todayManila } from "@/lib/finance/dates";
 import { cursorAfterEdit, markHandled, nextOccurrence, scheduleOf } from "@/lib/finance/recurrence";
 import { failure, idSchema, invalid, recurringSchema, type FormState } from "@/lib/finance/schemas";
 import { moveRecurringCursor, phpRatesOn, postDueRecurring } from "@/lib/finance/service";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 const daySchema = z.iso.date();
 
@@ -82,7 +82,7 @@ export async function saveRecurring(_prev: FormState, formData: FormData): Promi
   else await db.insert(recurringCashFlows).values(values);
 
   const message = await postNow(existing ? "Saved." : `Added ${input.description}.`);
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message };
 }
 
@@ -100,7 +100,7 @@ export async function setRecurringPaused(id: string, paused: boolean): Promise<F
   await db.update(recurringCashFlows).set(set).where(eq(recurringCashFlows.id, row.id));
 
   const message = paused ? "Paused." : await postNow("Resumed.");
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message };
 }
 
@@ -118,7 +118,7 @@ export async function skipRecurring(id: string, on: string): Promise<FormState> 
   if (row.nextOn && row.nextOn <= parsedOn.data) {
     await moveRecurringCursor(row, markHandled(scheduleOf(row), row, [parsedOn.data]));
   }
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: "Skipped." };
 }
 
@@ -128,7 +128,7 @@ export async function deleteRecurring(id: string): Promise<FormState> {
   if (!parsed.success) return failure("Unknown item.");
   // Entries already posted stay; their recurring_id becomes null.
   await getDb().delete(recurringCashFlows).where(eq(recurringCashFlows.id, parsed.data));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: "Deleted." };
 }
 
@@ -183,7 +183,7 @@ export async function postRecurring(occurrences: { id: string; on: string }[]): 
   // Duplicates (already posted by the cron or another tab) are skipped by the unique index.
   const insert = db.insert(cashFlows).values(entries).onConflictDoNothing().returning({ id: cashFlows.id });
   const [inserted] = await db.batch([insert, ...cursors]);
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
 
   const posted = inserted.length;
   const message =

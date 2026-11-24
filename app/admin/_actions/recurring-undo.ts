@@ -1,7 +1,6 @@
 "use server";
 
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
@@ -9,6 +8,7 @@ import { cashFlows, recurringCashFlows } from "@/lib/db/schema";
 import { scheduleOf, unmarkHandled } from "@/lib/finance/recurrence";
 import { failure, idSchema, type FormState } from "@/lib/finance/schemas";
 import { moveRecurringCursor } from "@/lib/finance/service";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 const undoSchema = z.object({
   /** The occurrences the Skip or Post handled. */
@@ -50,6 +50,6 @@ export async function undoRecurring(input: z.input<typeof undoSchema>): Promise<
   if (queries.length === 0) return failure("Nothing to undo.");
   const [first, ...rest] = queries;
   await db.batch([first, ...rest]);
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: posted ? "Undone: back in Needs confirming." : "Undone: no longer skipped." };
 }

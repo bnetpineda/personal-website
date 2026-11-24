@@ -1,7 +1,6 @@
 "use server";
 
 import { eq, sql } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
@@ -9,6 +8,7 @@ import { cashFlows, categories, holdings, liabilities } from "@/lib/db/schema";
 import { round2 } from "@/lib/finance/calc";
 import { debtPaymentSchema, failure, idSchema, invalid, liabilitySchema, manualAccountSchema, type FormState } from "@/lib/finance/schemas";
 import { ensureFx, phpRatesOn, snapshotQuietly } from "@/lib/finance/service";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 /*
  * Manual accounts (holdings no account syncs) and debts. Both count in net worth unless archived, so
@@ -17,7 +17,7 @@ import { ensureFx, phpRatesOn, snapshotQuietly } from "@/lib/finance/service";
 
 function done(message: string): FormState {
   after(snapshotQuietly);
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message };
 }
 

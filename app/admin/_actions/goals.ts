@@ -1,14 +1,14 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { goals } from "@/lib/db/schema";
 import { failure, goalSchema, idSchema, invalid, type FormState } from "@/lib/finance/schemas";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 function done(message: string): FormState {
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message };
 }
 

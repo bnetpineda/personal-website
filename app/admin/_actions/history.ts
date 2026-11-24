@@ -2,7 +2,6 @@
 
 import { createHash } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { accountConnections, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
@@ -16,6 +15,7 @@ import { ImportError, sameSource, sourceKey, type HistoryCoverage, type ImportEn
 import { saveNav } from "@/lib/finance/portfolio";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
 import { logError } from "@/lib/log";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 function failure(error: unknown): FormState {
   return { ok: false, message: error instanceof ImportError || error instanceof ConnectionError ? error.message : "The history could not be imported. Check report fields or provider access. Previous records were kept." };
@@ -55,7 +55,7 @@ export async function importInvestmentReport(data: FormData): Promise<FormState>
     const navDays = await saveNav("ibkr", parsed.nav ?? []).catch((err) => { logError("IBKR NAV save failed", err); return 0; });
     await applyCategoryRules();
     const ai = await categorizeQuietly({ deadline });
-    revalidatePath("/admin", "layout");
+    refreshAdmin();
     return { ok: true, message: `Imported ${Number(saved.rows[0]?.inserted ?? 0)} new entries; skipped ${Number(saved.rows[0]?.duplicates ?? 0)} duplicates.${navDays ? ` Added ${navDays} days of IBKR values to Portfolio.` : ""}${describeAiRun(ai)}` };
   } catch (error) { return failure(error); }
 }
@@ -65,7 +65,7 @@ export async function configureInvestmentHistory(_previous: FormState, data: For
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   try {
     await startBinanceHistory(parsed.data);
-    revalidatePath("/admin", "layout");
+    refreshAdmin();
     return { ok: true, message: "History streams saved. Use Continue all to import older activity now; daily sync also advances saved streams." };
   } catch (error) { return failure(error); }
 }
@@ -73,7 +73,7 @@ export async function prepareHoldingCosts(): Promise<FormState & { jobs?: { id: 
   await requireAdmin();
   try {
     const result = await startHeldSpotHistory();
-    revalidatePath("/admin", "layout");
+    refreshAdmin();
     return { ok: true, ...result };
   } catch (error) { return failure(error); }
 }
@@ -91,13 +91,13 @@ export async function continueInvestmentHistory(id: string): Promise<FormState &
   await requireAdmin();
   if (!idSchema.safeParse(id).success) return { ok: false, message: "Unknown import." };
   const result = await advanceHistory(id);
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return result;
 }
 export async function setHistoryEnabled(id: string, enabled: boolean): Promise<FormState> {
   await requireAdmin();
   if (!idSchema.safeParse(id).success || typeof enabled !== "boolean") return { ok: false, message: "Unknown import." };
   await getDb().update(investmentSyncs).set({ enabled, lease: null, leaseExpiresAt: null }).where(eq(investmentSyncs.id, id));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: enabled ? "History import resumed." : "History import paused; saved records were kept." };
 }

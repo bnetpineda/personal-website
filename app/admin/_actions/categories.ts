@@ -1,13 +1,13 @@
 "use server";
 
 import { and, count, eq, inArray } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { pgCode } from "@/lib/db/errors";
 import { cashFlows, categories, categoryBudgets, recurringCashFlows } from "@/lib/db/schema";
 import { isMonth, monthLabel } from "@/lib/finance/dates";
 import { categorySchema, failure, invalid, monthBudgetSchema, type FormState } from "@/lib/finance/schemas";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 export async function saveCategory(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireAdmin();
@@ -46,7 +46,7 @@ export async function saveCategory(_prev: FormState, formData: FormData): Promis
     throw err;
   }
 
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: id !== null ? `Saved ${input.name}.` : `Added ${input.name}.` };
 }
 
@@ -54,7 +54,7 @@ export async function setCategoryArchived(id: number, archived: boolean): Promis
   await requireAdmin();
   if (!Number.isInteger(id) || id <= 0) return failure("Unknown category.");
   await getDb().update(categories).set({ archived }).where(eq(categories.id, id));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: archived ? "Archived." : "Restored." };
 }
 
@@ -77,7 +77,7 @@ export async function deleteCategory(id: number): Promise<FormState> {
     if (pgCode(err) === "23503") return failure("Still in use — archive it instead.");
     throw err;
   }
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: "Deleted." };
 }
 
@@ -116,7 +116,7 @@ export async function updateMonthBudgets(_prev: FormState, formData: FormData): 
   if (writes.length === 0) return { ok: true, message: "No changes." };
   const [first, ...rest] = writes;
   await db.batch([first, ...rest]);
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: `Saved ${monthLabel(month)}'s budgets.` };
 }
 
@@ -156,6 +156,6 @@ export async function updateBudgets(_prev: FormState, formData: FormData): Promi
       .where(and(eq(categories.id, u.id), eq(categories.kind, "expense")))
   );
   await db.batch([first, ...rest]);
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: changed.length === 1 ? "Updated 1 budget." : `Updated ${changed.length} budgets.` };
 }

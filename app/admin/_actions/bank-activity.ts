@@ -1,7 +1,6 @@
 "use server";
 
 import { eq, sql } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
@@ -9,6 +8,7 @@ import { importedEntries } from "@/lib/db/schema";
 import { refileChoices } from "@/lib/finance/imports/review";
 import { failure, idSchema, type FormState } from "@/lib/finance/schemas";
 import { phpRatesOn } from "@/lib/finance/service";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 /*
  * Bank activity: re-filing a bank import the rules or AI got wrong. Every move is the person's own
@@ -25,7 +25,7 @@ async function entryFor(id: string) {
 }
 
 function done(message: string): FormState {
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message };
 }
 

@@ -1,7 +1,6 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import type { AddEntryData } from "../_components/add-entry";
 import { requireAdmin } from "@/lib/auth/session";
 import { getAccounts, getCategories, getEntrySuggestions, getLastEntryDefaults } from "@/lib/dal";
@@ -22,6 +21,7 @@ import {
   type RestoreCashFlowInput,
 } from "@/lib/finance/schemas";
 import { moveRecurringCursor, phpRatesOn } from "@/lib/finance/service";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 /** What the Add sheet needs, fetched when it opens so other pages don't pay for it on every load. */
 export async function getAddEntryData(): Promise<AddEntryData> {
@@ -137,7 +137,7 @@ export async function saveCashFlow(_prev: FormState, formData: FormData): Promis
     await db.insert(cashFlows).values({ ...values, id: createdId });
   }
 
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   if (existing) return { ok: true, message: `Saved ${values.description}.` };
   return {
     ok: true,
@@ -152,7 +152,7 @@ export async function deleteCashFlow(id: string): Promise<FormState & { deleted?
   const parsed = idSchema.safeParse(id);
   if (!parsed.success) return failure("Unknown entry.");
   const [row] = await getDb().delete(cashFlows).where(eq(cashFlows.id, parsed.data)).returning();
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   if (!row) return { ok: true, message: "Already deleted." };
   const deleted: RestoreCashFlowInput = {
     id: row.id,
@@ -200,7 +200,7 @@ export async function restoreCashFlow(row: RestoreCashFlowInput): Promise<FormSt
     })
     .onConflictDoNothing()
     .returning({ id: cashFlows.id });
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   if (inserted.length === 0) return failure("It's already back.");
   return { ok: true, message: `Restored ${input.description}.` };
 }
@@ -224,6 +224,6 @@ export async function setCashFlowCategory(id: string, categoryId: number, { undo
   // Archived categories can't take entries, except the one an Undo puts back.
   if (category.archived && !undo) return failure("That category is archived.");
   await db.update(cashFlows).set({ categoryId: category.id, updatedAt: new Date() }).where(eq(cashFlows.id, entryId.data));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: `${entry.description} → ${category.name}`, previous: entry.categoryId };
 }

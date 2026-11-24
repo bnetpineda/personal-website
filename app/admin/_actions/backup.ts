@@ -1,11 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import type { TableCount } from "@/lib/finance/backup";
 import { previewBackup, readBackupFile, restoreBackup } from "@/lib/finance/backup-service";
 import type { FormState } from "@/lib/finance/schemas";
 import { logError } from "@/lib/log";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 export interface RestorePreview extends FormState {
   counts?: Omit<TableCount, "table">[];
@@ -44,7 +44,7 @@ export async function restoreFromBackup(formData: FormData): Promise<FormState> 
     logError("backup restore failed", error);
     return { ok: false, message: "The restore didn't finish. Nothing already saved was changed; run it again to add the rest." };
   }
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   // Restored rules are off (see lib/finance/backup.ts), so say where to turn them back on.
   const rulesNote = rules ? ` ${rules} category ${rules === 1 ? "rule is" : "rules are"} turned off; turn on the ones you want on Categories.` : "";
   return { ok: true, message: fresh ? `Restored ${entries(fresh)}.${rulesNote}` : "Nothing to restore: everything in this backup is already here." };

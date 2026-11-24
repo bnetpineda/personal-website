@@ -1,13 +1,13 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { categories, categoryRules } from "@/lib/db/schema";
 import { providerSchema } from "@/lib/finance/connections/types";
 import { failure, idSchema, invalid, type FormState } from "@/lib/finance/schemas";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 const ruleSchema = z.object({
   id: z.preprocess((v) => (v === "" ? undefined : v), idSchema.optional()),
@@ -38,7 +38,7 @@ export async function saveRule(_previous: FormState, data: FormData): Promise<Fo
   } else {
     await db.insert(categoryRules).values(row);
   }
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: id ? "Rule saved." : "Rule saved. It runs before AI on the next import or sync." };
 }
 
@@ -48,6 +48,6 @@ export async function deleteRule(id: string): Promise<FormState> {
   const parsed = idSchema.safeParse(id);
   if (!parsed.success) return failure("Unknown rule.");
   await getDb().delete(categoryRules).where(eq(categoryRules.id, parsed.data));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: "Rule deleted. Entries it filed keep their category." };
 }

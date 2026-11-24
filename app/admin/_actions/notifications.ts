@@ -1,7 +1,6 @@
 "use server";
 
 import { inArray } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
@@ -18,6 +17,7 @@ import { importedIncomeSince, repeatPayers, typicalIncome } from "@/lib/finance/
 import type { FormState } from "@/lib/finance/schemas";
 import { statementPositions } from "@/lib/finance/statement-balances";
 import type { InboxProps } from "../_components/dashboard";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 /** Needs you for pages other than the Overview, fetched when it opens. */
 export async function getInboxData(): Promise<InboxProps> {
@@ -49,7 +49,7 @@ export async function dismissNotifications(keys: string[], dismissed: boolean): 
   if (!parsed.success || typeof dismissed !== "boolean") return { ok: false, message: "Invalid notification." };
   if (dismissed) await getDb().insert(notificationDismissals).values(parsed.data.map((key) => ({ key }))).onConflictDoNothing();
   else await getDb().delete(notificationDismissals).where(inArray(notificationDismissals.key, parsed.data));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   const one = parsed.data.length === 1;
   return { ok: true, message: dismissed ? (one ? "Alert dismissed." : `${parsed.data.length} alerts dismissed.`) : one ? "Alert restored." : "Alerts restored." };
 }

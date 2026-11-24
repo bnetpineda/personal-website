@@ -1,7 +1,6 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
@@ -18,6 +17,7 @@ import { recordPortfolioQuietly } from "@/lib/finance/portfolio";
 import { applyCategoryRules } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { actionDeadline } from "@/lib/finance/deadline";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 /** After a sync, rules and AI file the new activity before the action answers; the result is the message tail. */
 async function refreshTotals({ categorize = false, deadline = actionDeadline() } = {}) {
@@ -30,7 +30,7 @@ async function refreshTotals({ categorize = false, deadline = actionDeadline() }
     await applyCategoryRules();
     summary = describeAiRun(await categorizeQuietly({ deadline }));
   }
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return summary;
 }
 
@@ -69,7 +69,7 @@ export async function saveConnectionExpiry(_previous: FormState, data: FormData)
   const date = z.union([z.iso.date(), z.literal("")]).safeParse(data.get("credentialsExpireOn"));
   if (!provider.success || !date.success) return { ok: false, message: "Check the expiry date." };
   await getDb().update(accountConnections).set({ credentialsExpireOn: date.data || null }).where(eq(accountConnections.provider, provider.data));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: "Credential reminder updated." };
 }
 

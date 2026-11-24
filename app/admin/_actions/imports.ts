@@ -1,7 +1,6 @@
 "use server";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
@@ -17,6 +16,7 @@ import type { StatementBalance } from "@/lib/finance/statement-balances";
 import { ImportError, uniqueEntries, type ImportEntry } from "@/lib/finance/imports/types";
 import { detectFeeMode, mergeWiseStatements, parseWiseStatement } from "@/lib/finance/imports/wise-csv";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
+import { refreshAdmin } from "@/lib/finance/refresh";
 
 /** The tail of an import message: which balances now count in net worth. */
 function balancesNote(currencies: string[], warning?: string) {
@@ -56,7 +56,7 @@ export async function importWiseStatements(data: FormData): Promise<FormState> {
     const updated = await saveStatementBalances(balances.map((b) => ({ provider: "wise", account: "personal", ...b })));
     await applyCategoryRules();
     const ai = await categorizeQuietly({ deadline });
-    revalidatePath("/admin", "layout");
+    refreshAdmin();
     return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${balancesNote(updated, balanceWarning)}${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
 }
@@ -87,7 +87,7 @@ async function importStatementPdfs(data: FormData, bank: string, parse: (pages: 
     const updated = await saveStatementBalances(balances);
     await applyCategoryRules();
     const ai = await categorizeQuietly({ deadline });
-    revalidatePath("/admin", "layout");
+    refreshAdmin();
     const count = statements.length === 1 ? "1 statement" : `${statements.length} statements`;
     return { ok: true, message: `Imported ${result.inserted} new entries from ${count}; ${result.duplicates} were already imported.${balancesNote(updated)}${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
@@ -132,7 +132,7 @@ export async function teachPayee(payee: string, kind: "income" | "expense", cate
     db.update(cashFlows).set({ categoryId: category.id, notes: `Taught once: ${value.payee} is ${category.name}.`, updatedAt: new Date() }).where(inArray(cashFlows.id, ids)),
     db.update(e).set({ categoryId: category.id, categorizedBy: "rule", aiReason: null, updatedAt: new Date() }).where(inArray(e.id, ids))]);
   else await rule;
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: `${value.payee} is ${category.name} from now on. Moved ${ids.length} past ${ids.length === 1 ? "entry" : "entries"}.` };
 }
 
@@ -140,6 +140,6 @@ export async function setRuleEnabled(id: string, enabled: boolean): Promise<Form
   await requireAdmin();
   if (!idSchema.safeParse(id).success || typeof enabled !== "boolean") return { ok: false, message: "Invalid rule." };
   await getDb().update(categoryRules).set({ enabled }).where(eq(categoryRules.id, id));
-  revalidatePath("/admin", "layout");
+  refreshAdmin();
   return { ok: true, message: enabled ? "Rule resumed." : "Rule paused." };
 }
