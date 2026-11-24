@@ -155,7 +155,7 @@ see below. Wise balances are not part of net worth.
 
 MariBank has no API. **Import MariBank PDFs** (MariBank card on `/admin/connections`) reads the
 monthly e-statement PDFs from the MariBank app, several months at once (up to 12 files, 2.5 MB in
-total). Password-protected PDFs are refused; save a copy without the password first.
+total). A password-protected PDF opens a password prompt; see [GoTyme](#gotyme).
 
 Only the text layer is read (via `unpdf`); nothing in the PDF is executed. Each
 `<ACCOUNT> - TRANSACTION DETAILS` table is read row by row: an amount is Outgoing or Incoming by which
@@ -167,6 +167,34 @@ AI can file them as income or spending; money from the account holder's own name
 interest is interest. Statements carry no transaction
 IDs, so a row is identified by date, direction, amount and counterparty: re-importing a month, or a
 re-downloaded copy of it, skips what is already there. Balances are not saved.
+
+## GoTyme
+
+GoTyme has no API either. **Import PDFs** on the GoTyme card (`/admin/connections`) reads the
+"Statement of Account" PDFs you request in the GoTyme app, for any period, several at once (same limits
+as MariBank). Overlapping periods are fine. Apply migration `0019_gotyme_provider` first.
+
+GoTyme locks its statements with a password. A locked upload opens a password prompt, then sends the same
+files again with it. The password only opens the files in memory on the server: it is not saved, logged or
+put in a backup. The page keeps it until it is closed, so the next upload doesn't ask again. One password
+opens every file in an upload; a wrong one asks again.
+
+Each row's amount is a credit, a debit or the running balance by which header it is right-aligned under.
+Rows must move the running balance by their own amount from the **Opening balance** to the **Closing
+balance**, and add up to **Total Credit** and **Total Debit**, or the whole upload is refused. Only peso
+statements are read. Rows read as a person would: "Transfer from X, Account No. ••••" becomes
+"Received from X", "Transfer to X" becomes "Sent to X", "Card payment at X, Card ••••" becomes "Card payment:
+X", and the masked numbers are dropped. Interest is interest, withholding tax is tax and fees are fees;
+everything else is a payment for rules and AI.
+GoTyme shortens other people's names to initials ("M. B. N. PINEDA"), so initials that start with every
+given name's, followed by the account holder's last name, count as the account holder: those are transfers.
+
+Statements carry no transaction IDs, so a row is named by its date, direction, amount, the running
+balance after it and its details. The running balance is the account's own, so a statement for a
+different period names a row the same way, and two identical QR payments on one day stay two. The
+account is kept as its type and the last four digits of its number ("deposit account 1234"). The
+closing balance counts as cash in net worth, dated the period's last day; a period with no activity
+still updates it.
 
 ## CSV imports and category rules
 
@@ -229,7 +257,7 @@ money first, with the model's closest guess preselected. Choosing a category onc
 (`contains` = payee, any provider) and re-files that payee's past AI-filed entries; manual and rule
 decisions are never changed.
 
-**Statement reminders.** Wise and MariBank update only on upload, so "Needs you" says when last
+**Statement reminders.** Wise, MariBank and GoTyme update only on upload, so "Needs you" says when last
 month's statement is not in yet, when months between uploads have no activity, and when one bank's
 statements start later than the other's.
 
@@ -247,7 +275,7 @@ deposits and withdrawals, and budget-currency dividends, interest, fees and tax 
 
 Each entry gets one decision, validated server-side against what posting and the ledger accept:
 
-- **post**: fiat Wise/MariBank/IBKR income or expense goes to Transactions under a category whose kind
+- **post**: fiat Wise/MariBank/GoTyme/IBKR income or expense goes to Transactions under a category whose kind
   matches the amount's sign. If an entry you logged by hand or from a recurring schedule has the same
   date, currency, amount and direction, the import is ignored as `Already in Transactions`. Other
   imports never count as twins: two ₱500 payments on one day, or the same amount from two banks, both post.

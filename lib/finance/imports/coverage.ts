@@ -2,8 +2,9 @@ import type { Provider } from "../connections/types";
 import { addMonths } from "../dates";
 import type { StatementBalance } from "../statement-balances";
 
-export const STATEMENT_PROVIDERS = ["wise", "maribank"] as const;
+export const STATEMENT_PROVIDERS = ["wise", "maribank", "gotyme"] as const;
 export type StatementProvider = (typeof STATEMENT_PROVIDERS)[number];
+export const isStatementProvider = (provider: Provider): provider is StatementProvider => (STATEMENT_PROVIDERS as readonly Provider[]).includes(provider);
 
 export interface StatementCoverage {
   /** First and last month with imported activity ("YYYY-MM"). */

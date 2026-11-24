@@ -134,6 +134,13 @@
       "when": 1793918968605,
       "tag": "0018_ai_summaries",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795557603341,
+      "tag": "0019_gotyme_provider",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { pgCode } from "@/lib/db/errors";
 import { categoryRules, importedEntries, statementBalances } from "@/lib/db/schema";
 import { fxToPhp } from "../calc";
 import { CURRENCIES } from "../constants";
+import { BANK_PROVIDERS } from "../connections/types";
 import { ensureFx } from "../service";
 import { canPost, matchingRule } from "./review";
 import type { StatementBalance } from "../statement-balances";
@@ -95,7 +96,7 @@ export async function applyCategoryRules(entryIds?: string[]) {
   const [rules, pending] = await Promise.all([
     db.select().from(categoryRules).where(eq(categoryRules.enabled, true)),
     db.select().from(importedEntries).where(and(eq(importedEntries.status, "pending"),
-      inArray(importedEntries.provider, ["wise", "maribank", "ibkr"]), inArray(importedEntries.currency, [...CURRENCIES]),
+      inArray(importedEntries.provider, [...BANK_PROVIDERS, "ibkr"]), inArray(importedEntries.currency, [...CURRENCIES]),
       inArray(importedEntries.kind, ["payment", "reward", "dividend", "interest", "fee", "tax"]),
       sql`abs(${importedEntries.amount}) >= 0.005`,
       // Apply rules only to candidates that can match an active rule. Old unrelated entries cannot starve the queue.

@@ -11,7 +11,7 @@ import { isConnectionStale, PROVIDER_META } from "./connections/types";
 import { dashboardMonth } from "./dashboard";
 import { addMonths, currentMonth, monthLabel, monthRange, todayManila } from "./dates";
 import { averageMonthlySpending, goalProgress } from "./goals";
-import { missingStatementProviders, statementCoverage } from "./imports/coverage";
+import { missingStatementProviders, STATEMENT_PROVIDERS, statementCoverage } from "./imports/coverage";
 import { currentNetWorth, loadFxTable } from "./service";
 
 /*
@@ -50,7 +50,7 @@ export async function loadSummaryFacts(now = new Date()): Promise<SummaryFacts> 
     db.select({ provider: accountConnections.provider, enabled: accountConnections.enabled, error: accountConnections.error, lastSyncedAt: accountConnections.lastSyncedAt,
       includeInNetWorth: accountConnections.includeInNetWorth, asOf: sql<string | null>`${accountConnections.snapshot}->>'asOf'` }).from(accountConnections),
     db.select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
-      .from(e).where(inArray(e.provider, ["wise", "maribank"])).groupBy(e.provider, sql`2`),
+      .from(e).where(inArray(e.provider, [...STATEMENT_PROVIDERS])).groupBy(e.provider, sql`2`),
   ]);
 
   const statements = statementCoverage(statementRows);

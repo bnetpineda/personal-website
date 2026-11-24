@@ -2,13 +2,13 @@ import { z } from "zod";
 import { ASSET_CLASSES } from "../constants";
 import { removeBinanceEarnReceipts } from "./binance-positions";
 
-/** Where imported activity comes from. Wise and MariBank arrive only as uploaded statements. */
-export const PROVIDERS = ["wise", "binance", "ibkr", "maribank", "hyperliquid"] as const;
+/** Where imported activity comes from. Wise, MariBank and GoTyme arrive only as uploaded statements. */
+export const PROVIDERS = ["wise", "binance", "ibkr", "maribank", "hyperliquid", "gotyme"] as const;
 export const providerSchema = z.enum(PROVIDERS);
 export type Provider = z.infer<typeof providerSchema>;
 
 /** Bank accounts: their activity is everyday income and spending, never investment bookkeeping. */
-export const BANK_PROVIDERS: readonly Provider[] = ["wise", "maribank"];
+export const BANK_PROVIDERS: readonly Provider[] = ["wise", "maribank", "gotyme"];
 export const isBank = (provider: Provider) => BANK_PROVIDERS.includes(provider);
 
 /** Accounts that sync through an API. Wise personal tokens cannot, so Wise is not one of them. */
@@ -26,6 +26,11 @@ export const PROVIDER_META = {
   maribank: {
     name: "MariBank",
     description: "Transactions from the monthly statement PDFs in the MariBank app.",
+    scope: "Statement PDF import",
+  },
+  gotyme: {
+    name: "GoTyme",
+    description: "Transactions from the statement PDFs you request in the GoTyme app.",
     scope: "Statement PDF import",
   },
   binance: {

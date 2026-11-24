@@ -1,7 +1,7 @@
 import type { ConnectionView, Provider } from "./connections/types";
 import { isConnectionStale, needsNewCredentials, plainSyncError, PROVIDER_META, untriedAccounts } from "./connections/types";
 import { addMonths, dayLabel, daysBetween, fullDayLabel, monthLabel, timeAgo, todayManila } from "./dates";
-import type { StatementCoverage } from "./imports/coverage";
+import type { StatementCoverage, StatementProvider } from "./imports/coverage";
 
 export type NotificationType = "sync" | "history" | "expiry" | "budget" | "bill" | "statement" | "ai";
 
@@ -26,8 +26,8 @@ export function buildNotifications(input: {
   bills: { id: string; description: string; nextOn: string | null }[];
   /** Imported entries still uncategorized after a day, while AI is configured. Background runs fail quietly. */
   aiBacklog?: { waiting: number; oldest: string } | null;
-  /** What each statement-only bank (Wise, MariBank) has imported: they update only when the person uploads. */
-  statements?: Partial<Record<"wise" | "maribank", StatementCoverage>>;
+  /** What each statement-only bank (Wise, MariBank, GoTyme) has imported: they update only when the person uploads. */
+  statements?: Partial<Record<StatementProvider, StatementCoverage>>;
 }, now = new Date()): FinanceNotification[] {
   const today = todayManila(now), month = today.slice(0, 7);
   const alerts: FinanceNotification[] = [];
@@ -64,7 +64,7 @@ export function buildNotifications(input: {
     alerts.push({ key: `bill:${b.id}:${b.nextOn}`, type: "bill", title, label: title, detail: `Scheduled for ${dayLabel(b.nextOn)}.`, href: "/admin/recurring", severity: "warning" });
   }
   const lastMonth = addMonths(month, -1);
-  const banks = Object.entries(input.statements ?? {}) as ["wise" | "maribank", StatementCoverage][];
+  const banks = Object.entries(input.statements ?? {}) as [StatementProvider, StatementCoverage][];
   const earliest = banks.map(([, c]) => c.from).sort()[0];
   for (const [provider, c] of banks) {
     const name = PROVIDER_META[provider].name, file = provider === "wise" ? "CSVs" : "PDF";
@@ -77,7 +77,7 @@ export function buildNotifications(input: {
       detail: `No activity for ${c.missing.map((m) => monthLabel(m, "short")).join(", ")}. Upload ${c.missing.length === 1 ? "that statement" : "those statements"} if you have them.`, href: "/admin/connections", severity: "warning" });
     if (earliest && c.from > earliest) alerts.push({ key: `statement-start:${provider}:${earliest}`, type: "statement", provider,
       title: `${name}: older statements not uploaded`, label: "Older statements not uploaded",
-      detail: `${name} starts in ${monthLabel(c.from, "long")}, but your other bank goes back to ${monthLabel(earliest, "long")}. Upload the earlier ${name} statements so income and spending add up.`, href: "/admin/connections", severity: "warning" });
+      detail: `${name} starts in ${monthLabel(c.from, "long")}, but another bank goes back to ${monthLabel(earliest, "long")}. Upload the earlier ${name} statements so income and spending add up.`, href: "/admin/connections", severity: "warning" });
   }
   if (input.aiBacklog && input.aiBacklog.waiting > 0) {
     const title = "AI categorization is not keeping up";

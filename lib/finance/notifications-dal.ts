@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { accountConnections, cashFlows, categories, categoryBudgets, importedEntries, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
 import { monthBudget } from "./calc";
-import { statementCoverage } from "./imports/coverage";
+import { STATEMENT_PROVIDERS, statementCoverage } from "./imports/coverage";
 import { env } from "@/lib/env";
 import { currentMonth, monthRange } from "./dates";
 import { buildNotifications } from "./notifications";
@@ -34,7 +34,7 @@ export async function getNotifications() {
       .where(and(eq(e.status, "pending"), lt(e.createdAt, sql`now() - interval '1 day'`))).then(([row]) => row?.oldest ? { waiting: row.waiting, oldest: row.oldest } : null)
       : Promise.resolve(null),
     db.select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
-      .from(e).where(inArray(e.provider, ["wise", "maribank"])).groupBy(e.provider, sql`2`),
+      .from(e).where(inArray(e.provider, [...STATEMENT_PROVIDERS])).groupBy(e.provider, sql`2`),
     db.select({ categoryId: categoryBudgets.categoryId, amount: categoryBudgets.amount }).from(categoryBudgets).where(eq(categoryBudgets.month, month)),
   ]);
   const keys = new Set(dismissed.map((d) => d.key));

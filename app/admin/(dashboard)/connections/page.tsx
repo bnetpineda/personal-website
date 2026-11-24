@@ -37,7 +37,7 @@ export default async function ConnectionsPage() {
       <SyncConnectionsButton disabled={!connections.some((c) => c.enabled)} />
     </PageHeader>
     <p className="mb-6 max-w-3xl text-sm text-muted-foreground">
-      Connected accounts are set to update every day at 6 AM Manila time. Wise and MariBank update when you upload a statement. Other accounts and debts keep the value you last entered.
+      Connected accounts are set to update every day at 6 AM Manila time. Wise, MariBank and GoTyme update when you upload a statement. Other accounts and debts keep the value you last entered.
     </p>
     {untried.length > 0 && <Alert variant="warning" className="mb-6"><AlertTitle>Daily sync doesn&apos;t seem to be running</AlertTitle>
       <AlertDescription>Last tried: {untried.map((c) => `${PROVIDER_META[c.provider].name} ${dayLabel(todayManila(c.lastAttemptAt ?? c.lastSyncedAt!))}`).join(", ")}. Sync by hand for now; the daily job needs checking in Vercel.</AlertDescription></Alert>}

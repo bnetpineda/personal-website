@@ -11,14 +11,14 @@ import type { RecurringRow } from "@/lib/dal";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/types";
 import { monthLabel } from "@/lib/finance/dates";
-import type { StatementProvider } from "@/lib/finance/imports/coverage";
+import { isStatementProvider, type StatementProvider } from "@/lib/finance/imports/coverage";
 import type { TeachGroup } from "@/lib/finance/imports/teach";
 import type { AlertGroup } from "@/lib/finance/notifications";
 import type { Occurrence } from "@/lib/finance/recurrence";
 import type { FormCategory } from "./cash-flow-form";
 import { ConnectAccountButton, SyncConnectionsButton, SyncNowButton } from "./connection-controls";
 import { FormSheet } from "./form";
-import { ImportMariBankButton, ImportWiseButton } from "./import-controls";
+import { ImportGoTymeButton, ImportMariBankButton, ImportWiseButton } from "./import-controls";
 import { DismissNotificationButton } from "./notification-controls";
 import { DueList, PostAllDue } from "./recurring";
 import { TeachList } from "./teach-jev";
@@ -141,13 +141,20 @@ function KpiInfo({ kpi }: { kpi: Kpi }) {
   );
 }
 
+/** The upload button for one statement bank, in the dashboard's small size. */
+function ImportStatementButton({ provider }: { provider: StatementProvider }) {
+  if (provider === "wise") return <ImportWiseButton size="xs" />;
+  if (provider === "maribank") return <ImportMariBankButton size="xs" />;
+  return <ImportGoTymeButton size="xs" />;
+}
+
 function StatementUploads({ providers }: { providers: StatementProvider[] }) {
   return (
     <div className="flex flex-col gap-2">
       {providers.map((provider) => (
         <div key={provider} className="flex items-center justify-between gap-3 text-sm">
           {PROVIDER_META[provider].name}
-          {provider === "wise" ? <ImportWiseButton size="xs" /> : <ImportMariBankButton size="xs" />}
+          <ImportStatementButton provider={provider} />
         </div>
       ))}
     </div>
@@ -192,9 +199,7 @@ function AlertFix({ group }: { group: AlertGroup }) {
     );
   }
   if (!group.types.includes("statement")) return null;
-  if (group.provider === "wise") return <ImportWiseButton size="xs" />;
-  if (group.provider === "maribank") return <ImportMariBankButton size="xs" />;
-  return null;
+  return group.provider && isStatementProvider(group.provider) ? <ImportStatementButton provider={group.provider} /> : null;
 }
 
 function AlertRow({ group: g }: { group: AlertGroup }) {
@@ -366,7 +371,7 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
     >
       {rows.length === 0 ? (
         <EmptyState size="sm" title="No accounts connected">
-          Connect Binance, IBKR or Hyperliquid once and balances update by themselves every day. Wise and MariBank come in as statements.
+          Connect Binance, IBKR or Hyperliquid once and balances update by themselves every day. Wise, MariBank and GoTyme come in as statements.
         </EmptyState>
       ) : (
         <ItemGroup>

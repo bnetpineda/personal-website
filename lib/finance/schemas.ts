@@ -161,6 +161,8 @@ export interface FormState {
   values?: Record<string, string>;
   /** Id of the record a successful create made (lets the client offer "Undo"). */
   id?: string;
+  /** A statement PDF is locked: the client asks for its password and sends the same files again. */
+  needsPassword?: boolean;
 }
 
 export const initialFormState: FormState = { ok: false };

@@ -61,7 +61,7 @@ const goalRow = z.object({
   id: uuid, name: z.string().min(1), measure: z.enum(GOAL_MEASURES), target: amount.positive(), saved: maybe(amount.nonnegative()),
   targetOn: maybe(day), archived: z.boolean().default(false), sortOrder: z.number().int().default(0), ...timestamps,
 });
-const statementBalanceRow = z.object({ provider: z.enum(["wise", "maribank"]), account: z.string().min(1), currency, amount, asOf: day, ...timestamps });
+const statementBalanceRow = z.object({ provider: z.enum(["wise", "maribank", "gotyme"]), account: z.string().min(1), currency, amount, asOf: day, ...timestamps });
 const netWorthSnapshotRow = z.object({
   snapshotDate: day, assetsPhp: amount, liabilitiesPhp: amount, netWorthPhp: amount, investedPhp: amount,
   byClass: z.partialRecord(z.enum(ASSET_CLASSES), amount), updatedAt: time.optional(),

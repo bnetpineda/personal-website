@@ -24,7 +24,7 @@ import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
 import { IMPORTER_NOTE_PATTERNS } from "@/lib/finance/notes";
-import { statementCoverage } from "@/lib/finance/imports/coverage";
+import { STATEMENT_PROVIDERS, statementCoverage } from "@/lib/finance/imports/coverage";
 import { teachGroups } from "@/lib/finance/imports/teach";
 import { currentNetWorth, loadFxTable } from "@/lib/finance/service";
 import { latestAiSummary } from "@/lib/finance/ai-summary-service";
@@ -69,7 +69,7 @@ export async function getStatementImports() {
   const e = importedEntries;
   const rows = await getDb()
     .select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
-    .from(e).where(inArray(e.provider, ["wise", "maribank"])).groupBy(e.provider, sql`2`);
+    .from(e).where(inArray(e.provider, [...STATEMENT_PROVIDERS])).groupBy(e.provider, sql`2`);
   return statementCoverage(rows);
 }
 

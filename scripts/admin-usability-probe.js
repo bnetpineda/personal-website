@@ -443,7 +443,7 @@
     await open("/admin");
     await page.click((await find(ADD, ["button"])).ref);
     await find(/^amount$/i, FIELD);
-    t.addStartsClean = await evaluate(() => !/^(ibkr|binance|hyperliquid|wise|maribank)$/i.test(document.querySelector("[role=dialog] input[name=account]")?.value ?? ""));
+    t.addStartsClean = await evaluate(() => !/^(ibkr|binance|hyperliquid|wise|maribank|gotyme)$/i.test(document.querySelector("[role=dialog] input[name=account]")?.value ?? ""));
 
     // Filters switch on the client, so the walk stays on one page load.
     await open("/admin");

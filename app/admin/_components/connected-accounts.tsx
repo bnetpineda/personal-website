@@ -12,7 +12,7 @@ import type { StatementBalance } from "@/lib/finance/statement-balances";
 import { formatQty } from "@/lib/finance/format";
 import { ConnectAccountButton, ConnectionSettings, CredentialExpiryButton, SyncConnectionsButton } from "./connection-controls";
 import { FormSheet } from "./form";
-import { ImportMariBankButton, ImportWiseButton } from "./import-controls";
+import { ImportGoTymeButton, ImportMariBankButton, ImportWiseButton } from "./import-controls";
 import { PrivateRegion } from "./shell";
 import { Money, PrivateFigure } from "./ui";
 
@@ -181,6 +181,22 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
           <p className="text-xs text-muted-foreground">Select several months at once. Months already imported are skipped.</p>
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
             <ImportMariBankButton />
+          </div>
+        </CardContent>
+      </Card>
+      <Card id="gotyme" className="scroll-mt-24">
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>{PROVIDER_META.gotyme.name}</CardTitle>
+            <Badge variant={statementBadge(statements.gotyme, now).attention ? "warning" : "success"}>{statementBadge(statements.gotyme, now).label}</Badge>
+          </div>
+          <CardDescription>{PROVIDER_META.gotyme.scope}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-1 flex-col gap-3">
+          <StatementStatus coverage={statements.gotyme} balances={balances.filter((b) => b.provider === "gotyme")} now={now} />
+          <p className="text-xs text-muted-foreground">Request a statement for any period in the app. Overlapping periods are fine: rows already imported are skipped.</p>
+          <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
+            <ImportGoTymeButton />
           </div>
         </CardContent>
       </Card>
