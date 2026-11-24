@@ -25,7 +25,7 @@ import {
   getPeriodTotals,
   getRecordedMonths,
   getRecurring,
-  getSnapshots,
+  getSnapshotsSince,
   getStatementBalances,
   getStatementImports,
   getTeachGroups,
@@ -38,6 +38,7 @@ import { addDays, addMonths, currentMonth, dayRangeLabel, daysBetween, isMonth, 
 import { missingBalanceProviders, missingStatementProviders } from "@/lib/finance/imports/coverage";
 import { groupAlerts } from "@/lib/finance/notifications";
 import { getNotifications } from "@/lib/finance/notifications-dal";
+import { optionalRead } from "@/lib/finance/optional-read";
 import { dueOccurrences } from "@/lib/finance/recurrence";
 import { importedIncomeSince, repeatIncomeByMonth, repeatPayers, typicalIncome } from "@/lib/finance/repeat-income";
 import { ensureTodaySnapshot } from "@/lib/finance/service";
@@ -63,6 +64,12 @@ export const metadata: Metadata = {
   title: "Overview",
 };
 export const maxDuration = 120;
+
+/**
+ * A panel's own data may fail without taking the Overview down: that panel shows empty instead. The
+ * money figures (balances, entries, totals, rates) stay required, so a wrong total never shows as a right one.
+ */
+const optional = <T, F>(label: string, read: Promise<T>, fallback: F) => optionalRead(`Overview ${label}`, read, fallback);
 
 /** Type and category filters are in the URL too, but the client applies them (see useDashboardFilters). */
 type Params = { month?: string; q?: string; kind?: string; category?: string; add?: string };
@@ -120,7 +127,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   ] = await Promise.all([
     getConnections(),
     getFx(),
-    getSnapshots(),
+    getSnapshotsSince(addDays(today, -30)),
     getLatestPortfolioSnapshots(),
     getMonthlyTotals(month, 12),
     getCashFlows({ month, q: q || undefined }),
@@ -128,20 +135,20 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     getCategoryTotals("income", month),
     getCategories(),
     getAccounts(),
-    getRecurring(),
-    getImportedIncome(importedIncomeSince(today)),
+    optional("recurring", getRecurring(), []),
+    optional("imported income", getImportedIncome(importedIncomeSince(today)), []),
     getStatementBalances(),
-    getTeachGroups(),
-    getStatementImports(),
-    getNotifications(),
-    getLastEntryDefaults("expense"),
-    getLastEntryDefaults("income"),
-    comparison?.monthToDate ? getPeriodTotals(comparison.selected.start, comparison.selected.end) : null,
-    comparison?.monthToDate ? getPeriodTotals(comparison.previous.start, comparison.previous.end) : null,
+    optional("teach groups", getTeachGroups(), []),
+    optional("statement imports", getStatementImports(), {}),
+    optional("notifications", getNotifications(), []),
+    optional("last expense", getLastEntryDefaults("expense"), null),
+    optional("last income", getLastEntryDefaults("income"), null),
+    comparison?.monthToDate ? optional("period totals", getPeriodTotals(comparison.selected.start, comparison.selected.end), null) : null,
+    comparison?.monthToDate ? optional("period totals", getPeriodTotals(comparison.previous.start, comparison.previous.end), null) : null,
     getManualAccounts(),
     getDebts(),
-    getMonthBudgets(month),
-    getAiSummary(),
+    optional("month budgets", getMonthBudgets(month), new Map<number, number | null>()),
+    optional("AI feedback", getAiSummary(), null),
   ]);
 
   // Backfill today's history point after responding, in case the daily cron hasn't run yet.
