@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import type { Category } from "@/lib/db/schema";
-import type { FormState } from "@/lib/finance/schemas";
+import type { FormState } from "@/lib/finance/form-state";
 import { importGoTymeStatements, importMariBankStatements, importWiseStatements, saveCategoryRule, setRuleEnabled } from "../_actions/imports";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
 import { Money, PrivateFigure } from "./ui";

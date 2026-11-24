@@ -1,6 +1,6 @@
 import { removeBinanceEarnReceipts } from "../connections/binance-positions";
 import type { ConnectedPosition, ConnectionSnapshot } from "../connections/types";
-import { spotFifo, type SpotFifoGroup } from "./spot";
+import { spotFifo, type SpotFifoGroup } from "./spot-lots";
 import type { SpotTrade } from "./types";
 
 type CostEntry = { accountKey: string; externalId: string; occurredOn: string; status: string; kind: string; currency: string; trade: SpotTrade | null };

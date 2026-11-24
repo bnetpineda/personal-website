@@ -32,7 +32,7 @@ import {
 } from "@/lib/dal";
 import { computeNetWorth, fxToPhp, holdingMetrics, monthBudget, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { PROVIDER_META, connectionStatus, includedPositions, isConnectionStale, needsNewCredentials } from "@/lib/finance/connections/types";
+import { PROVIDER_META, connectionStatus, includedPositions, isConnectionStale, needsNewCredentials } from "@/lib/finance/connections/meta";
 import { dashboardMonth } from "@/lib/finance/dashboard";
 import { addDays, addMonths, currentMonth, dayRangeLabel, daysBetween, isMonth, monthComparison, monthLabel, shortDayLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { missingBalanceProviders, missingStatementProviders } from "@/lib/finance/imports/coverage";

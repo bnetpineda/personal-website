@@ -5,7 +5,7 @@ import { CheckCheck, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { FormState } from "@/lib/finance/schemas";
+import type { FormState } from "@/lib/finance/form-state";
 import { postRecurring } from "../_actions/recurring";
 import { FormSheet, notify } from "./form";
 

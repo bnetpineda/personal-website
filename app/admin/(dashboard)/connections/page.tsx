@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getConnections, getDebts, getFx, getManualAccounts, getStatementBalances, getStatementImports } from "@/lib/dal";
 import { holdingMetrics } from "@/lib/finance/calc";
-import { PROVIDER_META, untriedAccounts } from "@/lib/finance/connections/types";
+import { PROVIDER_META, untriedAccounts } from "@/lib/finance/connections/meta";
 import { dayLabel, daysBetween, fullDayLabel, todayManila } from "@/lib/finance/dates";
 import { env } from "@/lib/env";
 import { ConnectedAccounts } from "../../_components/connected-accounts";

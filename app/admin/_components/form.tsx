@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
-import { initialFormState, type FormState } from "@/lib/finance/schemas";
+import { initialFormState, type FormState } from "@/lib/finance/form-state";
 
 /* Form plumbing shared by every admin form (Server Action + shadcn Field). */
 

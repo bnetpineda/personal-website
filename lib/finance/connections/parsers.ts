@@ -1,3 +1,4 @@
+import "server-only";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { z } from "zod";
 import type { AssetClass } from "../constants";

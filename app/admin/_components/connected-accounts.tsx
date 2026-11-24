@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { computeNetWorth, fxToPhp, knownCost, type FxTable } from "@/lib/finance/calc";
-import { SYNC_PROVIDERS, PROVIDER_META, connectionStatus, needsNewCredentials, plainSyncError, type ConnectionView, type Provider, type SyncProvider } from "@/lib/finance/connections/types";
+import { SYNC_PROVIDERS, PROVIDER_META, connectionStatus, needsNewCredentials, plainSyncError, type ConnectionView, type Provider, type SyncProvider } from "@/lib/finance/connections/meta";
 import { addMonths, currentMonth, dayLabel, dayRangeLabel, fullDayLabel, monthLabel, timeAgo } from "@/lib/finance/dates";
 import type { StatementCoverage } from "@/lib/finance/imports/coverage";
 import type { StatementBalance } from "@/lib/finance/statement-balances";

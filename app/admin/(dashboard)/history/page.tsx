@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getConnections } from "@/lib/dal";
-import { PROVIDER_META, SYNC_PROVIDERS, type SyncProvider } from "@/lib/finance/connections/types";
+import { PROVIDER_META, SYNC_PROVIDERS, type SyncProvider } from "@/lib/finance/connections/meta";
 import { dayLabel, dayRangeLabel } from "@/lib/finance/dates";
 import { getInvestmentHistory } from "@/lib/finance/imports/dal";
 import { utcYesterday } from "@/lib/finance/imports/history-service";

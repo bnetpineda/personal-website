@@ -6,7 +6,7 @@ import { Swatch } from "@/components/ui/swatch";
 import { getConnections, getFx, getPortfolioSnapshots, getSnapshots } from "@/lib/dal";
 import { allocation, computeNetWorth, fxToPhp, isSmallHolding, knownCost, type FxTable } from "@/lib/finance/calc";
 import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { connectionStatus, PROVIDER_META, type ConnectionView, type SyncProvider } from "@/lib/finance/connections/types";
+import { connectionStatus, PROVIDER_META, type ConnectionView, type SyncProvider } from "@/lib/finance/connections/meta";
 import { addDays, dayLabel, dayRangeLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { getBinanceHoldingCosts, getInvestmentFlows } from "@/lib/finance/imports/dal";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";

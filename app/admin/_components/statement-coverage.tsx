@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { PROVIDER_META } from "@/lib/finance/connections/types";
+import { PROVIDER_META } from "@/lib/finance/connections/meta";
 import { monthLabel } from "@/lib/finance/dates";
 import type { StatementProvider } from "@/lib/finance/imports/coverage";
 

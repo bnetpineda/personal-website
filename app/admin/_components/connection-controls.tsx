@@ -12,8 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { CREDENTIAL_LIFETIMES, PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/types";
-import type { FormState } from "@/lib/finance/schemas";
+import { CREDENTIAL_LIFETIMES, PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/meta";
+import type { FormState } from "@/lib/finance/form-state";
 import { disconnectAccount, saveConnection, saveConnectionExpiry, syncConnections, updateConnection } from "../_actions/connections";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
 

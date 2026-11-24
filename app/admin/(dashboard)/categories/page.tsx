@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { getCategories, getCategoryUsage } from "@/lib/dal";
-import { PROVIDER_META } from "@/lib/finance/connections/types";
+import { PROVIDER_META } from "@/lib/finance/connections/meta";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { getCategoryRules } from "@/lib/finance/imports/dal";
 import { deleteCategory, setCategoryArchived } from "../../_actions/categories";

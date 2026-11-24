@@ -7,7 +7,7 @@ import { Swatch } from "@/components/ui/swatch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { connectedHoldingMetrics, fxToPhp, isSmallHolding, type FxTable } from "@/lib/finance/calc";
 import { ASSET_CLASS_META, type AssetClass } from "@/lib/finance/constants";
-import { connectionStatus, PROVIDER_META, type ConnectionView } from "@/lib/finance/connections/types";
+import { connectionStatus, PROVIDER_META, type ConnectionView } from "@/lib/finance/connections/meta";
 import { formatQty } from "@/lib/finance/format";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { BinanceCostDetails } from "./holding-cost-details";

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Swatch } from "@/components/ui/swatch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { SyncProvider } from "@/lib/finance/connections/types";
+import type { SyncProvider } from "@/lib/finance/connections/meta";
 import { addDays, dayRangeLabel } from "@/lib/finance/dates";
 import { RANGES, changeSince } from "@/lib/finance/performance";
 import { marketReturn, type Flow } from "@/lib/finance/returns";

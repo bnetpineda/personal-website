@@ -24,7 +24,7 @@ import { Item, ItemActions } from "@/components/ui/item";
 import { Sheet } from "@/components/ui/sheet";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
-import type { FormState } from "@/lib/finance/schemas";
+import type { FormState } from "@/lib/finance/form-state";
 import { FormSheetContent, notify } from "./form";
 import { captureRowFocus, restoreRowFocus, type RowFocusReturn } from "./row-focus";
 

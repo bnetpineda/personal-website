@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ASSET_CLASSES, CASH_FLOW_KINDS, CURRENCIES, GOAL_MEASURES, LIABILITY_KINDS, RECURRENCE_FREQUENCIES } from "./constants";
+import { formValues, type FieldErrors, type FormState } from "./form-state";
 import { defaultSecondDay } from "./recurrence";
 
 /*
@@ -151,34 +152,9 @@ export const monthBudgetSchema = z.object({
 
 /* ---------- form state ---------- */
 
-export type FieldErrors = Partial<Record<string, string[]>>;
-
-export interface FormState {
-  ok: boolean;
-  message?: string;
-  errors?: FieldErrors;
-  /** Submitted values echoed back on errors (React 19 resets forms after an action). */
-  values?: Record<string, string>;
-  /** Id of the record a successful create made (lets the client offer "Undo"). */
-  id?: string;
-  /** A statement PDF is locked: the client asks for its password and sends the same files again. */
-  needsPassword?: boolean;
-}
-
-export const initialFormState: FormState = { ok: false };
-
-export function formValues(formData: FormData): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const [key, value] of formData) {
-    if (typeof value === "string" && !key.startsWith("$ACTION")) values[key] = value;
-  }
-  return values;
-}
+export { failure, formValues, initialFormState, type FieldErrors, type FormState } from "./form-state";
 
 export function invalid(error: z.ZodError, formData: FormData, message?: string): FormState {
   return { ok: false, message, errors: z.flattenError(error).fieldErrors as FieldErrors, values: formValues(formData) };
 }
 
-export function failure(message: string, formData?: FormData, errors?: FieldErrors): FormState {
-  return { ok: false, message, errors, values: formData ? formValues(formData) : undefined };
-}

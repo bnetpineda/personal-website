@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { FormState } from "@/lib/finance/schemas";
+import type { FormState } from "@/lib/finance/form-state";
 import { configureInvestmentHistory, continueInvestmentHistory, importInvestmentReport, prepareHoldingCosts, previewInvestmentReport, setHistoryEnabled, type HistoryPreview } from "../_actions/history";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
 import { ImportAction, NativeAmount } from "./import-controls";

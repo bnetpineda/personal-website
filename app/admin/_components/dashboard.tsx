@@ -9,7 +9,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, 
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import type { RecurringRow } from "@/lib/dal";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/types";
+import { PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/meta";
 import { monthLabel } from "@/lib/finance/dates";
 import { isStatementProvider, type StatementProvider } from "@/lib/finance/imports/coverage";
 import type { TeachGroup } from "@/lib/finance/imports/teach";
