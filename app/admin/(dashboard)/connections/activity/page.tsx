@@ -17,6 +17,8 @@ import { RefileActions } from "../../../_components/bank-activity";
 import { NativeAmount } from "../../../_components/import-controls";
 import { EmptyState, InfoNote, PageHeader } from "../../../_components/ui";
 
+export const maxDuration = 120;
+
 export const metadata: Metadata = { title: "Bank activity" };
 
 const BANKS = ["wise", "maribank", "gotyme"] as const;

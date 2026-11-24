@@ -6,9 +6,9 @@ import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { cashFlows, categories, holdings, liabilities } from "@/lib/db/schema";
-import { fxToPhp, round2 } from "@/lib/finance/calc";
+import { round2 } from "@/lib/finance/calc";
 import { debtPaymentSchema, failure, idSchema, invalid, liabilitySchema, manualAccountSchema, type FormState } from "@/lib/finance/schemas";
-import { ensureFx, snapshotQuietly } from "@/lib/finance/service";
+import { ensureFx, phpRatesOn, snapshotQuietly } from "@/lib/finance/service";
 
 /*
  * Manual accounts (holdings no account syncs) and debts. Both count in net worth unless archived, so
@@ -157,7 +157,7 @@ export async function payDebt(_prev: DebtPaymentResult, formData: FormData): Pro
   let rate: number | null = null;
   if (input.logExpense) {
     try {
-      rate = fxToPhp(await ensureFx([debt.currency]), debt.currency);
+      rate = (await phpRatesOn([{ currency: debt.currency, on: input.occurredOn }]))(debt.currency, input.occurredOn);
     } catch {
       rate = null;
     }
