@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db";
 import { adminState } from "@/lib/db/schema";
 import { env } from "@/lib/env";
-import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, SESSION_ENDED_PATH, readSessionToken, signSessionToken } from "./token";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, endedSessionProof, readSessionToken, sessionEndedPath, signSessionToken } from "./token";
 
 /** The current session epoch. No row yet means nobody has signed out everywhere: epoch 0. */
 async function currentEpoch(): Promise<number> {
@@ -44,7 +44,8 @@ export const isAdmin = cache(async (): Promise<boolean> => {
  */
 export async function requireAdmin(): Promise<void> {
   if (await isAdmin()) return;
-  // A cookie that's still signed but no longer valid (signed out everywhere) has to be cleared at the login page.
-  const stale = (await cookies()).has(SESSION_COOKIE);
-  redirect(stale ? SESSION_ENDED_PATH : "/admin/login");
+  // A cookie that's still signed but no longer valid (signed out everywhere) has to be cleared at the login page,
+  // with a proof for that token so proxy.ts knows the request came from here and not from a link elsewhere.
+  const claims = await readSessionToken((await cookies()).get(SESSION_COOKIE)?.value, env.sessionSecret());
+  redirect(claims ? sessionEndedPath(await endedSessionProof(claims, env.sessionSecret())) : "/admin/login");
 }

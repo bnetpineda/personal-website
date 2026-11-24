@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
 import { verifyPassword } from "@/lib/auth/password";
-import { clientIpHash, isLockedOut, recordLoginAttempt } from "@/lib/auth/rate-limit";
+import { claimLoginAttempt, clientIpHash, isKnownDevice, rememberDevice, settleLoginAttempt } from "@/lib/auth/rate-limit";
 import { bumpSessionEpoch, createSession, deleteSession, requireAdmin } from "@/lib/auth/session";
 
 export interface LoginState {
@@ -23,15 +23,18 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (typeof password !== "string" || password.length === 0) return { error: "Enter your password." };
 
   const ipHash = await clientIpHash();
-  if (await isLockedOut(ipHash)) return { error: "Too many attempts. Try again in 15 minutes." };
+  // Claimed (and counted) before the password is hashed, so parallel guesses can't slip past the limits.
+  const claim = await claimLoginAttempt(ipHash, await isKnownDevice());
+  if (!claim.allowed) return { error: "Too many attempts. Try again in 15 minutes." };
 
   const ok = password.length <= 256 && (await verifyPassword(password, env.adminPasswordHash()));
-  await recordLoginAttempt(ipHash, ok);
+  await settleLoginAttempt(ipHash, claim.attemptId, ok);
   if (!ok) {
     await new Promise((resolve) => setTimeout(resolve, 400));
     return { error: "Wrong password." };
   }
 
+  await rememberDevice();
   await createSession();
   redirect(safeNext(formData.get("next")));
 }
