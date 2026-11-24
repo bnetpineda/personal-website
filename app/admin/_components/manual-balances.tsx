@@ -319,7 +319,7 @@ export function ManualBalances({ accounts, debts, categories, today, plan }: {
                     aside={<span className="font-mono text-sm"><Money value={-d.balance} currency={d.currency} /></span>}
                     extra={!d.archived && d.balance > 0 ? (
                       <FormSheet title={`Pay ${d.name}`} description="Takes the payment off the balance. Counted as spending, it shows on the Overview too."
-                        trigger={<Button variant="outline" size="sm" aria-label={`Pay ${d.name}`}><HandCoins /> Pay</Button>}>
+                        trigger={<Button variant="outline" size="sm" aria-label={`Pay ${d.name}`}><HandCoins /><span className="hidden sm:inline">Pay</span></Button>}>
                         <DebtPaymentForm debt={d} categories={categories} today={today} />
                       </FormSheet>
                     ) : undefined}

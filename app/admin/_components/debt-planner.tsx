@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -23,14 +23,15 @@ function Strategy({ title, hint, plan, best }: { title: string; hint: string; pl
   return (
     <Card variant="quiet" size="sm">
       <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2">{title}{best && <Badge variant="success">Least interest</Badge>}</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <CardDescription>{hint}</CardDescription>
+        {best && <CardAction><Badge variant="success">Least interest</Badge></CardAction>}
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-sm">
+      <CardContent>
         {!plan.feasible ? (
-          <p>These payments never catch up with the interest. Add more each month.</p>
+          <p className="text-sm">These payments never catch up with the interest. Add more each month.</p>
         ) : (
-          <>
+          <div className="flex flex-col gap-3 text-sm">
             <p>
               <span className="font-display text-lg uppercase">Debt-free {plan.debtFreeMonth ? monthLabel(plan.debtFreeMonth, "long") : "now"}</span>
               <br />
@@ -40,7 +41,7 @@ function Strategy({ title, hint, plan, best }: { title: string; hint: string; pl
             <ol className="flex list-decimal flex-col gap-1 pl-5">
               {plan.order.map((d) => <li key={d.id}>{d.name}{d.paidOffMonth && <span className="text-muted-foreground"> · paid off {monthLabel(d.paidOffMonth, "short")}</span>}</li>)}
             </ol>
-          </>
+          </div>
         )}
       </CardContent>
     </Card>
