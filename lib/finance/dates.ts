@@ -43,9 +43,10 @@ export function monthComparison(month: string, today: string) {
   const previous = monthRange(addMonths(month, -1));
   const monthToDate = month === current;
   if (monthToDate) {
-    const days = Math.min(Number(today.slice(8, 10)), daysBetween(previous.start, previous.end));
-    selected.end = addDays(selected.start, days);
-    previous.end = addDays(previous.start, days);
+    // Every day recorded so far counts; a shorter previous month is compared whole (Mar 1–31 vs Feb 1–28).
+    const day = Number(today.slice(8, 10));
+    selected.end = addDays(selected.start, day);
+    previous.end = addDays(previous.start, Math.min(day, daysBetween(previous.start, previous.end)));
   }
   return { selected, previous, monthToDate };
 }

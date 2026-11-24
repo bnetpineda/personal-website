@@ -41,12 +41,21 @@ describe("cash-flow comparison periods", () => {
     });
   });
 
-  test("caps both elapsed windows at the length of the shorter month", () => {
+  test("days 29–31 keep every recorded day and compare a shorter previous month whole", () => {
     expect(monthComparison("2024-03", "2024-03-31")).toMatchObject({
-      selected: { start: "2024-03-01", end: "2024-03-30" },
+      selected: { start: "2024-03-01", end: "2024-04-01" },
       previous: { start: "2024-02-01", end: "2024-03-01" },
     });
-    expect(monthComparison("2026-03", "2026-03-31")?.selected.end).toBe("2026-03-29");
+    expect(monthComparison("2026-03", "2026-03-29")).toMatchObject({
+      selected: { start: "2026-03-01", end: "2026-03-30" },
+      previous: { start: "2026-02-01", end: "2026-03-01" },
+    });
+    expect(monthComparison("2026-03", "2026-03-30")?.selected.end).toBe("2026-03-31");
+    expect(monthComparison("2026-05", "2026-05-31")).toMatchObject({
+      selected: { start: "2026-05-01", end: "2026-06-01" },
+      previous: { start: "2026-04-01", end: "2026-05-01" },
+    });
+    expect(monthComparison("2026-08", "2026-08-31")?.previous).toEqual({ start: "2026-07-01", end: "2026-08-01" });
   });
 
   test("past months compare complete months across year boundaries; future months have no comparison", () => {

@@ -38,16 +38,18 @@ export async function getEarnings(month: string | null) {
 }
 
 /**
- * Deposits and withdrawals of each investment account since `since`, in their own currency, summed per
- * day. Transfers between two of your own accounts count for each of them: money leaving one account is
- * not that account's loss, and it nets out across the portfolio.
+ * Deposits and withdrawals of each investment account since `since` (by default the first saved account
+ * value, where the "All" range starts), in their own currency, summed per day. Transfers between two of
+ * your own accounts count for each of them: money leaving one account is not that account's loss, and it
+ * nets out across the portfolio.
  */
-export async function getInvestmentFlows(since: string) {
+export async function getInvestmentFlows(since?: string) {
   await requireAdmin();
   const e = importedEntries;
+  const from = since ?? sql`(select coalesce(min(snapshot_date), current_date) from portfolio_snapshots)`;
   return getDb().select({ provider: e.provider, date: e.occurredOn, currency: e.currency, amount: sql<number>`sum(${e.amount})`.mapWith(Number) })
     .from(e)
-    .where(and(eq(e.status, "transfer"), gte(e.occurredOn, since), inArray(e.provider, ["binance", "ibkr", "hyperliquid"])))
+    .where(and(eq(e.status, "transfer"), gte(e.occurredOn, from), inArray(e.provider, ["binance", "ibkr", "hyperliquid"])))
     .groupBy(e.provider, e.occurredOn, e.currency);
 }
 

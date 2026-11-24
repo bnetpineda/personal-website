@@ -24,6 +24,8 @@ export function unitPricesUsd(positions: readonly ConnectedPosition[], fx: FxTab
   for (const p of positions) {
     const rate = fxToUsd(fx, p.currency);
     if (p.marketValue == null || rate == null || p.quantity <= 0 || p.marketValue <= 0 || p.assetClass === "cash") continue;
+    // A perp's value is its margin plus P/L, not size × price, so it can't price a coin.
+    if (p.id.startsWith("perp:")) continue;
     const symbol = p.symbol.toUpperCase();
     const value = p.marketValue * rate;
     // The largest holding of a symbol sets its price, so dust doesn't skew it.

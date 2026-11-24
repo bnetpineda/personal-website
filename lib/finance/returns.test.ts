@@ -48,6 +48,23 @@ describe("valuing transfers and rewards", () => {
     expect(prices.get("BTC")).toBe(60000);
   });
 
+  test("a leveraged perp never sets a coin's price; borrowed and vault rows are ignored too", () => {
+    // 0.05 BTC spot worth $3,000 next to a 10x long of 1 BTC carried at $6,200 (margin plus P/L).
+    const prices = unitPricesUsd([
+      position({ id: "spot:BTC", quantity: 0.05, marketValue: 3000 }),
+      position({ id: "perp:BTC", quantity: 1, marketValue: 6200 }),
+      position({ id: "borrow:0", quantity: -100, marketValue: -100, symbol: "USDC" }),
+      position({ id: "vault:0xabc", quantity: 500, marketValue: 500, symbol: "VAULT", assetClass: "fund" }),
+    ], fx);
+    expect(prices.get("BTC")).toBe(60000);
+    expect(prices.has("USDC")).toBe(false);
+    expect(amountInUsd(0.1, "BTC", prices, fx)).toBe(6000);
+  });
+
+  test("a perp alone leaves the coin unpriced", () => {
+    expect(unitPricesUsd([position({ id: "perp:ETH", symbol: "ETH", quantity: 2, marketValue: 900 })], fx).has("ETH")).toBe(false);
+  });
+
   test("fiat converts through the rate table and stablecoins are a dollar without a holding", () => {
     expect(amountInUsd(61, "EUR", new Map(), fx)).toBeCloseTo(66.0, 0);
     expect(amountInUsd(5, "USDC", new Map(), fx)).toBe(5);

@@ -68,7 +68,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
 
   const now = new Date();
   const today = todayManila(now);
-  const [connections, fx, history, flowRows, netWorthHistory] = await Promise.all([getConnections(), getFx(), getPortfolioSnapshots(), getInvestmentFlows(addDays(today, -400)), getSnapshots()]);
+  const [connections, fx, history, flowRows, netWorthHistory] = await Promise.all([getConnections(), getFx(), getPortfolioSnapshots(), getInvestmentFlows(), getSnapshots()]);
   const binanceCosts = await getBinanceHoldingCosts(connections.find((c) => c.provider === "binance")?.snapshot ?? null);
   // Transfers in coins are valued at today's prices, from the accounts' own balances.
   const prices = unitPricesUsd(connections.flatMap((c) => c.snapshot?.positions ?? []), fx);
