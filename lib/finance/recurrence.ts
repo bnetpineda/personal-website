@@ -224,3 +224,20 @@ export function upcomingOccurrences<T extends Schedule & RecurringState>(items: 
     (o) => (o.item.autoPost || o.date > today) && notHandled(o)
   );
 }
+
+/**
+ * Reverses `markHandled` for `days` (an Undo of Skip or Post). The cursor goes back to the earliest undone
+ * day; occurrences it had moved past because they were already handled go back into `handledOn`, so
+ * undoing one occurrence never brings back another.
+ */
+export function unmarkHandled(s: Schedule, state: Pick<RecurringState, "nextOn" | "handledOn">, days: readonly string[]): { nextOn: string | null; handledOn: string[] } {
+  if (days.length === 0) return { nextOn: state.nextOn, handledOn: [...(state.handledOn ?? [])] };
+  const undone = new Set(days);
+  const earliest = [...days].sort()[0];
+  const cur = state.nextOn;
+  const nextOn = cur == null || earliest < cur ? earliest : cur;
+  // Every occurrence between the old front and the cursor was handled; that's why the cursor passed it.
+  const passed = cur == null ? occurrencesBetween(s, nextOn, s.endOn ?? nextOn) : nextOn < cur ? occurrencesBetween(s, nextOn, addDays(cur, -1)) : [];
+  const handled = new Set([...passed, ...(state.handledOn ?? [])].filter((d) => d > nextOn && !undone.has(d)));
+  return { nextOn, handledOn: [...handled].sort() };
+}

@@ -7,6 +7,7 @@ import {
   dueOccurrences,
   dueThrough,
   markHandled,
+  unmarkHandled,
   MAX_OCCURRENCES,
   monthlyEquivalent,
   nextOccurrence,
@@ -224,5 +225,23 @@ describe("dueThrough", () => {
   test("skips dates already handled", () => {
     const s = { frequency: "monthly" as const, startOn: "2026-01-01", endOn: null, secondDay: null };
     expect(dueThrough(s, { nextOn: "2026-01-01", handledOn: ["2026-02-01"] }, "2026-03-15").days).toEqual(["2026-01-01", "2026-03-01"]);
+  });
+});
+
+describe("unmarkHandled (Undo of Skip or Post)", () => {
+  const bill = { frequency: "monthly" as const, startOn: "2026-09-01", endOn: null, secondDay: null };
+  const undoes = (state: { nextOn: string | null; handledOn: string[] }, days: string[]) => {
+    const after = markHandled(bill, state, days);
+    expect(unmarkHandled(bill, after, days)).toEqual(state);
+  };
+
+  test("undoing the front occurrence puts the cursor back", () => undoes({ nextOn: "2026-10-01", handledOn: [] }, ["2026-10-01"]));
+  test("undoing a later occurrence keeps the cursor and un-hides it", () => undoes({ nextOn: "2026-10-01", handledOn: [] }, ["2026-11-01"]));
+  test("undoing the front keeps an earlier out-of-order handle", () => undoes({ nextOn: "2026-10-01", handledOn: ["2026-11-01"] }, ["2026-10-01"]));
+  test("undoing Post all restores every occurrence", () => undoes({ nextOn: "2026-09-01", handledOn: [] }, ["2026-09-01", "2026-10-01", "2026-11-01"]));
+  test("an ended schedule comes back", () => {
+    const ending = { ...bill, endOn: "2026-10-31" };
+    const after = markHandled(ending, { nextOn: "2026-10-01", handledOn: [] }, ["2026-10-01"]);
+    expect(unmarkHandled(ending, after, ["2026-10-01"])).toEqual({ nextOn: "2026-10-01", handledOn: [] });
   });
 });

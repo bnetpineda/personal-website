@@ -20,8 +20,6 @@ import { undoRecurring } from "../_actions/recurring-undo";
 import { FormSheet, notify } from "./form";
 
 type Occurrence = { id: string; on: string };
-/** An item's next date before the action, so Undo can put it back. */
-type Cursor = { id: string; nextOn: string | null };
 
 function useRun() {
   const [pending, startTransition] = useTransition();
@@ -44,22 +42,19 @@ function useRun() {
 export function DueActions({
   name,
   occurrence,
-  cursor,
   form,
   onSkip,
 }: {
   name: string;
   occurrence: Occurrence;
-  cursor: string | null;
   form: ReactNode;
   onSkip: () => Promise<FormState>;
 }) {
   const { pending, run } = useRun();
   const when = dayLabel(occurrence.on);
-  const cursors = [{ id: occurrence.id, nextOn: cursor }];
   return (
     <div className="flex items-center gap-1">
-      <Button variant="ghost" size="sm" disabled={pending} aria-label={`Skip ${name}, ${when}`} onClick={() => run(onSkip, () => undoRecurring({ cursors }))}>
+      <Button variant="ghost" size="sm" disabled={pending} aria-label={`Skip ${name}, ${when}`} onClick={() => run(onSkip, () => undoRecurring({ undone: [occurrence] }))}>
         Skip
       </Button>
       <FormSheet
@@ -77,7 +72,7 @@ export function DueActions({
         size="sm"
         disabled={pending}
         aria-label={`Post ${name}, ${when}`}
-        onClick={() => run(() => postRecurring([occurrence]), () => undoRecurring({ cursors, posted: [occurrence] }))}
+        onClick={() => run(() => postRecurring([occurrence]), () => undoRecurring({ undone: [occurrence], posted: true }))}
       >
         {pending && <Spinner />}
         Post
@@ -87,7 +82,7 @@ export function DueActions({
 }
 
 /** Posts every due occurrence at its saved amount, after saying how many. */
-export function PostAllButton({ occurrences, cursors }: { occurrences: Occurrence[]; cursors: Cursor[] }) {
+export function PostAllButton({ occurrences }: { occurrences: Occurrence[] }) {
   const { pending, run } = useRun();
   const [confirming, setConfirming] = useState(false);
   const count = occurrences.length;
@@ -109,7 +104,7 @@ export function PostAllButton({ occurrences, cursors }: { occurrences: Occurrenc
             <Button
               onClick={() => {
                 setConfirming(false);
-                run(() => postRecurring(occurrences), () => undoRecurring({ cursors, posted: occurrences }));
+                run(() => postRecurring(occurrences), () => undoRecurring({ undone: occurrences, posted: true }));
               }}
             >
               Post {count}
