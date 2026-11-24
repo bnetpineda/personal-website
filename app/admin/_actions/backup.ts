@@ -35,12 +35,17 @@ export async function restoreFromBackup(formData: FormData): Promise<FormState> 
   const parsed = await readBackupFile(formData.get("backup"));
   if (!parsed.ok) return { ok: false, message: parsed.message };
   let fresh: number;
+  let rules = 0;
   try {
-    fresh = (await restoreBackup(parsed.backup)).reduce((sum, c) => sum + c.fresh, 0);
+    const counts = await restoreBackup(parsed.backup);
+    fresh = counts.reduce((sum, c) => sum + c.fresh, 0);
+    rules = counts.find((c) => c.table === "categoryRules")?.fresh ?? 0;
   } catch (error) {
     logError("backup restore failed", error);
     return { ok: false, message: "The restore didn't finish. Nothing already saved was changed; run it again to add the rest." };
   }
   revalidatePath("/admin", "layout");
-  return { ok: true, message: fresh ? `Restored ${entries(fresh)}.` : "Nothing to restore: everything in this backup is already here." };
+  // Restored rules are off (see lib/finance/backup.ts), so say where to turn them back on.
+  const rulesNote = rules ? ` ${rules} category ${rules === 1 ? "rule is" : "rules are"} turned off; turn on the ones you want on Categories.` : "";
+  return { ok: true, message: fresh ? `Restored ${entries(fresh)}.${rulesNote}` : "Nothing to restore: everything in this backup is already here." };
 }

@@ -19,50 +19,65 @@ const categoryId = z.number().int().positive();
 /** Columns added after a backup was made read as null. */
 const maybe = <T extends z.ZodType>(schema: T) => schema.nullable().default(null);
 const timestamps = { createdAt: time.optional(), updatedAt: time.optional() };
+/*
+ * Every text column has a ceiling, well above what the app writes, so an edited or foreign file can't plant
+ * megabyte strings (which every page would then load and render).
+ */
+const str = (max: number) => z.string().max(max);
+const SHORT = 100;
+const NAME = 200;
+const KEY = 300;
+const TEXT = 500;
+const NOTE = 2_000;
+const CURSOR = 4_000;
 
 const categoryRow = z.object({
-  id: categoryId, kind: z.enum(CASH_FLOW_KINDS), name: z.string().min(1), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+  id: categoryId, kind: z.enum(CASH_FLOW_KINDS), name: str(NAME).min(1), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
   monthlyBudget: maybe(amount.nonnegative()), sortOrder: z.number().int().default(0), archived: z.boolean().default(false), ...timestamps,
 });
 const holdingRow = z.object({
-  id: uuid, assetClass: z.enum(ASSET_CLASSES), name: z.string().min(1), symbol: maybe(z.string()), platform: maybe(z.string()),
+  id: uuid, assetClass: z.enum(ASSET_CLASSES), name: str(NAME).min(1), symbol: maybe(str(SHORT)), platform: maybe(str(SHORT)),
   quantity: amount.nonnegative(), avgCost: amount.nonnegative(), currency, priceSource: z.enum(PRICE_SOURCES).default("manual"),
-  priceRef: maybe(z.string()), lastPrice: maybe(amount.nonnegative()), priceUpdatedAt: maybe(time), archived: z.boolean().default(false),
-  notes: maybe(z.string()), statementSource: maybe(z.string()), statementAsOf: maybe(day), ...timestamps,
+  priceRef: maybe(str(SHORT)), lastPrice: maybe(amount.nonnegative()), priceUpdatedAt: maybe(time), archived: z.boolean().default(false),
+  notes: maybe(str(NOTE)), statementSource: maybe(str(SHORT)), statementAsOf: maybe(day), ...timestamps,
 });
 const liabilityRow = z.object({
-  id: uuid, kind: z.enum(LIABILITY_KINDS), name: z.string().min(1), lender: maybe(z.string()), balance: amount.nonnegative(), currency,
+  id: uuid, kind: z.enum(LIABILITY_KINDS), name: str(NAME).min(1), lender: maybe(str(SHORT)), balance: amount.nonnegative(), currency,
   creditLimit: maybe(amount), interestRate: maybe(amount), dueDay: maybe(z.number().int().min(1).max(31)), minPayment: maybe(amount),
-  archived: z.boolean().default(false), notes: maybe(z.string()), ...timestamps,
+  archived: z.boolean().default(false), notes: maybe(str(NOTE)), ...timestamps,
 });
 const recurringRow = z.object({
-  id: uuid, kind: z.enum(CASH_FLOW_KINDS), amount: amount.positive(), currency, categoryId, description: z.string(), account: maybe(z.string()),
-  notes: maybe(z.string()), frequency: z.enum(RECURRENCE_FREQUENCIES), startOn: day, secondDay: maybe(z.number().int().min(1).max(31)),
+  id: uuid, kind: z.enum(CASH_FLOW_KINDS), amount: amount.positive(), currency, categoryId, description: str(TEXT), account: maybe(str(SHORT)),
+  notes: maybe(str(NOTE)), frequency: z.enum(RECURRENCE_FREQUENCIES), startOn: day, secondDay: maybe(z.number().int().min(1).max(31)),
   endOn: maybe(day), nextOn: maybe(day), handledOn: z.array(day).max(500).default([]), autoPost: z.boolean().default(true),
   paused: z.boolean().default(false), ...timestamps,
 });
 const cashFlowRow = z.object({
   id: uuid, kind: z.enum(CASH_FLOW_KINDS), occurredOn: day, amount: amount.positive(), currency, amountPhp: amount, categoryId,
-  description: z.string(), account: maybe(z.string()), notes: maybe(z.string()), recurringId: maybe(uuid), recurringOn: maybe(day),
+  description: str(TEXT), account: maybe(str(SHORT)), notes: maybe(str(NOTE)), recurringId: maybe(uuid), recurringOn: maybe(day),
   liabilityId: maybe(uuid), ...timestamps,
 });
 const importedEntryRow = z.object({
-  id: uuid, provider: z.enum(PROVIDERS), accountKey: z.string().min(1), externalId: z.string().min(1), occurredOn: day, kind: z.enum(ENTRY_KINDS),
-  amount, currency: z.string().min(1).max(30), description: z.string(), realizedPnl: maybe(amount), trade: maybe(spotTradeSchema),
+  id: uuid, provider: z.enum(PROVIDERS), accountKey: str(SHORT).min(1), externalId: str(KEY).min(1), occurredOn: day, kind: z.enum(ENTRY_KINDS),
+  amount, currency: z.string().min(1).max(30), description: str(TEXT), realizedPnl: maybe(amount), trade: maybe(spotTradeSchema),
   status: z.enum(ENTRY_STATUSES).default("pending"), categoryId: maybe(categoryId), transferId: maybe(uuid),
-  categorizedBy: maybe(z.enum(CATEGORIZED_BY)), aiReason: maybe(z.string()), aiSuggestion: maybe(z.enum(["post", "transfer", "investment", "ignore"])),
+  categorizedBy: maybe(z.enum(CATEGORIZED_BY)), aiReason: maybe(str(TEXT)), aiSuggestion: maybe(z.enum(["post", "transfer", "investment", "ignore"])),
   aiAttemptedAt: maybe(time), ...timestamps,
 });
+/**
+ * Restored rules come back turned off. A rule files future imports with no review, so one from an edited or
+ * foreign file could quietly route income into a category; the owner turns on the ones they want on Categories.
+ */
 const categoryRuleRow = z.object({
-  id: uuid, contains: z.string().min(1), provider: maybe(z.enum(PROVIDERS)), kind: z.enum(CASH_FLOW_KINDS), categoryId,
+  id: uuid, contains: str(NAME).min(1), provider: maybe(z.enum(PROVIDERS)), kind: z.enum(CASH_FLOW_KINDS), categoryId,
   autoPost: z.boolean().default(false), enabled: z.boolean().default(true), ...timestamps,
-});
+}).transform((rule) => ({ ...rule, enabled: false }));
 const categoryBudgetRow = z.object({ categoryId, month: z.string().regex(/^[0-9]{4}-(0[1-9]|1[0-2])$/), amount: maybe(amount.nonnegative()), ...timestamps });
 const goalRow = z.object({
-  id: uuid, name: z.string().min(1), measure: z.enum(GOAL_MEASURES), target: amount.positive(), saved: maybe(amount.nonnegative()),
+  id: uuid, name: str(NAME).min(1), measure: z.enum(GOAL_MEASURES), target: amount.positive(), saved: maybe(amount.nonnegative()),
   targetOn: maybe(day), archived: z.boolean().default(false), sortOrder: z.number().int().default(0), ...timestamps,
 });
-const statementBalanceRow = z.object({ provider: z.enum(["wise", "maribank", "gotyme"]), account: z.string().min(1), currency, amount, asOf: day, ...timestamps });
+const statementBalanceRow = z.object({ provider: z.enum(["wise", "maribank", "gotyme"]), account: str(SHORT).min(1), currency, amount, asOf: day, ...timestamps });
 const netWorthSnapshotRow = z.object({
   snapshotDate: day, assetsPhp: amount, liabilitiesPhp: amount, netWorthPhp: amount, investedPhp: amount,
   byClass: z.partialRecord(z.enum(ASSET_CLASSES), amount), updatedAt: time.optional(),
@@ -73,15 +88,15 @@ const portfolioSnapshotRow = z.object({
 });
 const fxRateRow = z.object({ currency, rateToPhp: amount.positive(), asOf: day, updatedAt: time.optional() });
 const investmentReportRow = z.object({
-  id: uuid, provider: z.enum(PROVIDERS), fileHash: z.string().min(1), accounts: z.array(z.string()), fromDate: day, toDate: day,
+  id: uuid, provider: z.enum(PROVIDERS), fileHash: str(SHORT).min(1), accounts: z.array(str(SHORT)).max(200), fromDate: day, toDate: day,
   entries: z.number().int().nonnegative(), createdAt: time.optional(),
 });
 /** Leases are left out: a restored stream starts unlocked. */
 const investmentSyncRow = z.object({
-  id: uuid, accountKey: z.string().min(1), scope: z.string().min(1), fromDate: day, toDate: day, cursor: z.string(),
-  completedAt: maybe(time), lastSyncedAt: maybe(time), enabled: z.boolean().default(true), error: maybe(z.string()), ...timestamps,
+  id: uuid, accountKey: str(SHORT).min(1), scope: str(KEY).min(1), fromDate: day, toDate: day, cursor: str(CURSOR),
+  completedAt: maybe(time), lastSyncedAt: maybe(time), enabled: z.boolean().default(true), error: maybe(str(NOTE)), ...timestamps,
 });
-const notificationDismissalRow = z.object({ key: z.string().min(1), dismissedAt: time.optional() });
+const notificationDismissalRow = z.object({ key: str(KEY).min(1), dismissedAt: time.optional() });
 
 const backupSchema = z.object({
   exportedAt: z.iso.datetime({ offset: true }),
@@ -113,7 +128,7 @@ export const BACKUP_TABLES = [
   { key: "recurring", label: "Recurring items" },
   { key: "cashFlows", label: "Entries" },
   { key: "importedEntries", label: "Imported activity" },
-  { key: "categoryRules", label: "Category rules" },
+  { key: "categoryRules", label: "Category rules (restored turned off)" },
   { key: "categoryBudgets", label: "Monthly budgets" },
   { key: "goals", label: "Goals" },
   { key: "statementBalances", label: "Statement balances" },

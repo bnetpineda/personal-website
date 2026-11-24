@@ -53,6 +53,20 @@ describe("backup parsing", () => {
     expect(parseBackup(file({ cashFlows: [flow(A, { categoryId: 99 })] })).ok).toBe(false);
     expect(parseBackup(file({ cashFlows: [flow(A, { recurringId: B, recurringOn: "2026-10-02" })] })).ok).toBe(false);
   });
+
+  test("refuses oversized text, so an edited file can't plant huge strings", () => {
+    expect(parseBackup(file({ cashFlows: [flow(A, { description: "x".repeat(500) })] })).ok).toBe(true);
+    expect(parseBackup(file({ cashFlows: [flow(A, { description: "x".repeat(501) })] })).ok).toBe(false);
+    expect(parseBackup(file({ cashFlows: [flow(A, { notes: "x".repeat(2_001) })] })).ok).toBe(false);
+    expect(parseBackup(file({ notificationDismissals: [{ key: "k".repeat(301) }] })).ok).toBe(false);
+    expect(parseBackup(file({ categories: [{ ...groceries, name: "n".repeat(201) }, salary] })).ok).toBe(false);
+  });
+
+  test("category rules always come back turned off", () => {
+    const rule = { id: A, contains: "ACME", provider: null, kind: "income", categoryId: 8, autoPost: true, enabled: true, createdAt: ts, updatedAt: ts };
+    const backup = parsed({ categoryRules: [rule] });
+    expect(backup.categoryRules).toEqual([expect.objectContaining({ contains: "ACME", autoPost: true, enabled: false })]);
+  });
 });
 
 describe("restore plan", () => {
