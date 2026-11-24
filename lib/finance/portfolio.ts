@@ -55,6 +55,14 @@ export function portfolioRows(
   });
 }
 
+/** The rows that would change what's saved: a new day, other numbers, or a NAV fill that balances replace. */
+export function changedPortfolioRows(rows: readonly PortfolioRow[], saved: readonly Pick<PortfolioRow, "provider" | "snapshotDate" | "valueUsd" | "costUsd" | "pnlUsd" | "source">[]): PortfolioRow[] {
+  return rows.filter((row) => {
+    const same = saved.find((s) => s.provider === row.provider && s.snapshotDate === row.snapshotDate);
+    return !same || same.source !== row.source || same.valueUsd !== row.valueUsd || (same.costUsd ?? null) !== (row.costUsd ?? null) || (same.pnlUsd ?? null) !== (row.pnlUsd ?? null);
+  });
+}
+
 /** Balance rows replace whatever their day held before, an IBKR NAV fill included. */
 export async function savePortfolioRows(rows: PortfolioRow[]): Promise<void> {
   if (!rows.length) return;

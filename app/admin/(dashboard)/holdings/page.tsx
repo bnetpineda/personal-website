@@ -11,7 +11,7 @@ import { addDays, dayLabel, dayRangeLabel, timeAgo, todayManila } from "@/lib/fi
 import { getBinanceHoldingCosts, getInvestmentFlows } from "@/lib/finance/imports/dal";
 import { binanceHoldingRows, type HoldingCost } from "@/lib/finance/imports/holding-costs";
 import { RANGES, accountTotals, changeSince, moverRows, profitLossCoverage, snapshotDay, topMovers, withCurrent, type PortfolioPoint } from "@/lib/finance/performance";
-import { portfolioRows, savePortfolioRows } from "@/lib/finance/portfolio";
+import { changedPortfolioRows, portfolioRows, savePortfolioRows } from "@/lib/finance/portfolio";
 import { amountInUsd, combineReturns, marketReturn, returnBase, unitPricesUsd } from "@/lib/finance/returns";
 import { PortfolioSections } from "../../_components/admin-nav";
 import { AllocationChart } from "../../_components/charts";
@@ -69,19 +69,24 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
 
   const now = new Date();
   const today = todayManila(now);
-  const [connections, fx, history, flowRows, netWorthHistory] = await Promise.all([getConnections(), getFx(), getPortfolioSnapshots(), getInvestmentFlows(), getSnapshots()]);
-  const binanceCosts = await getBinanceHoldingCosts(connections.find((c) => c.provider === "binance")?.snapshot ?? null);
+  // Binance costs need only the connections, so they load alongside everything else.
+  const connectionsRead = getConnections();
+  const costsRead = connectionsRead.then((all) => getBinanceHoldingCosts(all.find((c) => c.provider === "binance")?.snapshot ?? null));
+  const [connections, fx, history, flowRows, netWorthHistory, binanceCosts] = await Promise.all([connectionsRead, getFx(), getPortfolioSnapshots(), getInvestmentFlows(), getSnapshots(), costsRead]);
   // Transfers in coins are valued at today's prices, from the accounts' own balances.
   const prices = unitPricesUsd(connections.flatMap((c) => c.snapshot?.positions ?? []), fx);
 
-  // Keep today's point current; balances only change on sync, so this is cheap to repeat.
-  after(async () => {
-    try {
-      await savePortfolioRows(portfolioRows(connections, fx, binanceCosts));
-    } catch (err) {
-      logError("portfolio snapshot failed", err);
-    }
-  });
+  // Keep today's point current. Balances only change on sync, so most views have nothing to write.
+  const changed = changedPortfolioRows(portfolioRows(connections, fx, binanceCosts), history);
+  if (changed.length) {
+    after(async () => {
+      try {
+        await savePortfolioRows(changed);
+      } catch (err) {
+        logError("portfolio snapshot failed", err);
+      }
+    });
+  }
 
   // The portfolio is every connected account, whether or not it counts in net worth.
   const usdRate = fxToPhp(fx, "USD");
