@@ -17,6 +17,7 @@ import {
   History,
   House,
   Landmark,
+  ListChecks,
   Moon,
   RefreshCw,
   Repeat,
@@ -42,6 +43,7 @@ const PAGES = [
   { href: "/admin/recurring", label: "Recurring", icon: Repeat },
   { href: "/admin/connections", label: "Accounts", icon: Landmark },
   { href: "/admin/connections#debts", label: "Debts and other accounts", icon: CreditCard },
+  { href: "/admin/connections/activity", label: "Bank activity (re-file imports)", icon: ListChecks },
   { href: "/admin/categories", label: "Categories and rules", icon: Tags },
 ] as const;
 

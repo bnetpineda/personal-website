@@ -1,12 +1,13 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { categoryRules, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
+import { categories, categoryRules, importedEntries, investmentReports, investmentSyncs } from "@/lib/db/schema";
 import { monthRange } from "../dates";
 import type { EntryKind } from "./types";
-import { earningsByCurrency } from "./review";
-import type { ConnectionSnapshot } from "../connections/types";
+import { bankFiling, DUPLICATE_REASON, earningsByCurrency, type BankFiling } from "./review";
+import { BANK_PROVIDERS, type ConnectionSnapshot } from "../connections/types";
 import { loadBinanceHoldingCosts } from "../portfolio";
 import { readAllSpotFifo } from "./spot-fifo";
 
@@ -51,6 +52,44 @@ export async function getInvestmentFlows(since?: string) {
     .from(e)
     .where(and(eq(e.status, "transfer"), gte(e.occurredOn, from), inArray(e.provider, ["binance", "ibkr", "hyperliquid"])))
     .groupBy(e.provider, e.occurredOn, e.currency);
+}
+
+export const BANK_ACTIVITY_PAGE = 50;
+export type BankActivityFilter = "all" | BankFiling;
+
+/**
+ * Every bank import (Wise, MariBank, GoTyme) with how it was filed and why, newest first: posted ones
+ * and the ones that never reached Transactions (transfers, ignored, a twin of something logged).
+ * Each row carries its transfer partner, when it has one.
+ */
+export async function getBankActivity({ provider, filter, q, page }: { provider: "all" | "wise" | "maribank" | "gotyme"; filter: BankActivityFilter; q: string; page: number }) {
+  await requireAdmin();
+  const db = getDb(), e = importedEntries;
+  const partner = alias(importedEntries, "partner");
+  const duplicate = sql`${e.status} = 'ignored' and ${e.aiReason} like ${`${DUPLICATE_REASON}%`}`;
+  const filed = {
+    all: undefined, duplicate,
+    ignored: sql`${e.status} = 'ignored' and not (${duplicate})`,
+    investment: eq(e.status, "reviewed"),
+    posted: eq(e.status, "posted"), transfer: eq(e.status, "transfer"), pending: eq(e.status, "pending"),
+  }[filter];
+  const base = and(provider === "all" ? inArray(e.provider, [...BANK_PROVIDERS]) : eq(e.provider, provider),
+    q ? ilike(e.description, `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`) : undefined);
+  const where = and(base, filed);
+  const [entries, [totals], counts] = await Promise.all([
+    db.select({ entry: e, category: categories.name, partner: { id: partner.id, provider: partner.provider, description: partner.description, occurredOn: partner.occurredOn } })
+      .from(e).leftJoin(categories, eq(categories.id, e.categoryId))
+      .leftJoin(partner, and(eq(partner.transferId, e.transferId), ne(partner.id, e.id)))
+      .where(where).orderBy(desc(e.occurredOn), desc(e.createdAt), asc(e.id)).limit(BANK_ACTIVITY_PAGE).offset(page * BANK_ACTIVITY_PAGE),
+    db.select({ total: count() }).from(e).where(where),
+    db.select({ status: e.status, duplicate: sql<boolean>`coalesce(${duplicate}, false)`, total: count() }).from(e).where(base).groupBy(e.status, sql`2`),
+  ]);
+  const byFiling = new Map<BankFiling, number>();
+  for (const c of counts) {
+    const key = bankFiling({ status: c.status, aiReason: c.duplicate ? DUPLICATE_REASON : null });
+    byFiling.set(key, (byFiling.get(key) ?? 0) + c.total);
+  }
+  return { entries: entries.map((r) => ({ ...r.entry, category: r.category, partner: r.partner?.id ? r.partner : null })), total: totals.total, counts: byFiling };
 }
 
 export async function getInvestmentHistory(provider: "binance" | "ibkr" | "hyperliquid" | "all", page: number, q = "", kinds: readonly EntryKind[] = []) {

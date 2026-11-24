@@ -40,6 +40,32 @@ export function transferSuggestions(entries: TransferCandidate[]): [TransferCand
     .flatMap((a) => { const b = candidates.get(a.id)![0]; return candidates.get(b.id)?.length === 1 ? [[a, b]] : []; });
 }
 
+/** How a bank import was filed, in Bank activity. A same-day twin of something you logged is told apart from a plain ignore. */
+export type BankFiling = "posted" | "transfer" | "ignored" | "duplicate" | "pending" | "investment";
+
+export const DUPLICATE_REASON = "Already in Transactions";
+
+export function bankFiling(e: Pick<ImportedEntry, "status" | "aiReason">): BankFiling {
+  if (e.status === "ignored" && e.aiReason?.startsWith(DUPLICATE_REASON)) return "duplicate";
+  if (e.status === "reviewed") return "investment";
+  return e.status;
+}
+
+export const BANK_FILING_LABELS: Record<BankFiling, string> = {
+  posted: "In Transactions", transfer: "Transfer", ignored: "Ignored", duplicate: "Already in Transactions", pending: "Waiting for AI", investment: "Investment",
+};
+
+/** What a bank import can be re-filed as from Bank activity. */
+export function refileChoices(e: Pick<ImportedEntry, "provider" | "kind" | "amount" | "currency" | "status" | "transferId">) {
+  const bank = isBank(e.provider);
+  return {
+    post: bank && e.status !== "posted" && canPost(e),
+    transfer: bank && e.status !== "transfer" && ["payment", "transfer", "other"].includes(e.kind),
+    ignore: bank && e.status !== "ignored",
+    unlink: bank && e.status === "transfer" && e.transferId != null,
+  };
+}
+
 const POSTED_CASH_KINDS = new Set(["dividend", "interest", "fee", "tax"]);
 
 export function earningsByCurrency(entries: Pick<ImportedEntry, "provider" | "kind" | "status" | "currency" | "amount" | "realizedPnl">[]) {

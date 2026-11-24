@@ -154,7 +154,8 @@ async function linkExactTransfers(entryIds?: string[]) {
  */
 async function pairFiledTransfers() {
   const db = getDb(), e = importedEntries;
-  const filed = await db.select().from(e).where(and(eq(e.status, "transfer"), isNull(e.transferId))).orderBy(desc(e.occurredOn)).limit(500);
+  // A bank transfer you filed or unlinked yourself (Bank activity) is left alone: re-pairing it would undo your decision.
+  const filed = await db.select().from(e).where(and(eq(e.status, "transfer"), isNull(e.transferId), sql`not (${e.categorizedBy} is not distinct from 'manual' and ${e.provider} in ('wise', 'maribank', 'gotyme'))`)).orderBy(desc(e.occurredOn)).limit(500);
   // Same narrow matching as pending suggestions: exact opposite amounts, same currency, within 7 days, unambiguous.
   const pairs = transferSuggestions(filed.map((row) => ({ ...row, status: "pending" as const })));
   if (!pairs.length) return 0;

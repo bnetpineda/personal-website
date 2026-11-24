@@ -33,6 +33,8 @@ describe("dashboard navigation", () => {
   test("Earnings, History and Goals count as Portfolio; Categories counts as the Overview", () => {
     expect(isNavActive("/admin/holdings", "/admin/earnings")).toBe(true);
     expect(isNavActive("/admin/holdings", "/admin/history")).toBe(true);
+    expect(isNavActive("/admin/connections", "/admin/connections/activity")).toBe(true);
+    expect(isNavActive("/admin/connections", "/admin/connectionsx")).toBe(false);
     expect(isNavActive("/admin/holdings", "/admin/goals")).toBe(true);
     // Categories is opened from the Overview, so the Overview stays lit there (but isn't "the page").
     expect(isNavActive("/admin", "/admin/categories")).toBe(true);

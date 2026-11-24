@@ -28,7 +28,8 @@ export function isNavActive(href: (typeof NAV_DESTINATIONS)[number]["href"], pat
   if (exact) return pathname === href;
   if (href === "/admin") return pathname === "/admin" || pathname === "/admin/categories";
   if (href === "/admin/holdings") return PORTFOLIO_SECTIONS.some((section) => section.href === pathname);
-  return pathname === href;
+  // Bank activity sits under Accounts.
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /**
