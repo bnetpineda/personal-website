@@ -77,6 +77,8 @@ export interface PreparedSpotCosts {
   fifo: SpotFifoGroup[];
   ignoredBases: ReadonlySet<string>;
   paymentAssets: ReadonlySet<string>;
+  /** Coins with non-trade activity (rewards, transfers, other fees) up to the snapshot, so entries need not be loaded. */
+  otherActivity?: ReadonlySet<string>;
 }
 
 /** Trade-only evidence, never a zero basis for rewards, transfers or unrecorded purchases. */
@@ -112,7 +114,7 @@ export function holdingCosts(snapshot: ConnectionSnapshot | null, entries: reado
     if (groups.some((g) => g.unmatched)) reasons.push("Some sells have no earlier imported purchase to establish their cost.");
     if (groups.some((g) => g.externalFees)) reasons.push("Fees paid in another coin are excluded from these trade costs.");
     if (groups.length > 1) reasons.push("FIFO is calculated separately per trading pair. A combined coin cost requires matching lots across every pair.");
-    if (rows.some((e) => e.status !== "ignored" && !e.trade && e.currency === symbol && (e.kind !== "fee" || !e.externalId.startsWith("spot:")))) {
+    if (prepared?.otherActivity ? prepared.otherActivity.has(symbol) : rows.some((e) => e.status !== "ignored" && !e.trade && e.currency === symbol && (e.kind !== "fee" || !e.externalId.startsWith("spot:")))) {
       reasons.push("Imported rewards or transfers also affect this coin. Their original cost is not established by Spot fills.");
     }
     const usedAsPayment = prepared ? prepared.paymentAssets.has(symbol) : rows.some((e) => e.status !== "ignored" && e.trade && (e.trade.quoteAsset === symbol ||

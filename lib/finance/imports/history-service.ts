@@ -122,11 +122,7 @@ export async function advanceHistory(id: string, io: ProviderIO = defaultIO, loa
         where id = ${id}::uuid and lease = ${lease}::uuid and enabled and exists(select 1 from account_connections where provider = 'binance' and enabled and encrypted_credentials = ${row.encryptedCredentials}) returning id`),
     ]);
     if (!saved.rows[0]?.active || !updated.rows.length) throw new ImportError("The connection or import changed. Retry from the saved cursor.");
-    try {
-      await readSpotFifo(job.accountKey, null);
-    } catch (error) {
-      logError("spot fifo refresh failed", error);
-    }
+    // The FIFO cache rebuilds lazily when its fingerprint changes; the daily job warms it once after all pages.
     return { ok: true, message: `Saved ${Number(saved.rows[0].inserted)} new history entries.${complete ? " This stream is caught up to the available data." : " More history is ready to import."}`, more: !complete };
   } catch (error) {
     const message = error instanceof ImportError || error instanceof ConnectionError ? error.message : "History import failed. Check provider access and report data, then retry. Saved progress was kept.";
@@ -135,14 +131,20 @@ export async function advanceHistory(id: string, io: ProviderIO = defaultIO, loa
   }
 }
 
+/** A batch of three pages can take this long (45-second provider calls), so one only starts with this much time left. */
+const HISTORY_BATCH_MS = 50_000;
+
 /** Fair, bounded background progress; each configured pair gets an opportunity on daily runs. */
-export async function syncInvestmentHistory() {
-  const jobs = await getDb().select({ id: investmentSyncs.id }).from(investmentSyncs)
+export async function syncInvestmentHistory({ deadline = Date.now() + 180_000 }: { deadline?: number } = {}) {
+  const jobs = await getDb().select({ id: investmentSyncs.id, scope: investmentSyncs.scope, accountKey: investmentSyncs.accountKey }).from(investmentSyncs)
     .where(and(eq(investmentSyncs.enabled, true), or(isNull(investmentSyncs.completedAt), sql`${investmentSyncs.scope} like 'spot:%'`)))
     .orderBy(asc(investmentSyncs.updatedAt)).limit(21);
-  const deadline = Date.now() + 180_000, results = [];
-  for (let i = 0; i < jobs.length && Date.now() < deadline; i += 3) {
+  const results: PromiseSettledResult<Awaited<ReturnType<typeof advanceHistory>>>[] = [];
+  for (let i = 0; i < jobs.length && deadline - Date.now() >= HISTORY_BATCH_MS; i += 3) {
     results.push(...await Promise.allSettled(jobs.slice(i, i + 3).map((job) => advanceHistory(job.id))));
   }
+  // One FIFO rebuild per account after all pages, instead of one per page.
+  const spotAccounts = new Set(jobs.filter((job, i) => job.scope.startsWith("spot:") && results[i]?.status === "fulfilled" && results[i].value.ok).map((job) => job.accountKey));
+  for (const accountKey of spotAccounts) await readSpotFifo(accountKey, null).catch((error) => logError("spot fifo refresh failed", error));
   return results.map((r) => r.status === "fulfilled" ? r.value : { ok: false, message: "Background history import could not finish; saved progress was kept." });
 }

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, isNull, like, lte, ne, not, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { accountConnections, importedEntries, investmentSyncs, portfolioSnapshots } from "@/lib/db/schema";
 import { round2, type FxTable } from "./calc";
@@ -21,16 +21,17 @@ export async function loadBinanceHoldingCosts(snapshot: ConnectionSnapshot | nul
   if (!snapshot?.accountKey) return holdingCosts(snapshot, [], []);
   const db = getDb();
   const accountKey = snapshot.accountKey;
-  const [prepared, entries, jobs] = await Promise.all([
+  const e = importedEntries;
+  const [prepared, other, jobs] = await Promise.all([
     readSpotFifo(accountKey, snapshot.asOf),
-    db.select({ accountKey: importedEntries.accountKey, externalId: importedEntries.externalId, occurredOn: importedEntries.occurredOn,
-      status: importedEntries.status, kind: importedEntries.kind, currency: importedEntries.currency, trade: importedEntries.trade })
-      .from(importedEntries).where(and(eq(importedEntries.provider, "binance"), eq(importedEntries.accountKey, accountKey),
-        isNull(importedEntries.trade), lte(importedEntries.occurredOn, snapshot.asOf.slice(0, 10)))),
+    // Only which coins had rewards, transfers or non-trade fees matters, not every daily Earn reward row.
+    db.selectDistinct({ currency: e.currency }).from(e).where(and(eq(e.provider, "binance"), eq(e.accountKey, accountKey),
+      isNull(e.trade), ne(e.status, "ignored"), lte(e.occurredOn, snapshot.asOf.slice(0, 10)),
+      or(ne(e.kind, "fee"), not(like(e.externalId, "spot:%"))))),
     db.select({ accountKey: investmentSyncs.accountKey, scope: investmentSyncs.scope, completedAt: investmentSyncs.completedAt,
       lastSyncedAt: investmentSyncs.lastSyncedAt, error: investmentSyncs.error }).from(investmentSyncs).where(eq(investmentSyncs.accountKey, accountKey)),
   ]);
-  return holdingCosts(snapshot, entries, jobs, prepared);
+  return holdingCosts(snapshot, [], jobs, { ...prepared, otherActivity: new Set(other.map((row) => row.currency)) });
 }
 
 type PortfolioRow = typeof portfolioSnapshots.$inferInsert;

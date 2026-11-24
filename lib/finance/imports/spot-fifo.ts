@@ -17,11 +17,12 @@ const tradeRows = {
 const FIFO_COLUMNS = ["base_asset", "quote_asset", "bought", "sold", "remaining", "cost", "realized", "unmatched", "external_fees"] as const;
 
 /**
- * Fingerprint of everything FIFO reads: which fills exist, their status and their data.
- * Timestamps are not enough: drizzle stamps `updated_at` with the app's clock and inserts use the
- * database's, so a status change can land "earlier" than the newest row and go unnoticed.
+ * Fingerprint of everything FIFO reads: which fills exist and their status. A saved fill's data never
+ * changes (re-importing a different record for the same ID is rejected), so the row id stands for it and
+ * the trade JSON isn't serialized on every read. Timestamps are not enough: drizzle stamps `updated_at`
+ * with the app's clock and inserts use the database's, so a status change could go unnoticed.
  */
-const sourceHash = sql<string>`coalesce(md5(string_agg(${importedEntries.externalId} || ':' || ${importedEntries.status} || ':' || ${importedEntries.trade}::text, ',' order by ${importedEntries.externalId})), '')`;
+const sourceHash = sql<string>`coalesce(md5(string_agg(${importedEntries.id}::text || ':' || ${importedEntries.status}, ',' order by ${importedEntries.id})), '')`;
 
 /** Full history when `asOf` is null. A snapshot time limits fills to those already in that balance. */
 export async function readSpotFifo(accountKey: string, asOf: string | null): Promise<PreparedSpotCosts> {
