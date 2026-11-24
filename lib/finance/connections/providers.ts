@@ -25,17 +25,28 @@ export const defaultIO: ProviderIO = { json: readJson, text: readText, quotes: f
 export async function binanceReader(credentials: Extract<Credentials, { provider: "binance" }>, signal: AbortSignal, io: ProviderIO) {
   const time = z.object({ serverTime: z.number().int().positive() }).parse(await io.json(new URL(`${BINANCE}/api/v3/time`), {}, signal));
   const offset = time.serverTime - Date.now();
-  const signed = (path: string, params: Record<string, string> = {}) => {
+  /** `callSignal` lets one reader serve the snapshot and then the history, each with its own time limit. */
+  const signed = (path: string, params: Record<string, string> = {}, callSignal: AbortSignal = signal) => {
     const query = new URLSearchParams({ ...params, recvWindow: "10000", timestamp: String(Date.now() + offset) });
     query.set("signature", createHmac("sha256", credentials.apiSecret).update(query.toString()).digest("hex"));
-    return io.json(new URL(`${BINANCE}${path}?${query}`), { "X-MBX-APIKEY": credentials.apiKey }, signal);
+    return io.json(new URL(`${BINANCE}${path}?${query}`), { "X-MBX-APIKEY": credentials.apiKey }, callSignal);
   };
   assertReadOnlyBinance(await signed("/sapi/v1/account/apiRestrictions"));
   return signed;
 }
 
-async function binance(credentials: Extract<Credentials, { provider: "binance" }>, signal: AbortSignal, io: ProviderIO): Promise<ConnectionSnapshot> {
-  const signed = await binanceReader(credentials, signal, io);
+export type BinanceReader = Awaited<ReturnType<typeof binanceReader>>;
+export const USDT_RATE_REUSED_WARNING = "The USDT/USD quote was unavailable, so this sync reused the last saved rate.";
+
+/** The snapshot from an open reader, so a sync can reuse the same reader (server time, key check) for history. */
+/** How old the last saved USDT/USD rate may be when CoinGecko can't answer (USDT holds close to $1). */
+const SAVED_USDT_RATE_DAYS = 3;
+
+/**
+ * The snapshot from an open reader, so a sync can reuse the same reader (server time, key check) for history.
+ * `previous` is the saved snapshot: its USDT/USD rate stands in for a few days when CoinGecko fails.
+ */
+export async function binanceSnapshot(signed: BinanceReader, signal: AbortSignal, io: ProviderIO, previous?: Pick<ConnectionSnapshot, "asOf" | "usdtUsd"> | null): Promise<ConnectionSnapshot> {
 
   const earn = async (kind: "flexible" | "locked") => {
     const positions: { id: string; asset: string; quantity: number }[] = [];
@@ -56,15 +67,17 @@ async function binance(credentials: Extract<Credentials, { provider: "binance" }
     signed("/api/v3/account", { omitZeroBalances: "true" }),
     earn("flexible"), earn("locked"),
     io.json(new URL(`${BINANCE}/api/v3/ticker/price`), {}, signal),
-    io.quotes(["tether"], ["USD"]),
+    // CoinGecko often rate-limits shared server IPs; that alone must not fail the balances.
+    io.quotes(["tether"], ["USD"]).catch(() => new Map<string, { prices: Record<string, number>; asOf: Date }>()),
   ]);
   const spot = parseBinanceBalances(account);
   const { uid } = z.object({ uid: z.union([z.string().regex(/^\d+$/), z.number().int().safe().nonnegative()]).transform(String) }).parse(account);
   const usd = tether.get("tether");
-  const usdtUsd = usd?.prices.usd;
-  if (!usdtUsd || !Number.isFinite(usdtUsd) || !usd || Date.now() - usd.asOf.getTime() > 24 * 3_600_000) {
-    throw new ConnectionError("A recent USDT/USD quote is unavailable. Previous balances were kept.");
-  }
+  const quoted = usd?.prices.usd;
+  const fresh = quoted != null && Number.isFinite(quoted) && quoted > 0 && Date.now() - usd!.asOf.getTime() <= 24 * 3_600_000;
+  const saved = previous?.usdtUsd != null && Date.now() - Date.parse(previous.asOf) <= SAVED_USDT_RATE_DAYS * 86_400_000 ? previous.usdtUsd : null;
+  const usdtUsd = fresh ? quoted : saved;
+  if (usdtUsd == null) throw new ConnectionError("A recent USDT/USD quote is unavailable. Previous balances were kept.");
   const tickers = z.array(z.object({ symbol: z.string(), price: z.string().regex(/^\d+(?:\.\d+)?$/) })).parse(rawTickers);
   const prices = new Map(tickers.map((q) => [q.symbol, Number(q.price)]));
   const quantities = [
@@ -82,6 +95,7 @@ async function binance(credentials: Extract<Credentials, { provider: "binance" }
     "Spot and Simple Earn only. Funding, Margin, Futures, staking services and other Earn products are not included.",
     "USD values use Binance USDT market prices and a USDT/USD quote. Spot trade cost estimates are available on Holdings after importing history.",
     ...(positions.some((p) => p.marketValue == null) ? [BINANCE_MISSING_PRICE_WARNING] : []),
+    ...(fresh ? [] : [USDT_RATE_REUSED_WARNING]),
   ] });
 }
 
@@ -124,7 +138,10 @@ export async function hyperliquidPages(info: HyperliquidInfo, query: Record<stri
   throw new ConnectionError("This wallet has too much Hyperliquid activity to read in one sync. Previous balances were kept.");
 }
 
-async function hyperliquid(credentials: Extract<Credentials, { provider: "hyperliquid" }>, signal: AbortSignal, io: ProviderIO): Promise<ConnectionSnapshot> {
+/** What a Hyperliquid snapshot already read that the history import needs too, so one sync asks once. */
+export interface HyperliquidShared { markets: unknown; rewards: unknown; portfolio: unknown; fills: unknown[] }
+
+export async function hyperliquidAccount(credentials: Extract<Credentials, { provider: "hyperliquid" }>, signal: AbortSignal, io: ProviderIO): Promise<{ snapshot: ConnectionSnapshot; shared: HyperliquidShared }> {
   const info = hyperliquidReader(signal, io);
   const user = credentials.address;
   const { role } = z.object({ role: z.string() }).parse(await info({ type: "userRole", user }));
@@ -139,14 +156,15 @@ async function hyperliquid(credentials: Extract<Credentials, { provider: "hyperl
     info({ type: "delegatorRewards", user }), info({ type: "portfolio", user }), hyperliquidPages(info, { type: "userFillsByTime", user }, 0),
     ...dexes.map((dex) => info({ type: "clearinghouseState", user, ...(dex ? { dex: dex.name } : {}) })),
   ]);
-  return hyperliquidSnapshot({ address: user, abstraction, markets, spot, perps, lending, staking, vaults, rewards, portfolio, fills });
+  const snapshot = hyperliquidSnapshot({ address: user, abstraction, markets, spot, perps, lending, staking, vaults, rewards, portfolio, fills });
+  return { snapshot, shared: { markets, rewards, portfolio, fills } };
 }
 
-export async function fetchAccountSnapshot(credentials: Credentials, io: ProviderIO = defaultIO): Promise<ConnectionSnapshot> {
+export async function fetchAccountSnapshot(credentials: Credentials, io: ProviderIO = defaultIO, previous?: ConnectionSnapshot | null): Promise<ConnectionSnapshot> {
   const signal = AbortSignal.timeout(45_000);
   switch (credentials.provider) {
-    case "binance": return binance(credentials, signal, io);
+    case "binance": return binanceSnapshot(await binanceReader(credentials, signal, io), signal, io, previous);
     case "ibkr": return parseIbkrStatement(await fetchFlexReport(credentials, signal, io));
-    case "hyperliquid": return hyperliquid(credentials, signal, io);
+    case "hyperliquid": return (await hyperliquidAccount(credentials, signal, io)).snapshot;
   }
 }

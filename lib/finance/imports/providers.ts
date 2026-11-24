@@ -1,7 +1,8 @@
 import "server-only";
 import { z } from "zod";
-import { binanceReader, defaultIO, fetchFlexReport, hyperliquidPages, hyperliquidReader, type ProviderIO } from "../connections/providers";
-import type { Credentials } from "../connections/types";
+import { binanceReader, binanceSnapshot, defaultIO, fetchAccountSnapshot, fetchFlexReport, hyperliquidAccount, hyperliquidPages, hyperliquidReader, type BinanceReader, type HyperliquidShared, type ProviderIO } from "../connections/providers";
+import { parseIbkrStatement } from "../connections/parsers";
+import type { ConnectionSnapshot, Credentials } from "../connections/types";
 import { ImportError, uniqueEntries, type HistoryImport, type ImportEntry } from "./types";
 import { identifier, parseCapitalPage, parseHyperliquidHistory, parseIbkrHistory, parseRewardsPage } from "./provider-parsers";
 
@@ -9,28 +10,77 @@ import { identifier, parseCapitalPage, parseHyperliquidHistory, parseIbkrHistory
 const IBKR_HISTORY_DAYS = 30;
 /** Fills and funding per sync, whole UTC days so a funding day is never read half finished. Duplicates are skipped. */
 const HYPERLIQUID_HISTORY_DAYS = 30;
+const PROVIDER_TIMEOUT_MS = 45_000;
+
+export type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+const settle = async <T>(run: () => Promise<T> | T): Promise<Settled<T>> => {
+  try { return { ok: true, value: await run() }; } catch (error) { return { ok: false, error }; }
+};
+
+/**
+ * One sync: balances, then recent history, asking each provider once for what both need
+ * (IBKR's Flex report; Binance's server time, key check and account; Hyperliquid's markets, rewards,
+ * portfolio and fills). A failed snapshot fails the sync; a failed history only reports its error.
+ */
+export async function fetchAccount(credentials: Credentials, { io = defaultIO, now = new Date(), previous = null }: { io?: ProviderIO; now?: Date; previous?: ConnectionSnapshot | null } = {}): Promise<{ snapshot: ConnectionSnapshot; history: Settled<HistoryImport> }> {
+  const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
+  if (credentials.provider === "ibkr") {
+    // The 30-day report carries the same closing positions and cash as the query's own period, plus the activity.
+    const xml = await fetchFlexReport(credentials, signal, io, IBKR_HISTORY_DAYS);
+    let snapshot: ConnectionSnapshot;
+    try {
+      snapshot = parseIbkrStatement(xml);
+    } catch {
+      // A query broken out per day (several statements per account) only reads as balances over its saved period.
+      snapshot = await fetchAccountSnapshot(credentials, io, previous);
+    }
+    return { snapshot, history: await settle(() => parseIbkrHistory(xml)) };
+  }
+  if (credentials.provider === "hyperliquid") {
+    const { snapshot, shared } = await hyperliquidAccount(credentials, signal, io);
+    return { snapshot, history: await settle(() => hyperliquidHistory(credentials.address, io, now, shared)) };
+  }
+  const signed = await binanceReader(credentials, signal, io);
+  const snapshot = await binanceSnapshot(signed, signal, io, previous);
+  const historySignal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
+  return { snapshot, history: await settle(() => {
+    if (!snapshot.accountKey) throw new ImportError("Binance did not identify the account. Retry the sync.");
+    return binanceHistory((path, params) => signed(path, params, historySignal), snapshot.accountKey, now);
+  }) };
+}
+
+async function hyperliquidHistory(user: string, io: ProviderIO, now: Date, shared?: HyperliquidShared): Promise<HistoryImport> {
+  const info = hyperliquidReader(AbortSignal.timeout(PROVIDER_TIMEOUT_MS), io);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const from = today - HYPERLIQUID_HISTORY_DAYS * 86_400_000;
+  const [markets, fills, funding, ledger, rewards, portfolio] = await Promise.all([
+    shared?.markets ?? info({ type: "spotMetaAndAssetCtxs" }),
+    // The snapshot already read every fill; history keeps the window it would have asked for.
+    shared ? shared.fills.filter((row) => (row as { time: number }).time >= from) : hyperliquidPages(info, { type: "userFillsByTime", user }, from),
+    hyperliquidPages(info, { type: "userFunding", user }, from),
+    hyperliquidPages(info, { type: "userNonFundingLedgerUpdates", user }, 0),
+    shared?.rewards ?? info({ type: "delegatorRewards", user }),
+    shared?.portfolio ?? info({ type: "portfolio", user }),
+  ]);
+  return parseHyperliquidHistory({ address: user, markets, fills, funding, ledger, rewards, portfolio }, from, today);
+}
 
 /** Rolling overlap repairs missed days and deduplicates by provider identity, not import time. */
 export async function fetchHistory(credentials: Credentials, io: ProviderIO = defaultIO, now = new Date(), range?: { from: string; to: string }, expectedAccount?: string): Promise<HistoryImport> {
-  const signal = AbortSignal.timeout(45_000);
   if (credentials.provider === "ibkr") {
     // The balance query also carries Cash Transactions and Trades; history asks it for the last 30 days.
-    return parseIbkrHistory(await fetchFlexReport(credentials, signal, io, IBKR_HISTORY_DAYS));
+    return parseIbkrHistory(await fetchFlexReport(credentials, AbortSignal.timeout(PROVIDER_TIMEOUT_MS), io, IBKR_HISTORY_DAYS));
   }
-  if (credentials.provider === "hyperliquid") {
-    const info = hyperliquidReader(signal, io), user = credentials.address;
-    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const from = today - HYPERLIQUID_HISTORY_DAYS * 86_400_000;
-    const [markets, fills, funding, ledger, rewards, portfolio] = await Promise.all([
-      info({ type: "spotMetaAndAssetCtxs" }), hyperliquidPages(info, { type: "userFillsByTime", user }, from), hyperliquidPages(info, { type: "userFunding", user }, from),
-      hyperliquidPages(info, { type: "userNonFundingLedgerUpdates", user }, 0), info({ type: "delegatorRewards", user }), info({ type: "portfolio", user }),
-    ]);
-    return parseHyperliquidHistory({ address: user, markets, fills, funding, ledger, rewards, portfolio }, from, today);
-  }
-  const signed = await binanceReader(credentials, signal, io);
+  if (credentials.provider === "hyperliquid") return hyperliquidHistory(credentials.address, io, now);
+  const signed = await binanceReader(credentials, AbortSignal.timeout(PROVIDER_TIMEOUT_MS), io);
   const { uid } = z.object({ uid: identifier }).parse(await signed("/api/v3/account", { omitZeroBalances: "true" }));
   const accountKey = `uid:${uid}`;
   if (expectedAccount && accountKey !== expectedAccount) throw new ImportError("The connected Binance account changed. Start history for the new account.");
+  return binanceHistory(signed, accountKey, now, range);
+}
+
+/** Earn rewards and completed deposits/withdrawals for up to 30 completed UTC days (the last 30 by default). */
+async function binanceHistory(signed: (path: string, params?: Record<string, string>) => ReturnType<BinanceReader>, accountKey: string, now: Date, range?: { from: string; to: string }): Promise<HistoryImport> {
   if (range && (!z.iso.date().safeParse(range.from).success || !z.iso.date().safeParse(range.to).success)) throw new ImportError("Invalid history dates.");
   const end = range ? Date.parse(range.to + "T00:00:00Z") + 86_400_000 - 1 : Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - 1;
   const start = range ? Date.parse(range.from + "T00:00:00Z") : end + 1 - 30 * 86_400_000;

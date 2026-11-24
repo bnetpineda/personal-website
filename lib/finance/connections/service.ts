@@ -5,10 +5,9 @@ import { getDb } from "@/lib/db";
 import { accountConnections } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { needsReseal, openCredentials, sealCredentials } from "./crypto";
-import { fetchAccountSnapshot } from "./providers";
 import { normalizeBinanceSnapshot } from "./binance-positions";
 import { ConnectionError, type ConnectionView, type Credentials, type SyncProvider, type SyncResult } from "./types";
-import { fetchHistory } from "../imports/providers";
+import { fetchAccount } from "../imports/providers";
 import { ingestEntries } from "../imports/service";
 import { ImportError, type HistoryCoverage } from "../imports/types";
 import { saveNav } from "../portfolio";
@@ -97,14 +96,15 @@ export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
       throw new ConnectionError("The saved credential could not be unlocked. Reconnect this account.");
     }
     await resealCredential(provider, connection.encryptedCredentials, credentials);
-    const snapshot = await fetchAccountSnapshot(credentials);
+    const { snapshot, history: fetched } = await fetchAccount(credentials, { previous: connection.snapshot });
     if (connection.snapshot && snapshot.asOf < connection.snapshot.asOf) {
       throw new ConnectionError("The provider returned an older report. The newer saved balances were kept.");
     }
     let historyError: string | null = null;
     let historyCoverage: HistoryCoverage | undefined;
     try {
-      const history = await fetchHistory(credentials);
+      if (!fetched.ok) throw fetched.error;
+      const history = fetched.value;
       await ingestEntries(history.entries, { provider, id: lease });
       historyCoverage = history.coverage;
       // Best effort: a provider's own daily value only fills earlier days of the Portfolio chart.
