@@ -133,13 +133,33 @@ export function paysAccountHolder(description: string, fullName: string): boolea
 }
 
 /**
+ * Who the money went to or came from, as the bank names them: the part after "Received from" / "Sent to" (and
+ * Wise's and GoTyme's raw "Received money from" / "Transfer to"), without a payment reference or fee note.
+ * Null when the line names no counterparty. The reference is free text the sender types, so it must never
+ * decide whose money this is.
+ */
+export function counterpartyOf(description: string): string | null {
+  const text = description.replace(/\s+/g, " ").trim();
+  const match = /^(?:received money from|sent money to|received from|sent to|transfer from|transfer to)\s+(.+)$/i.exec(text);
+  if (!match) return null;
+  const name = match[1]
+    .replace(/\s+with reference\b.*$/i, "")
+    .replace(/\s*\(fee: [^)]*\)\s*$/i, "")
+    .replace(/,\s*(?:account|mobile) no\.?.*$/i, "")
+    .trim();
+  return name || null;
+}
+
+/**
  * Lines with one correct answer. Jev is not asked: card checks, payments to the account holder,
  * broker and exchange deposits, and budget-currency dividends, interest, fees and tax.
  */
 export function routineDecision(entry: Entry, categories: CategoryOption[], accountHolder: string): AiDecision | null {
   if (entry.provider === "wise" && entry.kind === "payment" && isCardCheck(entry))
     return { id: entry.id, decision: "ignore", reason: "Card check of 1.00" };
-  if (TRANSFER_KINDS.includes(entry.kind) && paysAccountHolder(entry.description, accountHolder))
+  // Only the counterparty's name counts, so a stranger can't hide a payment by typing the owner's name in its reference.
+  const counterparty = counterpartyOf(entry.description);
+  if (TRANSFER_KINDS.includes(entry.kind) && counterparty && paysAccountHolder(counterparty, accountHolder))
     return { id: entry.id, decision: "transfer", reason: "Payment to the account holder" };
   if ((entry.provider === "binance" || entry.provider === "ibkr" || entry.provider === "hyperliquid") && entry.kind === "transfer")
     return { id: entry.id, decision: "transfer", reason: "Deposit or withdrawal between accounts" };
@@ -179,14 +199,48 @@ export function buildCategorizePrompt(entries: Entry[], categories: CategoryOpti
   return { instructions: INSTRUCTIONS, prompt: JSON.stringify(payload) };
 }
 
+/**
+ * Bank amounts from this size up are too large for the model alone to take out of the budget. Per currency
+ * because bank lines are not converted here; other currencies use the USD-sized default.
+ */
+export const HIDE_REVIEW_THRESHOLD: Readonly<Record<string, number>> = { PHP: 5_000, JPY: 15_000 };
+const DEFAULT_HIDE_THRESHOLD = 100;
+
+/**
+ * A model's "ignore" or "transfer" removes money from income and spending, and nobody reviews it afterwards. Bank
+ * descriptions are written by senders and merchants, so text in one could steer the model into hiding a real
+ * payment. A large bank line it wants to hide is posted to Other instead, with a reason that says to check it:
+ * visible and easy to fix, rather than silently gone. Exempt: incoming or outgoing money whose counterparty is
+ * the account holder (a real transfer) and outgoing transfers between own accounts. Null keeps the model's choice.
+ */
+export function reviewHiddenDecision(entry: Entry, decision: "transfer" | "investment" | "ignore", categories: CategoryOption[], accountHolder: string): AiDecision | null | "drop" {
+  if (!isBank(entry.provider) || decision === "investment") return null;
+  const threshold = HIDE_REVIEW_THRESHOLD[entry.currency.toUpperCase()] ?? DEFAULT_HIDE_THRESHOLD;
+  if (Math.abs(entry.amount) < threshold) return null;
+  const counterparty = counterpartyOf(entry.description);
+  if (counterparty && paysAccountHolder(counterparty, accountHolder)) return null;
+  // Moving your own money out (a top-up of another wallet) is the usual large transfer; hiding income is the risk.
+  if (decision === "transfer" && entry.amount < 0) return null;
+  if (!allowedDecisions(entry).includes("post")) return "drop";
+  const other = categoryNamed(categories, direction(entry.amount), "Other");
+  if (!other) return "drop";
+  const suggested = decision === "ignore" ? "ignoring" : "a transfer";
+  return { id: entry.id, decision: "post", categoryId: other.id, reason: `Check this: AI suggested ${suggested}` };
+}
+
 /** Anything unexpected is dropped; the entry stays pending and a later run asks again. */
-export function validateDecisions(entries: Entry[], categories: CategoryOption[], output: AiOutput) {
+export function validateDecisions(entries: Entry[], categories: CategoryOption[], output: AiOutput, accountHolder: string = SITE.name) {
   const byRef = new Map(entries.map((e, i) => [`e${i + 1}`, e]));
   const accepted = new Map<string, AiDecision>();
   for (const d of output.decisions) {
     const entry = byRef.get(d.ref);
     if (!entry || accepted.has(entry.id) || !allowedDecisions(entry).includes(d.decision)) continue;
     const reason = d.reason.replace(/\s+/g, " ").trim().slice(0, 200) || "Categorized by AI";
+    if (d.decision !== "post") {
+      const review = reviewHiddenDecision(entry, d.decision, categories, accountHolder);
+      if (review === "drop") continue;
+      if (review) { accepted.set(entry.id, review); continue; }
+    }
     if (d.decision === "post") {
       const category = categories.find((c) => c.id === d.categoryId);
       if (!category || category.archived || category.kind !== direction(entry.amount)) continue;
