@@ -10,6 +10,7 @@ import { loadStatementMonths } from "./imports/statement-months";
 import { env } from "@/lib/env";
 import { currentMonth, monthRange } from "./dates";
 import { buildNotifications } from "./notifications";
+import { loadDebtsDue, loadSpendingSignals } from "./anomalies-dal";
 
 /** The layout's badge, the Overview and Needs you all ask in one request; cache() runs the queries once. */
 export const getNotifications = cache(async function getNotifications() {
@@ -42,6 +43,12 @@ export const getNotifications = cache(async function getNotifications() {
   const keys = new Set(dismissed.map((d) => d.key));
   const own = new Map(overrides.map((o) => [o.categoryId, o.amount]));
   const budgeted = budgets.map((b) => ({ ...b, budget: monthBudget({ id: b.id, monthlyBudget: b.budget }, own) ?? 0 })).filter((b) => b.budget > 0);
-  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgeted, bills, aiBacklog, statements: statementCoverage(months) })
+  const withBudget = new Set(budgeted.map((b) => b.id));
+  // Money alerts are extras: a failed read leaves them out rather than taking the account alerts with it.
+  const [debts, spending] = await Promise.all([
+    loadDebtsDue().catch(() => []),
+    loadSpendingSignals(month, budgets.map((b) => ({ id: b.id, name: b.name, spent: b.spent, budgeted: withBudget.has(b.id) }))).catch(() => undefined),
+  ]);
+  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgeted, bills, aiBacklog, statements: statementCoverage(months), debts, spending })
     .map((alert) => ({ ...alert, dismissed: keys.has(alert.key) }));
 });

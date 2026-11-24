@@ -2,8 +2,9 @@ import type { ConnectionView, Provider } from "./connections/types";
 import { isConnectionStale, needsNewCredentials, plainSyncError, PROVIDER_META, untriedAccounts } from "./connections/types";
 import { addMonths, dayLabel, daysBetween, fullDayLabel, monthLabel, timeAgo, todayManila } from "./dates";
 import type { StatementCoverage, StatementProvider } from "./imports/coverage";
+import { categorySpikes, debtReminders, doubleCharges, newPayees, priceRises, type BankCharge, type CategorySpending, type DebtDue, type RecentExpense, type Subscription } from "./anomalies";
 
-export type NotificationType = "sync" | "history" | "expiry" | "budget" | "bill" | "statement" | "ai";
+export type NotificationType = "sync" | "history" | "expiry" | "budget" | "bill" | "statement" | "ai" | "debt" | "spending";
 
 export interface FinanceNotification {
   key: string;
@@ -28,6 +29,10 @@ export function buildNotifications(input: {
   aiBacklog?: { waiting: number; oldest: string } | null;
   /** What each statement-only bank (Wise, MariBank, GoTyme) has imported: they update only when the person uploads. */
   statements?: Partial<Record<StatementProvider, StatementCoverage>>;
+  /** Debts with a due day, for payment reminders. */
+  debts?: DebtDue[];
+  /** What the money itself says: spikes, payments to someone new, double charges, price rises. */
+  spending?: { categories: CategorySpending[]; expenses: RecentExpense[]; knownPayees: ReadonlySet<string>; olderExpenses: number; bankCharges: BankCharge[]; subscriptions: Subscription[] };
 }, now = new Date()): FinanceNotification[] {
   const today = todayManila(now), month = today.slice(0, 7);
   const alerts: FinanceNotification[] = [];
@@ -63,6 +68,7 @@ export function buildNotifications(input: {
     const title = `${b.description} ${b.nextOn < today ? "is overdue" : "is coming up"}`;
     alerts.push({ key: `bill:${b.id}:${b.nextOn}`, type: "bill", title, label: title, detail: `Scheduled for ${dayLabel(b.nextOn)}.`, href: "/admin/recurring", severity: "warning" });
   }
+  alerts.push(...debtReminders(input.debts ?? [], today));
   const lastMonth = addMonths(month, -1);
   const banks = Object.entries(input.statements ?? {}) as [StatementProvider, StatementCoverage][];
   const earliest = banks.map(([, c]) => c.from).sort()[0];
@@ -84,6 +90,11 @@ export function buildNotifications(input: {
     alerts.push({ key: `ai:${input.aiBacklog.oldest}`, type: "ai", title, label: title,
       detail: `${input.aiBacklog.waiting} imported ${input.aiBacklog.waiting === 1 ? "entry has" : "entries have"} waited over a day. Check the AI Gateway key and credits, then sync again.`,
       href: "/admin/connections", severity: "warning" });
+  }
+  if (input.spending) {
+    const s = input.spending;
+    alerts.push(...categorySpikes(s.categories, month), ...newPayees(s.expenses, s.knownPayees, s.olderExpenses, today),
+      ...doubleCharges(s.bankCharges, today), ...priceRises(s.subscriptions, s.expenses, today));
   }
   return alerts;
 }
