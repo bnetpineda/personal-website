@@ -1,9 +1,9 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { createGateway, generateText, Output } from "ai";
-import { and, asc, count, desc, eq, gte, inArray, lt, max, sql, sum } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { accountConnections, aiSummaries, cashFlows, categories, categoryBudgets, goals, importedEntries, liabilities, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
+import { accountConnections, aiSummaries, cashFlows, categories, categoryBudgets, goals, liabilities, netWorthSnapshots, recurringCashFlows } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { buildSummaryFacts, buildSummaryPrompt, financeSummarySchema, hashableFacts, readSummary, tidySummary, type FinanceSummary, type SummaryFacts } from "./ai-summary";
 import { monthlySeries } from "./calc";
@@ -11,7 +11,8 @@ import { isConnectionStale, PROVIDER_META } from "./connections/types";
 import { dashboardMonth } from "./dashboard";
 import { addMonths, currentMonth, monthLabel, monthRange, todayManila } from "./dates";
 import { averageMonthlySpending, goalProgress } from "./goals";
-import { missingStatementProviders, STATEMENT_PROVIDERS, statementCoverage } from "./imports/coverage";
+import { missingStatementProviders, statementCoverage } from "./imports/coverage";
+import { loadStatementMonths } from "./imports/statement-months";
 import { currentNetWorth, loadFxTable } from "./service";
 import { logError } from "@/lib/log";
 
@@ -34,7 +35,6 @@ export async function loadSummaryFacts(now = new Date()): Promise<SummaryFacts> 
   const today = todayManila(now), current = currentMonth(now);
   const from = monthRange(addMonths(current, -12)).start, to = monthRange(current).end;
   const month = sql<string>`to_char(${cashFlows.occurredOn}, 'YYYY-MM')`;
-  const e = importedEntries;
   const [nw, fx, snapshots, debts, monthly, byCategory, allCategories, overrides, recurring, goalRows, connections, statementRows] = await Promise.all([
     currentNetWorth(),
     loadFxTable(),
@@ -50,8 +50,7 @@ export async function loadSummaryFacts(now = new Date()): Promise<SummaryFacts> 
     db.select().from(goals).where(eq(goals.archived, false)).orderBy(asc(goals.sortOrder)),
     db.select({ provider: accountConnections.provider, enabled: accountConnections.enabled, error: accountConnections.error, lastSyncedAt: accountConnections.lastSyncedAt,
       includeInNetWorth: accountConnections.includeInNetWorth, asOf: sql<string | null>`${accountConnections.snapshot}->>'asOf'` }).from(accountConnections),
-    db.select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
-      .from(e).where(inArray(e.provider, [...STATEMENT_PROVIDERS])).groupBy(e.provider, sql`2`),
+    loadStatementMonths(),
   ]);
 
   const statements = statementCoverage(statementRows);

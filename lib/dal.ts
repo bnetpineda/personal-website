@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, isNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, ilike, isNotNull, isNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import {
@@ -24,7 +24,8 @@ import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
 import { IMPORTER_NOTE_PATTERNS } from "@/lib/finance/notes";
-import { STATEMENT_PROVIDERS, statementCoverage } from "@/lib/finance/imports/coverage";
+import { statementCoverage } from "@/lib/finance/imports/coverage";
+import { loadStatementMonths } from "@/lib/finance/imports/statement-months";
 import { teachGroups } from "@/lib/finance/imports/teach";
 import { currentNetWorth, loadFxTable } from "@/lib/finance/service";
 import { latestAiSummary } from "@/lib/finance/ai-summary-service";
@@ -66,11 +67,7 @@ export async function getStatementBalances() {
 /** What uploaded statements have brought in so far, per bank: the months with activity and when the last upload was. */
 export async function getStatementImports() {
   await requireAdmin();
-  const e = importedEntries;
-  const rows = await getDb()
-    .select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
-    .from(e).where(inArray(e.provider, [...STATEMENT_PROVIDERS])).groupBy(e.provider, sql`2`);
-  return statementCoverage(rows);
+  return statementCoverage(await loadStatementMonths());
 }
 
 export async function getCategories(kind?: CashFlowKind) {
@@ -314,6 +311,18 @@ export async function getNetWorthNow() {
 export async function getSnapshots() {
   await requireAdmin();
   return getDb().select().from(netWorthSnapshots).orderBy(asc(netWorthSnapshots.snapshotDate));
+}
+
+/**
+ * Net-worth points from the last one on or before `anchor` onwards, oldest first: what the Overview's
+ * "vs a month ago" and its trend line read, without loading the whole history.
+ */
+export async function getSnapshotsSince(anchor: string) {
+  await requireAdmin();
+  const s = netWorthSnapshots;
+  return getDb().select().from(s)
+    .where(gte(s.snapshotDate, sql`coalesce((select max(${s.snapshotDate}) from ${s} where ${s.snapshotDate} <= ${anchor}), ${anchor}::date)`))
+    .orderBy(asc(s.snapshotDate));
 }
 
 /** Each investment account's daily value, oldest first. */

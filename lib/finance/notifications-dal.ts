@@ -1,15 +1,18 @@
 import "server-only";
-import { and, count, eq, gte, inArray, lt, max, min, sql } from "drizzle-orm";
+import { cache } from "react";
+import { and, eq, gte, lt, min, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { accountConnections, cashFlows, categories, categoryBudgets, importedEntries, notificationDismissals, recurringCashFlows } from "@/lib/db/schema";
 import { monthBudget } from "./calc";
-import { STATEMENT_PROVIDERS, statementCoverage } from "./imports/coverage";
+import { statementCoverage } from "./imports/coverage";
+import { loadStatementMonths } from "./imports/statement-months";
 import { env } from "@/lib/env";
 import { currentMonth, monthRange } from "./dates";
 import { buildNotifications } from "./notifications";
 
-export async function getNotifications() {
+/** The layout's badge, the Overview and Needs you all ask in one request; cache() runs the queries once. */
+export const getNotifications = cache(async function getNotifications() {
   await requireAdmin();
   const month = currentMonth();
   const db = getDb(), { start, end } = monthRange(month);
@@ -33,8 +36,7 @@ export async function getNotifications() {
     env.aiGatewayApiKey() ? db.select({ waiting: sql<number>`count(*)`.mapWith(Number), oldest: min(e.occurredOn) }).from(e)
       .where(and(eq(e.status, "pending"), lt(e.createdAt, sql`now() - interval '1 day'`))).then(([row]) => row?.oldest ? { waiting: row.waiting, oldest: row.oldest } : null)
       : Promise.resolve(null),
-    db.select({ provider: e.provider, month: sql<string>`to_char(${e.occurredOn}, 'YYYY-MM')`, entries: count(), importedAt: max(e.createdAt) })
-      .from(e).where(inArray(e.provider, [...STATEMENT_PROVIDERS])).groupBy(e.provider, sql`2`),
+    loadStatementMonths(),
     db.select({ categoryId: categoryBudgets.categoryId, amount: categoryBudgets.amount }).from(categoryBudgets).where(eq(categoryBudgets.month, month)),
   ]);
   const keys = new Set(dismissed.map((d) => d.key));
@@ -42,4 +44,4 @@ export async function getNotifications() {
   const budgeted = budgets.map((b) => ({ ...b, budget: monthBudget({ id: b.id, monthlyBudget: b.budget }, own) ?? 0 })).filter((b) => b.budget > 0);
   return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgeted, bills, aiBacklog, statements: statementCoverage(months) })
     .map((alert) => ({ ...alert, dismissed: keys.has(alert.key) }));
-}
+});
