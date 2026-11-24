@@ -61,7 +61,7 @@ export default async function RecurringPage() {
   const live = rows.filter((r) => !r.paused && r.nextOn != null);
   const perMonth = (kind: CashFlowKind) =>
     sumInPhp(fx, live.filter((r) => r.kind === kind).map((r) => ({ amount: monthlyEquivalent(r.amount, r.frequency), currency: r.currency })));
-  const payers = repeatPayers(received);
+  const payers = repeatPayers(received, today.slice(0, 7));
   // The same estimate as the Overview, so the two pages never disagree about monthly income.
   const income = typicalIncome(fx, rows, payers);
   const expenses = perMonth("expense");

@@ -226,7 +226,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   };
 
   // Hourly work pays differently every month: each client's average month, with everyone's low and high.
-  const payers = repeatPayers(received);
+  const payers = repeatPayers(received, current);
   const income = typicalIncome(fx, recurring, payers);
   const hasIncomeEstimate = income.sources > 0 && income.missing.length === 0;
   // Tile charts: each month the figure is drawn from (pay by month; the year up to the month on show).

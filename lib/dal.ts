@@ -250,16 +250,21 @@ export async function getRecurring(kind?: CashFlowKind) {
     .orderBy(asc(recurringCashFlows.paused), sql`${recurringCashFlows.nextOn} asc nulls last`, asc(recurringCashFlows.description));
 }
 
-/** Imported income posted to Transactions since `since`, for spotting payers that repeat. */
-export async function getImportedIncome(since: string) {
+/** Imported entries of one kind posted to Transactions since `since`, for spotting payers and charges that repeat. */
+export async function getImportedFlows(kind: CashFlowKind, since: string) {
   await requireAdmin();
   return getDb()
     .select({ description: importedEntries.description, occurredOn: cashFlows.occurredOn, amount: cashFlows.amount, currency: cashFlows.currency,
-      categoryName: categories.name, categoryColor: categories.color })
+      categoryId: cashFlows.categoryId, categoryName: categories.name, categoryColor: categories.color, account: cashFlows.account })
     .from(cashFlows)
     .innerJoin(importedEntries, eq(importedEntries.id, cashFlows.id))
     .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
-    .where(and(eq(cashFlows.kind, "income"), gte(cashFlows.occurredOn, since)));
+    .where(and(eq(cashFlows.kind, kind), gte(cashFlows.occurredOn, since)));
+}
+
+/** Imported income posted to Transactions since `since`, for spotting payers that repeat. */
+export async function getImportedIncome(since: string) {
+  return getImportedFlows("income", since);
 }
 
 /** Things you own that no account syncs, archived ones last. Only unarchived ones count in net worth. */

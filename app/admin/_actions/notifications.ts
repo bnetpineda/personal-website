@@ -27,7 +27,7 @@ export async function getInboxData(): Promise<InboxProps> {
     getNotifications(), getConnections(), getFx(), getStatementBalances(), getRecurring(), getImportedIncome(importedIncomeSince(today)), getTeachGroups(), getCategories(), getAccounts(),
   ]);
   const netWorth = computeNetWorth([], [], fx, [...includedPositions(connections), ...statementPositions(balances)]);
-  const income = typicalIncome(fx, recurring, repeatPayers(received));
+  const income = typicalIncome(fx, recurring, repeatPayers(received, today.slice(0, 7)));
   const form = (kind: CashFlowKind) => categories.filter((c) => c.kind === kind).map(({ id, name, color, archived }) => ({ id, name, color, archived }));
   return {
     groups: groupAlerts(notifications.filter((alert) => !alert.dismissed)),
