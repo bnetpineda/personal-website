@@ -26,7 +26,7 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import type { FormState } from "@/lib/finance/form-state";
 import { FormSheetContent, notify } from "./form";
-import { captureRowFocus, restoreRowFocus, type RowFocusReturn } from "./row-focus";
+import { captureRowFocus, keepFocusAfterRemoval, restoreRowFocus, type RowFocusReturn } from "./row-focus";
 
 type Action = () => Promise<FormState | void>;
 
@@ -117,12 +117,16 @@ export function RowActions<D>({
       }
     });
 
-  const deleteNow = () =>
+  const deleteNow = () => {
+    // The row (and this menu) leave the page once it re-renders; keep keyboard focus on the next row.
+    const target = captureRowFocus(menuTriggerRef.current);
     startTransition(async () => {
       const result = await onDelete!();
       const { deleted } = result;
       notify(result, result.ok && deleted !== undefined && onRestore ? () => onRestore(deleted) : undefined);
+      if (result.ok) keepFocusAfterRemoval(target);
     });
+  };
 
   return (
     <>
@@ -204,7 +208,16 @@ export function RowActions<D>({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <Button variant="destructive" disabled={pending} onClick={() => run(onDelete, () => setConfirming(false))}>
+              <Button
+                variant="destructive"
+                disabled={pending}
+                onClick={() =>
+                  run(onDelete, () => {
+                    setConfirming(false);
+                    keepFocusAfterRemoval(returnFocusRef.current);
+                  })
+                }
+              >
                 {pending && <Spinner />}
                 Delete
               </Button>

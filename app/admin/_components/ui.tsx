@@ -78,7 +78,8 @@ export function MissingFxAlert({ currencies }: { currencies: string[] }) {
 export function TokenAmount({ value, currency, signed = false, tone = false }: {
   value: number; currency: string; signed?: boolean; tone?: boolean;
 }) {
-  return <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm", tone && value > 0 && "text-success", tone && value < 0 && "text-destructive")}>
+  // Like Money: with amounts hidden, gains and losses lose their color too, or the color gives them away.
+  return <span className={cn("tabular-nums group-data-[private=true]/shell:blur-sm", tone && value > 0 && "text-success group-data-[private=true]/shell:text-foreground", tone && value < 0 && "text-destructive group-data-[private=true]/shell:text-foreground")}>
     <Masked text={`${value.toLocaleString("en-US", { signDisplay: signed ? "exceptZero" : "auto", ...(value !== 0 && Math.abs(value) < 1
       ? { minimumSignificantDigits: 2, maximumSignificantDigits: 4 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })} ${currency}`} />
   </span>;

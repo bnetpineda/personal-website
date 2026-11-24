@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { captureRowFocus, restoreRowFocus } from "./row-focus";
+import { captureRowFocus, focusAfterRemoval, restoreRowFocus } from "./row-focus";
 
 // A DOM-only fixture: these tests never import forms, server actions, or financial data.
 class FocusDocument {
@@ -194,5 +194,42 @@ describe("row overlay focus restoration", () => {
     event.preventDefault();
     restoreRowFocus(capture(row), event);
     expect(doc.activeElement).toBe(doc.body);
+  });
+});
+
+describe("focus after a row is deleted with Undo", () => {
+  test("waits while the row is still on the page", () => {
+    const { doc, menu, capture } = fixture();
+    const target = capture(menu)!;
+    doc.activeElement = menu;
+    expect(focusAfterRemoval(target)).toBe(false);
+    expect(doc.activeElement).toBe(menu);
+  });
+
+  test("once the row is gone, focus lost with it moves to the next row", () => {
+    const { doc, row, menu, next, capture } = fixture();
+    const target = capture(menu)!;
+    doc.activeElement = menu;
+    row.isConnected = menu.isConnected = false;
+    expect(focusAfterRemoval(target)).toBe(true);
+    expect(doc.activeElement).toBe(next);
+  });
+
+  test("the last row falls back to the Activity heading", () => {
+    const { doc, row, menu, next, heading, capture } = fixture();
+    const target = capture(menu)!;
+    row.isConnected = menu.isConnected = next.isConnected = false;
+    focusAfterRemoval(target);
+    expect(doc.activeElement).toBe(heading);
+  });
+
+  test("focus the user already moved elsewhere stays there", () => {
+    const { doc, row, menu, capture } = fixture();
+    const target = capture(menu)!;
+    const search = new FocusElement(doc);
+    doc.activeElement = search;
+    row.isConnected = menu.isConnected = false;
+    expect(focusAfterRemoval(target)).toBe(true);
+    expect(doc.activeElement).toBe(search);
   });
 });

@@ -96,7 +96,8 @@ function PrivacyToggle() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Toggle pressed={hidden} onPressedChange={toggle} aria-label={hidden ? "Show amounts" : "Hide amounts"}>
+        {/* One name, with the pressed state saying whether it is on: "Hide amounts, pressed". */}
+        <Toggle pressed={hidden} onPressedChange={toggle} aria-label="Hide amounts">
           {hidden ? <EyeOff /> : <Eye />}
         </Toggle>
       </TooltipTrigger>

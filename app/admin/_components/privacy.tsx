@@ -17,5 +17,6 @@ export function maskDigits(text: string): string {
 /** A private figure's text: as-is, or dotted out while amounts are hidden. */
 export function Masked({ text }: { text: string }) {
   const hidden = useContext(PrivacyHiddenContext);
-  return hidden ? <span aria-label="Hidden amount">{maskDigits(text)}</span> : text;
+  // Screen readers hear "Hidden amount", not a run of bullets (aria-label is ignored on a plain span).
+  return hidden ? <span><span aria-hidden>{maskDigits(text)}</span><span className="sr-only">Hidden amount</span></span> : text;
 }

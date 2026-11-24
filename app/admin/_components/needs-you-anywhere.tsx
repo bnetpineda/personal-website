@@ -18,6 +18,8 @@ export function NeedsYouAnywhere({ alerts }: { alerts: number }) {
   const [pending, startTransition] = useTransition();
   const open = inbox != null;
   const seen = useRef(alerts);
+  const button = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
 
   useEffect(() => {
     if (seen.current === alerts) return;
@@ -25,9 +27,29 @@ export function NeedsYouAnywhere({ alerts }: { alerts: number }) {
     if (open) getInboxData().then(setInbox).catch(() => {});
   }, [alerts, open]);
 
-  if (inbox) return <NeedsYou {...inbox} defaultOpen onClosed={() => setInbox(null)} />;
+  // The sheet's own trigger unmounts with it, so put keyboard focus back on this button.
+  useEffect(() => {
+    if (open || !refocus.current) return;
+    refocus.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) button.current?.focus();
+  }, [open]);
+
+  if (inbox) {
+    return (
+      <NeedsYou
+        {...inbox}
+        defaultOpen
+        onClosed={() => {
+          refocus.current = true;
+          setInbox(null);
+        }}
+      />
+    );
+  }
   return (
     <Button
+      ref={button}
       variant="outline"
       size="sm"
       className="relative"

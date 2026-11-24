@@ -163,7 +163,7 @@
     "edit-budget": { start: "/admin", viewport: "desktop", paths: [[{ c: /^budgets$/i }, { exists: /\(php\)/i, r: FIELD }, { count: 2 }]] },
     "explain-alert": explainAlert("desktop"),
     "upload-statement": { start: "/admin", viewport: "desktop", paths: [[{ c: NEEDS }, { exists: /^import (csvs|pdfs)/i, r: ["button"] }, { count: 1 }]] },
-    "hide-amounts": { start: "/admin", viewport: "desktop", paths: [[{ c: /^hide amounts$/i }, { c: /^show amounts$/i, free: true }]] },
+    "hide-amounts": { start: "/admin", viewport: "desktop", paths: [[{ c: /^hide amounts$/i }, { c: /^hide amounts$/i, free: true }]] },
     "p-see-month": seeMonth("phone"),
     "p-go-portfolio": nav(PORTFOLIO, /\/admin\/holdings/, "phone"),
     "p-go-recurring": nav(RECURRING, /\/admin\/recurring/, "phone"),
@@ -517,7 +517,7 @@
       }
       return { total, blurred };
     });
-    await page.click((await find(/^show amounts$/i)).ref);
+    await page.click((await find(/^hide amounts$/i)).ref);
 
     await open("/admin?month=" + current);
     const unknownNotZero = await evaluate(() => {
