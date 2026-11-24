@@ -3,11 +3,10 @@ import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { pgCode } from "@/lib/db/errors";
 import { categoryRules, importedEntries, statementBalances } from "@/lib/db/schema";
-import { fxToPhp } from "../calc";
 import { CURRENCIES } from "../constants";
 import { BANK_PROVIDERS } from "../connections/types";
-import { ensureFx } from "../service";
-import { canPost, matchingRule } from "./review";
+import { phpRatesOn } from "../service";
+import { matchingRule } from "./review";
 import type { StatementBalance } from "../statement-balances";
 import { ImportError, uniqueEntries, type ImportEntry } from "./types";
 
@@ -26,13 +25,50 @@ export function ingestQuery(input: ImportEntry[], guard: SQL = sql`select 'impor
         insert into imported_entries (provider, account_key, external_id, occurred_on, kind, amount, currency, description, realized_pnl, trade, status)
         select provider, account_key, external_id, occurred_on, kind, amount, currency, description, realized_pnl, trade,
           case when kind = 'trade' then 'reviewed' else 'pending' end from incoming where exists (select 1 from guard)
-        on conflict (provider, account_key, external_id) do update set amount = case
-          when (imported_entries.amount, imported_entries.currency, imported_entries.occurred_on, imported_entries.kind, imported_entries.realized_pnl, imported_entries.trade)
-            is not distinct from (excluded.amount, excluded.currency, excluded.occurred_on, excluded.kind, excluded.realized_pnl, excluded.trade)
-          then imported_entries.amount else null end
-        returning (xmax = 0) as inserted
-      ) select count(*) filter (where inserted)::int as inserted, count(*) filter (where not inserted)::int as duplicates,
-        exists(select 1 from guard) as active from saved`;
+        -- An identical re-import writes nothing (no dead row). A changed one hits NOT NULL and fails the whole import.
+        on conflict (provider, account_key, external_id) do update set amount = null
+          where (imported_entries.amount, imported_entries.currency, imported_entries.occurred_on, imported_entries.kind, imported_entries.realized_pnl, imported_entries.trade)
+            is distinct from (excluded.amount, excluded.currency, excluded.occurred_on, excluded.kind, excluded.realized_pnl, excluded.trade)
+        returning 1
+      ) select (select count(*) from saved)::int as inserted,
+        (case when exists(select 1 from guard) then (select count(*) from incoming) - (select count(*) from saved) else 0 end)::int as duplicates,
+        exists(select 1 from guard) as active`;
+}
+
+/**
+ * CTEs that pair each row of a `source` CTE (id, occurred_on, currency, signed amount) with an entry the
+ * person logged (by hand or from a schedule) on the same day, currency, amount and direction. One logged
+ * entry stands in for one import only: two ₱500 card payments against one logged "Lunch ₱500" leave
+ * the second without a twin. A logged entry already matched to an earlier import is taken.
+ * `twins.twin_id` is null when the row has no twin.
+ */
+export const twinCtes = sql`
+  twin_keys as (
+    select s.id, s.occurred_on, s.currency, round(abs(s.amount), 2) as amount,
+      (case when s.amount > 0 then 'income' else 'expense' end)::cash_flow_kind as kind,
+      row_number() over (partition by s.occurred_on, s.currency, round(abs(s.amount), 2), s.amount > 0 order by s.id) as n
+    from source s
+  ), free_twins as (
+    select f.id, f.occurred_on, f.currency, f.amount, f.kind,
+      row_number() over (partition by f.occurred_on, f.currency, f.amount, f.kind order by f.created_at, f.id) as n
+    from cash_flows f
+    where exists (select 1 from twin_keys k where k.occurred_on = f.occurred_on and k.currency = f.currency and k.amount = f.amount and k.kind = f.kind)
+      and not exists (select 1 from imported_entries i where i.id = f.id)
+      and not exists (select 1 from imported_entries i where i.twin_cash_flow_id = f.id)
+  ), twins as (
+    select k.id, t.id as twin_id from twin_keys k
+    left join free_twins t on t.occurred_on = k.occurred_on and t.currency = k.currency and t.amount = k.amount and t.kind = k.kind and t.n = k.n
+  )`;
+
+/** Each entry's PHP rate on its own date, for posting. */
+export async function postingRates(entries: readonly { currency: string; occurredOn: string }[]) {
+  try {
+    const rateOf = await phpRatesOn(entries.map((e) => ({ currency: e.currency, on: e.occurredOn })));
+    return (e: { currency: string; occurredOn: string }) => rateOf(e.currency, e.occurredOn);
+  } catch {
+    // Entries without a rate stay waiting and are retried later.
+    return () => null;
+  }
 }
 
 /** Saves statement closing balances; a balance dated before the saved one is kept out. Returns the currencies updated. */
@@ -66,31 +102,6 @@ export async function ingestEntries(input: ImportEntry[], lease?: { provider: st
   }
 }
 
-/** Row locks serialize review, auto-posting and transfer matching. The cash-flow ID is the source ID. */
-export async function postImportedEntry(id: string, categoryId: number, allowDuplicate = false, extraGuard: SQL = sql`true`) {
-  const db = getDb();
-  const [entry] = await db.select().from(importedEntries).where(eq(importedEntries.id, id));
-  if (!entry || entry.status !== "pending") throw new ImportError("This entry was already categorized. Refresh the page.");
-  if (!canPost(entry)) throw new ImportError("Keep trades and crypto units in the earnings ledger. They cannot be posted as a cash expense or income.");
-  let rate: number | null = null;
-  try { rate = fxToPhp(await ensureFx([entry.currency]), entry.currency); } catch { /* A missing rate blocks posting. */ }
-  if (!rate) throw new ImportError("No PHP exchange rate is available. Try again later.");
-  if (Math.abs(entry.amount) * rate >= 1_000_000_000_000) throw new ImportError("The converted amount is too large to post as a cash-flow entry.");
-  const result = await db.execute(sql`
-    with source as materialized (select * from imported_entries where id = ${id}::uuid and status = 'pending' and (${extraGuard}) for update),
-    posted as (
-      insert into cash_flows (id, kind, occurred_on, amount, currency, amount_php, category_id, description, account, notes)
-      select s.id, c.kind, s.occurred_on, round(abs(s.amount), 2), s.currency, round(abs(s.amount) * ${rate}::numeric, 2), c.id,
-        s.description, upper(s.provider), 'Imported transaction; PHP conversion uses the exchange rate at posting.'
-      from source s join categories c on c.id = ${categoryId} and not c.archived and c.kind::text = case when s.amount > 0 then 'income' else 'expense' end
-      where ${allowDuplicate} or not exists (select 1 from cash_flows f where f.occurred_on = s.occurred_on
-        and f.currency = s.currency and f.amount = round(abs(s.amount), 2) and f.kind = c.kind and not exists (select 1 from imported_entries i where i.id = f.id))
-      on conflict do nothing returning id
-    ) update imported_entries set status = 'posted', category_id = ${categoryId}, categorized_by = 'manual', ai_suggestion = null, updated_at = now()
-      where id in (select id from posted) returning id`);
-  if (!result.rows.length) throw new ImportError("Already reviewed, category unavailable, or a matching amount is already logged on this date. Check Transactions before allowing a duplicate.");
-}
-
 export async function applyCategoryRules(entryIds?: string[]) {
   const db = getDb();
   const [rules, pending] = await Promise.all([
@@ -112,10 +123,10 @@ export async function applyCategoryRules(entryIds?: string[]) {
   };
   const matches = pending.flatMap((entry) => { const rule = matchingRule(entry, rules); return rule ? [{ entry, rule }] : []; });
   if (!matches.length) { await rotateQueue(); return { posted: 0, suggested: 0 }; }
-  let fx: Awaited<ReturnType<typeof ensureFx>> = {};
-  try { fx = await ensureFx([...new Set(matches.filter((m) => m.rule.autoPost).map((m) => m.entry.currency))]); } catch { /* Leave entries waiting for valid FX. */ }
+  // Each entry converts at its own date's rate; entries without one wait for valid FX.
+  const rateOf = await postingRates(matches.filter((m) => m.rule.autoPost).map((m) => m.entry));
   const payload = matches.map(({ entry, rule }) => ({ id: entry.id, rule_id: rule.id, contains: rule.contains,
-    category_id: rule.categoryId, auto_post: rule.autoPost, rate: fxToPhp(fx, entry.currency) }));
+    category_id: rule.categoryId, auto_post: rule.autoPost, rate: rule.autoPost ? rateOf(entry) : null }));
   const result = await db.execute(sql`
     with instructions as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb)
       as x(id uuid, rule_id uuid, contains text, category_id integer, auto_post boolean, rate numeric)),
@@ -126,16 +137,15 @@ export async function applyCategoryRules(entryIds?: string[]) {
         and (r.provider is null or r.provider = e.provider) and r.kind::text = case when e.amount > 0 then 'income' else 'expense' end
       join categories c on c.id = r.category_id and not c.archived and c.kind = r.kind
       where e.status = 'pending' order by e.id for update of e
-    ), posted as (
+    ), ${twinCtes}, posted as (
       insert into cash_flows (id, kind, occurred_on, amount, currency, amount_php, category_id, description, account, notes)
       select s.id, (case when s.amount > 0 then 'income' else 'expense' end)::cash_flow_kind,
         s.occurred_on, round(abs(s.amount), 2), s.currency, round(abs(s.amount) * s.rate, 2), s.target_category,
-        s.description, upper(s.provider), 'Automatically imported; PHP conversion uses the rate at posting.'
+        s.description, upper(s.provider), 'Automatically imported; PHP conversion uses the rate on the transaction date.'
       from source s where s.auto_post and s.rate > 0
         and round(abs(s.amount) * s.rate, 2) < 1000000000000
-        -- Same-day, same-amount imports are separate payments (two ₱500 checkouts); only a logged entry is a twin.
-        and not exists (select 1 from cash_flows f where f.occurred_on = s.occurred_on and f.currency = s.currency
-          and f.amount = round(abs(s.amount), 2) and f.kind::text = case when s.amount > 0 then 'income' else 'expense' end and not exists (select 1 from imported_entries i where i.id = f.id))
+        -- Same-day, same-amount imports are separate payments (two ₱500 checkouts); only a logged entry is a twin, once.
+        and not exists (select 1 from twins t where t.id = s.id and t.twin_id is not null)
       on conflict do nothing returning id
     ), updated as (
       update imported_entries e set category_id = s.target_category, categorized_by = 'rule', ai_reason = null, ai_suggestion = null,

@@ -5,8 +5,7 @@ import { getDb } from "@/lib/db";
 import { cashFlows, categories, categoryRules, importedEntries, type ImportedEntry } from "@/lib/db/schema";
 import { SITE } from "@/lib/constants";
 import { env } from "@/lib/env";
-import { fxToPhp } from "../calc";
-import { ensureFx } from "../service";
+import { postingRates, twinCtes } from "./service";
 import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, rememberedDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
   type AiDecision, type AiExample } from "./ai-review";
 import { payeeKey } from "../payee";
@@ -213,38 +212,39 @@ async function applyDecisions(decisions: AiDecision[]) {
   const moves = decisions.flatMap((d) => d.decision === "post" ? [] : [{ id: d.id, status: STATUS_FOR[d.decision], reason: d.reason }]);
   const counts = { posted: 0, duplicates: 0, held: 0, transfers: 0, investment: 0, ignored: 0, stale: 0 };
   if (posts.length) {
-    const currencies = await db.selectDistinct({ currency: importedEntries.currency }).from(importedEntries).where(inArray(importedEntries.id, posts.map((d) => d.id)));
-    let fx: Awaited<ReturnType<typeof ensureFx>> = {};
-    try { fx = await ensureFx(currencies.map((c) => c.currency)); } catch { /* Entries without a rate stay pending and are asked again later. */ }
-    const rates = new Map(currencies.map((c) => [c.currency, fxToPhp(fx, c.currency)]));
+    const entries = await db.select({ id: importedEntries.id, currency: importedEntries.currency, occurredOn: importedEntries.occurredOn })
+      .from(importedEntries).where(inArray(importedEntries.id, posts.map((d) => d.id)));
+    // Each entry converts at its own date's rate; entries without one stay pending and are asked again later.
+    const rateOf = await postingRates(entries);
     const payload = posts.map((d) => ({ id: d.id, category_id: d.categoryId, reason: d.reason }));
+    const rates = entries.map((e) => ({ id: e.id, rate: rateOf(e) }));
     const result = await db.execute(sql`
       with instructions as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(id uuid, category_id integer, reason text)),
-      rates as (select * from jsonb_to_recordset(${JSON.stringify([...rates].map(([currency, rate]) => ({ currency, rate })))}::jsonb) as r(currency text, rate numeric)),
+      rates as (select * from jsonb_to_recordset(${JSON.stringify(rates)}::jsonb) as r(id uuid, rate numeric)),
       source as materialized (
         select e.*, i.category_id as target_category, i.reason, r.rate from imported_entries e
         join instructions i on e.id = i.id
         join categories c on c.id = i.category_id and not c.archived and c.kind::text = case when e.amount > 0 then 'income' else 'expense' end
-        left join rates r on r.currency = e.currency
+        left join rates r on r.id = e.id
         where e.status = 'pending' order by e.id for update of e
-      ), posted as (
+      ), ${twinCtes}, posted as (
         insert into cash_flows (id, kind, occurred_on, amount, currency, amount_php, category_id, description, account, notes)
         select s.id, (case when s.amount > 0 then 'income' else 'expense' end)::cash_flow_kind,
           s.occurred_on, round(abs(s.amount), 2), s.currency, round(abs(s.amount) * s.rate, 2), s.target_category,
           s.description, upper(s.provider), 'Categorized by AI: ' || s.reason
         from source s where s.rate > 0
           and round(abs(s.amount) * s.rate, 2) < 1000000000000
-          -- Only an entry the person logged (by hand or from a schedule) is a twin; other imports are separate money.
-          and not exists (select 1 from cash_flows f where f.occurred_on = s.occurred_on and f.currency = s.currency
-            and f.amount = round(abs(s.amount), 2) and f.kind::text = case when s.amount > 0 then 'income' else 'expense' end and not exists (select 1 from imported_entries i where i.id = f.id))
+          -- Only an entry the person logged (by hand or from a schedule) is a twin, and only for one import.
+          and not exists (select 1 from twins t where t.id = s.id and t.twin_id is not null)
         on conflict do nothing returning id
       ), outcome as (
         -- Priced but not posted means the same amount is already logged that day (a recurring or manual entry).
-        select s.id, s.target_category, s.reason, case when exists(select 1 from posted p where p.id = s.id) then 'posted'
-          when s.rate > 0 then 'ignored' else 'pending' end as status from source s
+        select s.id, s.target_category, s.reason, t.twin_id, case when exists(select 1 from posted p where p.id = s.id) then 'posted'
+          when s.rate > 0 then 'ignored' else 'pending' end as status from source s left join twins t on t.id = s.id
       ), updated as (
         update imported_entries e set category_id = case when o.status = 'ignored' then null else o.target_category end, categorized_by = 'ai',
           ai_reason = case when o.status = 'ignored' then 'Already in Transactions: ' || o.reason else o.reason end,
+          twin_cash_flow_id = case when o.status = 'ignored' then o.twin_id else null end,
           ai_suggestion = null, status = o.status, updated_at = now()
         from outcome o where e.id = o.id returning e.status
       ) select count(*) filter (where status = 'posted')::int as posted, count(*) filter (where status = 'ignored')::int as duplicates,
