@@ -38,13 +38,17 @@ export function RecurringForm({
   kind,
   categories,
   accounts,
-  item,
+  item: editing,
+  defaults,
 }: {
   kind: CashFlowKind;
   categories: { id: number; name: string; archived: boolean }[];
   accounts: string[];
   item?: RecurringDTO;
+  /** Prefills a new schedule, e.g. from a charge seen every month in imports. */
+  defaults?: Omit<RecurringDTO, "id">;
 }) {
+  const item: RecurringDTO | Omit<RecurringDTO, "id"> | undefined = editing ?? defaults;
   const { state, pending, onSubmit, formKey, error } = useFormAction(saveRecurring);
   const [frequency, setFrequency] = useState<RecurrenceFrequency>(item?.frequency ?? "monthly");
   const [ends, setEnds] = useState(item?.endOn ? "on" : "never");
@@ -60,7 +64,7 @@ export function RecurringForm({
   return (
     <form key={formKey} onSubmit={onSubmit} noValidate>
       <input type="hidden" name="kind" value={kind} />
-      {item && <input type="hidden" name="id" value={item.id} />}
+      {editing && <input type="hidden" name="id" value={editing.id} />}
       <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormField id={id("description")} label="Description" error={error("description")} wide>
           <Input
@@ -113,10 +117,10 @@ export function RecurringForm({
         </FormField>
         <FormField
           id={id("start")}
-          label={item ? "Starts" : "First date"}
+          label={editing ? "Starts" : "First date"}
           error={error("startOn")}
           description={
-            item
+            editing
               ? "Changes apply to upcoming entries."
               : (backfillNote({ frequency, startOn, endOn: ends === "on" ? endOn || null : null }, today, posting === "auto") ?? "Pick a past date to fill in entries since then.")
           }
@@ -193,7 +197,7 @@ export function RecurringForm({
           <Input id={id("notes")} name="notes" maxLength={500} placeholder="Optional" defaultValue={item?.notes ?? undefined} />
         </FormField>
         <FormFooter state={state} pending={pending}>
-          {item ? "Save" : expense ? "Add recurring expense" : "Add recurring income"}
+          {editing ? "Save" : expense ? "Add recurring expense" : "Add recurring income"}
         </FormFooter>
       </FieldGroup>
     </form>
