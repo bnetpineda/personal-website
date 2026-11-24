@@ -22,6 +22,7 @@ import { ImportGoTymeButton, ImportMariBankButton, ImportWiseButton } from "./im
 import { DismissNotificationButton } from "./notification-controls";
 import { DueList, PostAllDue } from "./recurring";
 import { TeachList } from "./teach-jev";
+import { TERMS } from "./labels";
 import { EmptyState, Money, Panel, Pct } from "./ui";
 
 /* Server-safe pieces of the one-screen dashboard (app/admin/(dashboard)/(overview)/page.tsx). */
@@ -393,7 +394,7 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
               <ItemActions>
                 {/* Clicks on the amount fall through to the row's link. */}
                 <span className="pointer-events-none flex flex-col items-end font-mono text-sm">
-                  {row.value == null ? <span className="text-muted-foreground">Unknown</span> : <Money value={row.value} />}
+                  {row.value == null ? <span className="text-muted-foreground">{TERMS.noData}</span> : <Money value={row.value} />}
                   {row.pnlPct != null && (
                     <span className="text-xs">
                       <Pct value={row.pnlPct} tone /> P/L

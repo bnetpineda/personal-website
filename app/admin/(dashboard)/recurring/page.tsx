@@ -16,6 +16,7 @@ import { FormSheet } from "../../_components/form";
 import { DuePanel, OccurrenceList, whenLabel } from "../../_components/recurring";
 import { RecurringForm, type RecurringDTO } from "../../_components/recurring-form";
 import { EditableRow } from "../../_components/row-actions";
+import { TERMS } from "../../_components/labels";
 import { EmptyState, MissingFxAlert, Money, PageHeader, Panel, StatCards } from "../../_components/ui";
 
 export const metadata: Metadata = {
@@ -197,7 +198,7 @@ export default async function RecurringPage() {
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="flex flex-col gap-6 lg:col-span-3">
           <Panel title="Income">{list("income")}</Panel>
-          <Panel title="Expenses">{list("expense")}</Panel>
+          <Panel title={TERMS.spending}>{list("expense")}</Panel>
         </div>
         <div className="lg:col-span-2">
           <Panel title="Next 30 days">

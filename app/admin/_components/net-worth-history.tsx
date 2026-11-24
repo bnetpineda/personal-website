@@ -9,6 +9,7 @@ import { addDays, dayLabel, dayRangeLabel, shortDayLabel } from "@/lib/finance/d
 import { formatMoney } from "@/lib/finance/format";
 import { changeSince } from "@/lib/finance/performance";
 import { Masked, PrivacyHiddenContext, maskDigits } from "./privacy";
+import { NetWorthDetails } from "./net-worth-details";
 import { EmptyState, Money, Panel, Pct } from "./ui";
 
 export interface NetWorthPoint {
@@ -39,7 +40,8 @@ export function NetWorthHistory({ points, today }: { points: NetWorthPoint[]; to
   const change = changeSince(shown.map((p) => ({ date: p.date, value: p.netWorth })), shown[0]?.date ?? today);
   const classes = ASSET_CLASSES.filter((c) => shown.some((p) => (p.byClass[c] ?? 0) > 0));
   const config = {
-    netWorth: { label: "Net worth", color: "var(--chart-1)" },
+    // Ink, so the line reads on paper in both themes (lime on paper is 1.5:1).
+    netWorth: { label: "Net worth", color: "var(--foreground)" },
     ...Object.fromEntries(classes.map((c) => [c, { label: ASSET_CLASS_META[c].plural, color: ASSET_CLASS_META[c].color }])),
   } satisfies ChartConfig;
   // Spaced by date, not by point, so a gap in the history reads as a gap in time.
@@ -52,6 +54,7 @@ export function NetWorthHistory({ points, today }: { points: NetWorthPoint[]; to
       title="Net worth over time"
       action={
         <div className="flex flex-wrap items-center gap-2">
+          {shown.length >= 2 && <NetWorthDetails points={shown} classes={classes} />}
           <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setView(v as View)} aria-label="Show">
             <ToggleGroupItem value="total">Total</ToggleGroupItem>
             <ToggleGroupItem value="classes">By asset class</ToggleGroupItem>

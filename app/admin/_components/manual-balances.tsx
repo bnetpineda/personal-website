@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ASSET_CLASSES, ASSET_CLASS_META, CURRENCIES, LIABILITY_KINDS, LIABILITY_KIND_LABELS, type AssetClass, type LiabilityKind } from "@/lib/finance/constants";
 import { deleteDebt, deleteManualAccount, saveDebt, saveManualAccount, setDebtArchived, setManualAccountArchived } from "../_actions/balances";
 import { FormField, FormFooter, FormSheet, useFormAction } from "./form";
+import { staleLabel } from "./labels";
 import { EditableRow } from "./row-actions";
 import { EmptyState, Money } from "./ui";
 
@@ -204,7 +205,7 @@ export function ManualBalances({ accounts, debts }: { accounts: ManualAccountDTO
                     <ItemTitle>{a.name}{a.archived && <span className="text-xs font-normal text-muted-foreground">Archived · not in net worth</span>}</ItemTitle>
                     <ItemDescription clamp={1}>
                       {[ASSET_CLASS_META[a.assetClass].label, a.platform, a.updated].filter(Boolean).join(" · ")}
-                      {a.stale && !a.archived && <span className="text-warning-text"> · worth checking</span>}
+                      {a.stale && !a.archived && <span className="text-warning-text"> · {staleLabel("holding")}</span>}
                     </ItemDescription>
                   </ItemContent>
                 </EditableRow>
@@ -248,7 +249,7 @@ export function ManualBalances({ accounts, debts }: { accounts: ManualAccountDTO
                       <ItemTitle>{d.name}{d.archived && <span className="text-xs font-normal text-muted-foreground">Archived · not in net worth</span>}</ItemTitle>
                       <ItemDescription clamp={1}>
                         {[LIABILITY_KIND_LABELS[d.kind], d.lender, d.dueDay ? `due day ${d.dueDay}` : null, d.updated].filter(Boolean).join(" · ")}
-                        {d.stale && !d.archived && <span className="text-warning-text"> · worth checking</span>}
+                        {d.stale && !d.archived && <span className="text-warning-text"> · {staleLabel("debt")}</span>}
                       </ItemDescription>
                       {used != null && !d.archived && (
                         <span className="block group-data-[private=true]/shell:blur-sm">

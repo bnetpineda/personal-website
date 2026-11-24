@@ -7,12 +7,13 @@ import type { dashboardMonth } from "@/lib/finance/dashboard";
 import { monthLabel } from "@/lib/finance/dates";
 import { FormSheet } from "./form";
 import { useAdminUi } from "./shell";
+import { TERMS } from "./labels";
 import { Money } from "./ui";
 
 /** A touch/keyboard alternative to chart hover, with privacy bridged into the portalled sheet. */
 export function CashFlowHistoryDetails({ points, month }: { points: ReturnType<typeof dashboardMonth>[]; month: string }) {
   const { privacy } = useAdminUi();
-  const amount = (value: number | null) => value == null ? <span className="text-muted-foreground">No data</span> : <Money value={value} />;
+  const amount = (value: number | null) => value == null ? <span className="text-muted-foreground">{TERMS.noData}</span> : <Money value={value} />;
   return (
     <FormSheet wide title="Monthly recorded totals" description="Recorded entries, each converted once at the rate when it was recorded, so these totals don't move. Missing data is never treated as zero."
       trigger={<Button variant="ghost" size="sm" touch aria-label="View monthly cash-flow details">Details</Button>}>

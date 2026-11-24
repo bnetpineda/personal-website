@@ -16,6 +16,7 @@ import { ASSET_CLASSES, ASSET_CLASS_META, type AssetClass } from "@/lib/finance/
 import { dayLabel, shortDayLabel } from "@/lib/finance/dates";
 import { formatMoney } from "@/lib/finance/format";
 import { Masked, PrivacyHiddenContext, maskDigits } from "./privacy";
+import { TERMS } from "./labels";
 import { EmptyState } from "./ui";
 
 const compact = (value: number) => formatMoney(value, "PHP", { compact: true });
@@ -68,8 +69,8 @@ export function PortfolioChart({ points, label, color, currency }: { points: { d
 }
 
 const cashFlowConfig = {
-  income: { label: "Income", color: "var(--chart-1)" },
-  expense: { label: "Expenses", color: "var(--chart-3)" },
+  income: { label: TERMS.income, color: "var(--chart-2)" },
+  expense: { label: TERMS.spending, color: "var(--chart-3)" },
 } satisfies ChartConfig;
 
 /** The cash-flow colors as a compact key, for a panel header when the chart leaves out its own legend (`fill`). */
@@ -109,8 +110,10 @@ export function CashFlowChart({ points, fill = false }: { points: { label: strin
             }
           />
           {!fill && <ChartLegend content={<ChartLegendContent />} />}
-          <Bar dataKey="income" fill="var(--color-income)" radius={4} isAnimationActive={false} />
-          <Bar dataKey="expense" fill="var(--color-expense)" radius={4} isAnimationActive={false} />
+          {/* Blue against red reads with red-green color blindness, and the house ink outline
+              separates each bar from the card whatever its fill. */}
+          <Bar dataKey="income" fill="var(--color-income)" stroke="var(--border)" strokeWidth={2} radius={4} isAnimationActive={false} />
+          <Bar dataKey="expense" fill="var(--color-expense)" stroke="var(--border)" strokeWidth={2} radius={4} isAnimationActive={false} />
         </BarChart>
       </ChartContainer>
     </div>
@@ -170,9 +173,11 @@ export function Sparkline({ points, label }: { points: { date: string; value: nu
   // Spaced by date, not by point, so a gap in the history reads as a gap in time.
   const data = points.map((p) => ({ ...p, time: Date.parse(p.date) }));
   return (
-    <div className="transition group-data-[private=true]/shell:blur-sm">
+    // Decoration for a tile whose figure is already in text: hidden from screen readers and out of
+    // the tab order (Recharts would otherwise make the surface a focus stop).
+    <div aria-hidden className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={config} className="aspect-auto h-10 w-full">
-        <AreaChart aria-label={`${label} history`} data={data} margin={{ top: 4, right: 4, left: 2, bottom: 4 }}>
+        <AreaChart accessibilityLayer={false} data={data} margin={{ top: 4, right: 4, left: 2, bottom: 4 }}>
           <XAxis hide dataKey="time" type="number" scale="time" domain={["dataMin", "dataMax"]} />
           <YAxis hide domain={["dataMin", "dataMax"]} />
           <ChartTooltip
@@ -219,7 +224,8 @@ export interface MiniBar {
 export function MiniBars({
   points,
   label,
-  color = "var(--chart-1)",
+  // The income color, as on the cash-flow chart.
+  color = "var(--chart-2)",
   tone = false,
   highlight,
   reference,
@@ -234,9 +240,10 @@ export function MiniBars({
   if (points.every((p) => p.value == null)) return null;
   const config = { value: { label, color } } satisfies ChartConfig;
   return (
-    <div className="transition group-data-[private=true]/shell:blur-sm">
+    // Decoration: the tile states the figure, and its history is in the cash-flow Details table.
+    <div aria-hidden className="transition group-data-[private=true]/shell:blur-sm">
       <ChartContainer config={config} className="aspect-auto h-10 w-full">
-        <BarChart aria-label={`${label} history`} data={points} margin={{ top: 2, right: 0, left: 0, bottom: 0 }} barCategoryGap={2}>
+        <BarChart accessibilityLayer={false} data={points} margin={{ top: 2, right: 0, left: 0, bottom: 0 }} barCategoryGap={2}>
           {/* Zero stays on the scale, so a negative month hangs below it. */}
           <YAxis hide domain={[(min: number) => Math.min(0, min), (max: number) => Math.max(0, max)]} />
           <ChartTooltip
