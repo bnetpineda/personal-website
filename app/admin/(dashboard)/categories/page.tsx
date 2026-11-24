@@ -24,6 +24,9 @@ export const metadata: Metadata = {
  * it isn't in the main navigation: the Overview's By category panel and ⌘K open it. Budgets stay on
  * the Overview, beside the spending they limit.
  */
+/** Server Actions run under the calling page's limit (⌘K can sync from any page); see lib/finance/deadline.ts. */
+export const maxDuration = 120;
+
 export default async function CategoriesPage() {
   const [categories, usage, rules] = await Promise.all([getCategories(), getCategoryUsage(), getCategoryRules()]);
 

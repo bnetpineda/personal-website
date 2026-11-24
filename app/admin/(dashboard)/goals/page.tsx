@@ -14,6 +14,9 @@ export const metadata: Metadata = { title: "Goals" };
 const SPENDING_MONTHS = 6;
 
 /** What you're saving towards, measured against live figures: net worth, cash, investments, or months of spending. */
+/** Server Actions run under the calling page's limit (⌘K can sync from any page); see lib/finance/deadline.ts. */
+export const maxDuration = 120;
+
 export default async function GoalsPage() {
   const now = new Date();
   const today = todayManila(now);

@@ -10,6 +10,7 @@ import { ConnectionError } from "@/lib/finance/connections/types";
 import { advanceHistory, historySetupSchema, startBinanceHistory, startHeldSpotHistory } from "@/lib/finance/imports/history-service";
 import { parseIbkrHistory } from "@/lib/finance/imports/provider-parsers";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
+import { actionDeadline } from "@/lib/finance/deadline";
 import { applyCategoryRules, ingestQuery } from "@/lib/finance/imports/service";
 import { ImportError, sameSource, sourceKey, type HistoryCoverage, type ImportEntry } from "@/lib/finance/imports/types";
 import { saveNav } from "@/lib/finance/portfolio";
@@ -42,6 +43,7 @@ export async function previewInvestmentReport(data: FormData): Promise<HistoryPr
   } catch (error) { return failure(error); }
 }
 export async function importInvestmentReport(data: FormData): Promise<FormState> {
+  const deadline = actionDeadline();
   await requireAdmin();
   try {
     const parsed = await report(data), db = getDb();
@@ -52,7 +54,7 @@ export async function importInvestmentReport(data: FormData): Promise<FormState>
     // Best effort, like on sync: the entries above are already saved.
     const navDays = await saveNav("ibkr", parsed.nav ?? []).catch((err) => { logError("IBKR NAV save failed", err); return 0; });
     await applyCategoryRules();
-    const ai = await categorizeQuietly();
+    const ai = await categorizeQuietly({ deadline });
     revalidatePath("/admin", "layout");
     return { ok: true, message: `Imported ${Number(saved.rows[0]?.inserted ?? 0)} new entries; skipped ${Number(saved.rows[0]?.duplicates ?? 0)} duplicates.${navDays ? ` Added ${navDays} days of IBKR values to Portfolio.` : ""}${describeAiRun(ai)}` };
   } catch (error) { return failure(error); }

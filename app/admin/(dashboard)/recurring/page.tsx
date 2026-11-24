@@ -39,6 +39,9 @@ function toDTO(r: RecurringRow): RecurringDTO {
   };
 }
 
+/** Server Actions run under the calling page's limit (⌘K can sync from any page); see lib/finance/deadline.ts. */
+export const maxDuration = 120;
+
 export default async function RecurringPage() {
   const today = todayManila();
   const [rows, incomeCategories, expenseCategories, accounts, fx, received] = await Promise.all([

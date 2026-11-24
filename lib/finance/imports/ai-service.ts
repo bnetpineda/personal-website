@@ -7,13 +7,15 @@ import { SITE } from "@/lib/constants";
 import { env } from "@/lib/env";
 import { postingRates, twinCtes } from "./service";
 import { logError } from "@/lib/log";
-import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, rememberedDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
+import { deadlineFor, timeLeft } from "../deadline";\nimport { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, rememberedDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
   type AiDecision, type AiExample } from "./ai-review";
 import { payeeKey } from "../payee";
 import { transferSuggestions } from "./review";
 import { ImportError } from "./types";
 
-export interface AiRunResult { skipped: boolean; claimed: number; linked: number; posted: number; duplicates: number; held: number; transfers: number; investment: number; ignored: number; unsure: number }
+export interface AiRunResult { skipped: boolean; claimed: number; linked: number; posted: number; duplicates: number; held: number; transfers: number; investment: number; ignored: number; unsure: number;
+  /** The time budget ran out with entries still waiting; they are filed on the next sync or the daily job. */
+  stopped?: boolean }
 
 const STATUS_FOR = { transfer: "transfer", investment: "reviewed", ignore: "ignored" } as const;
 const RUN_LIMIT = 300;
@@ -35,8 +37,10 @@ function configuredClassifier(apiKey: string): Classifier {
  * `retry` asks again right away. Posting keeps the rule path's guards: pending rows only and
  * category kind matches the amount's sign; a same-day twin the person logged (by hand or from a schedule) is ignored instead.
  */
-export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model, classifier: given, entryIds, ledgerShortcut = true }: {
+export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model, classifier: given, entryIds, ledgerShortcut = true, signal }: {
   retry?: boolean; limit?: number; model?: LanguageModel; classifier?: Classifier; entryIds?: string[];
+  /** Aborts model calls when the caller's time is up; their entries are released for the next run. */
+  signal?: AbortSignal;
   /** false sends crypto rewards and fees to the model too, instead of deciding them locally. */
   ledgerShortcut?: boolean;
 } = {}): Promise<AiRunResult> {
@@ -67,7 +71,7 @@ export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model
   const batches = Array.from({ length: Math.ceil(pending.length / AI_BATCH_SIZE) }, (_, i) => pending.slice(i * AI_BATCH_SIZE, (i + 1) * AI_BATCH_SIZE));
   const settled = await Promise.allSettled(batches.map(async (batch) => {
     try {
-      const { decisions, rejected } = await decide(classifier, batch, options, examples);
+      const { decisions, rejected } = await decide(classifier, batch, options, examples, signal);
       return { applied: await applyDecisions(decisions), rejected: rejected.length };
     } catch (error) {
       // Release the claim so the next sync or cron retries this batch (and a persistent failure surfaces as a notification).
@@ -168,20 +172,29 @@ async function pairFiledTransfers() {
  * A first sync can bring hundreds of entries, so keep going (bounded by rounds and time) while
  * runs come back full. Whatever is left waits for the next sync or the daily cron.
  */
-export async function categorizeQuietly({ budgetMs = 150_000 }: { budgetMs?: number } = {}): Promise<AiRunResult | { error: string }> {
-  const deadline = Date.now() + budgetMs;
+export async function categorizeQuietly({ deadline = deadlineFor(160) }: { deadline?: number } = {}): Promise<AiRunResult | { error: string }> {
+  if (timeLeft(deadline) < MIN_ROUND_MS) return { error: OUT_OF_TIME };
+  // Model calls stop at the deadline, so a long run can't push the function past its time limit.
+  const signal = AbortSignal.timeout(timeLeft(deadline));
+  let total: AiRunResult | null = null;
   try {
-    let last = await categorizeWithAi();
-    const total = { ...last };
-    for (let round = 1; round < 4 && last.claimed === RUN_LIMIT && Date.now() < deadline; round++) {
-      last = await categorizeWithAi();
+    let last = await categorizeWithAi({ signal });
+    total = { ...last };
+    for (let round = 1; round < 4 && last.claimed === RUN_LIMIT; round++) {
+      if (timeLeft(deadline) < MIN_ROUND_MS) return { ...total, stopped: true };
+      last = await categorizeWithAi({ signal });
       for (const key of COUNTS) total[key] += last[key];
     }
     return total;
   } catch (error) {
+    if (signal.aborted) return total ? { ...total, stopped: true } : { error: OUT_OF_TIME };
     return { error: error instanceof ImportError ? error.message : "AI categorization failed." };
   }
 }
+
+/** A round is worth starting only with time for a model answer and saving it. */
+const MIN_ROUND_MS = 20_000;
+const OUT_OF_TIME = "New activity is categorized on the next sync.";
 
 /** The tail of an import or sync message: what the model filed just now. */
 export function describeAiRun(run: AiRunResult | { error: string }): string {
@@ -190,15 +203,16 @@ export function describeAiRun(run: AiRunResult | { error: string }): string {
   const parts = ([["posted", run.posted], ["transfers", run.transfers + run.linked * 2], ["investment", run.investment],
     ["ignored", run.ignored], ["already in Transactions", run.duplicates]] as const).filter(([, n]) => n > 0).map(([label, n]) => `${n} ${label}`);
   const waiting = run.held + run.unsure;
-  if (!parts.length && !waiting) return "";
-  return ` Categorized: ${parts.join(", ") || "nothing yet"}.${waiting ? ` ${waiting} will be retried on the next sync.` : ""}`;
+  const rest = run.stopped ? " The rest is categorized on the next sync." : "";
+  if (!parts.length && !waiting) return rest;
+  return ` Categorized: ${parts.join(", ") || "nothing yet"}.${waiting ? ` ${waiting} will be retried on the next sync.` : ""}${rest}`;
 }
 
-async function decide(classifier: Classifier, batch: ImportedEntry[], options: typeof categories.$inferSelect[], examples: AiExample[]) {
+async function decide(classifier: Classifier, batch: ImportedEntry[], options: typeof categories.$inferSelect[], examples: AiExample[], signal?: AbortSignal) {
   try {
-    if (classifier.kind === "evaluation") return validateDecisions(batch, options, { decisions: await evaluateEach(classifier.model, batch, options, examples) });
+    if (classifier.kind === "evaluation") return validateDecisions(batch, options, { decisions: await evaluateEach(classifier.model, batch, options, examples, signal) });
     const { instructions, prompt } = buildCategorizePrompt(batch, options, examples);
-    const { output } = await generateText({ model: classifier.model, instructions, prompt, temperature: 0, timeout: 60_000, maxRetries: 1,
+    const { output } = await generateText({ model: classifier.model, instructions, prompt, temperature: 0, timeout: 60_000, maxRetries: 1, abortSignal: signal,
       output: Output.object({ schema: aiOutputSchema }) });
     return validateDecisions(batch, options, output);
   } catch (error) {
@@ -273,14 +287,15 @@ async function applyDecisions(decisions: AiDecision[]) {
 }
 
 /** Evaluation models take one state per call: ask every entry its own question, a few at a time. */
-async function evaluateEach(model: Experimental_EvaluationModel, batch: ImportedEntry[], options: typeof categories.$inferSelect[], examples: AiExample[]) {
+async function evaluateEach(model: Experimental_EvaluationModel, batch: ImportedEntry[], options: typeof categories.$inferSelect[], examples: AiExample[], signal?: AbortSignal) {
   const decisions: ReturnType<typeof settleEvaluation>[] = [];
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(8, batch.length) }, async () => {
     while (next < batch.length) {
       const index = next++;
       const { state, instructions, criteria } = buildEvaluationQuestion(batch[index], options, examples);
-      const { answers } = await experimental_evaluate({ model, state, maxRetries: 1, abortSignal: AbortSignal.timeout(30_000),
+      const timeout = AbortSignal.timeout(30_000);
+      const { answers } = await experimental_evaluate({ model, state, maxRetries: 1, abortSignal: signal ? AbortSignal.any([signal, timeout]) : timeout,
         questions: { decision: { type: "choice", instructions, criteria } } });
       const choice = String(answers.decision.choice);
       decisions.push(settleEvaluation(`e${index + 1}`, choice, options, batch[index].amount, answers.decision.probabilities));

@@ -10,6 +10,7 @@ import { payeeKey } from "@/lib/finance/payee";
 import { providerSchema } from "@/lib/finance/connections/types";
 import { applyCategoryRules, ingestEntries, saveStatementBalances } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
+import { actionDeadline } from "@/lib/finance/deadline";
 import { parseGoTymeStatement } from "@/lib/finance/imports/gotyme";
 import { parseMariBankStatement, type PdfPage } from "@/lib/finance/imports/maribank";
 import { PdfPasswordError, pdfPages } from "@/lib/finance/imports/pdf-text";
@@ -47,6 +48,7 @@ async function csvEntries(data: FormData) {
  * Re-importing is safe; entries already imported are skipped.
  */
 export async function importWiseStatements(data: FormData): Promise<FormState> {
+  const deadline = actionDeadline();
   await requireAdmin();
   try {
     const { entries, files, balances, balanceWarning } = await csvEntries(data);
@@ -54,7 +56,7 @@ export async function importWiseStatements(data: FormData): Promise<FormState> {
     const result = await ingestEntries(entries);
     const updated = await saveStatementBalances(balances.map((b) => ({ provider: "wise", account: "personal", ...b })));
     await applyCategoryRules();
-    const ai = await categorizeQuietly();
+    const ai = await categorizeQuietly({ deadline });
     revalidatePath("/admin", "layout");
     return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${balancesNote(updated, balanceWarning)}${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
@@ -66,6 +68,7 @@ export async function importWiseStatements(data: FormData): Promise<FormState> {
  * locked file (a bank uses the same one for all of a person's statements); it is never kept.
  */
 async function importStatementPdfs(data: FormData, bank: string, parse: (pages: PdfPage[]) => { entries: ImportEntry[]; balances: StatementBalance[] }): Promise<FormState> {
+  const deadline = actionDeadline();
   await requireAdmin();
   try {
     const files = data.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
@@ -84,7 +87,7 @@ async function importStatementPdfs(data: FormData, bank: string, parse: (pages: 
     const result = entries.length ? await ingestEntries(entries) : { inserted: 0, duplicates: 0 };
     const updated = await saveStatementBalances(balances);
     await applyCategoryRules();
-    const ai = await categorizeQuietly();
+    const ai = await categorizeQuietly({ deadline });
     revalidatePath("/admin", "layout");
     const count = statements.length === 1 ? "1 statement" : `${statements.length} statements`;
     return { ok: true, message: `Imported ${result.inserted} new entries from ${count}; ${result.duplicates} were already imported.${balancesNote(updated)}${describeAiRun(ai)}` };

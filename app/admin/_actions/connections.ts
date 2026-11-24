@@ -17,9 +17,10 @@ import { ensureFx, snapshotQuietly } from "@/lib/finance/service";
 import { recordPortfolioQuietly } from "@/lib/finance/portfolio";
 import { applyCategoryRules } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
+import { actionDeadline } from "@/lib/finance/deadline";
 
 /** After a sync, rules and AI file the new activity before the action answers; the result is the message tail. */
-async function refreshTotals({ categorize = false } = {}) {
+async function refreshTotals({ categorize = false, deadline = actionDeadline() } = {}) {
   const rows = await getDb().select({ snapshot: accountConnections.snapshot }).from(accountConnections);
   try { await ensureFx(rows.flatMap((r) => r.snapshot?.positions.map((p) => p.currency) ?? [])); } catch { /* UI reports missing FX. */ }
   after(snapshotQuietly);
@@ -27,13 +28,14 @@ async function refreshTotals({ categorize = false } = {}) {
   let summary = "";
   if (categorize) {
     await applyCategoryRules();
-    summary = describeAiRun(await categorizeQuietly());
+    summary = describeAiRun(await categorizeQuietly({ deadline }));
   }
   revalidatePath("/admin", "layout");
   return summary;
 }
 
 export async function saveConnection(_previous: FormState, data: FormData): Promise<FormState> {
+  const deadline = actionDeadline();
   await requireAdmin();
   const parsed = credentialsSchema.safeParse(Object.fromEntries(data));
   // Do not use invalid()/failure(formData): those helpers echo secrets to the client.
@@ -54,7 +56,7 @@ export async function saveConnection(_previous: FormState, data: FormData): Prom
     await db.insert(accountConnections).values({ provider: credentials.provider, ...values })
       .onConflictDoUpdate({ target: accountConnections.provider, set: values });
     const result = await syncAccount(credentials.provider);
-    const summary = await refreshTotals({ categorize: true });
+    const summary = await refreshTotals({ categorize: true, deadline });
     return { ok: true, message: result.ok ? `Connected and synced. Review the balances before including them in net worth.${summary}` : "Connection saved. Open its sync status to resolve the first sync." };
   } catch {
     return { ok: false, message: "The connection could not be saved. Try again." };
@@ -72,11 +74,12 @@ export async function saveConnectionExpiry(_previous: FormState, data: FormData)
 }
 
 export async function syncConnections(provider?: SyncProvider): Promise<FormState> {
+  const deadline = actionDeadline();
   await requireAdmin();
   if (provider !== undefined && !syncProviderSchema.safeParse(provider).success) return { ok: false, message: "Unknown provider." };
   try {
     const results = provider ? [await syncAccount(provider)] : await syncAllAccounts();
-    const summary = await refreshTotals({ categorize: true });
+    const summary = await refreshTotals({ categorize: true, deadline });
     if (results.length === 0) return { ok: false, message: "Connect an account first." };
     const failed = results.filter((r) => !r.ok);
     return { ok: failed.length === 0, message: `${failed.length ? failed.map((r) => `${r.provider.toUpperCase()}: ${r.message}`).join(" ") : "Account balances updated."}${summary}` };

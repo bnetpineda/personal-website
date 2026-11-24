@@ -37,6 +37,9 @@ function AmountsTable({ rows, columns }: { rows: EarningsRow[]; columns: readonl
   );
 }
 
+/** Server Actions run under the calling page's limit (⌘K can sync from any page); see lib/finance/deadline.ts. */
+export const maxDuration = 120;
+
 export default async function EarningsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const params = await searchParams, current = currentMonth(), month = isMonth(params.month) ? params.month : current;
   // All time unless a month was chosen: this month is usually empty until statements arrive.
