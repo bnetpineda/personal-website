@@ -6,6 +6,7 @@ import { accountConnections } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { needsReseal, openCredentials, sealCredentials } from "./crypto";
 import { normalizeBinanceSnapshot } from "./binance-positions";
+import type { ProviderIO } from "./providers";
 import { ConnectionError, type ConnectionView, type Credentials, type SyncProvider, type SyncResult } from "./types";
 import { fetchAccount } from "../imports/providers";
 import { ingestEntries } from "../imports/service";
@@ -73,7 +74,8 @@ export async function resealAllCredentials(): Promise<number> {
   }
 }
 
-export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
+/** `io` swaps the provider transport, for tests; the lease, cooldown and saving are the real ones. */
+export async function syncAccount(provider: SyncProvider, { io }: { io?: ProviderIO } = {}): Promise<SyncResult> {
   const db = getDb();
   const lease = randomUUID();
   const now = new Date();
@@ -96,7 +98,7 @@ export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
       throw new ConnectionError("The saved credential could not be unlocked. Reconnect this account.");
     }
     await resealCredential(provider, connection.encryptedCredentials, credentials);
-    const { snapshot, history: fetched } = await fetchAccount(credentials, { previous: connection.snapshot });
+    const { snapshot, history: fetched } = await fetchAccount(credentials, { io, previous: connection.snapshot });
     if (connection.snapshot && snapshot.asOf < connection.snapshot.asOf) {
       throw new ConnectionError("The provider returned an older report. The newer saved balances were kept.");
     }
