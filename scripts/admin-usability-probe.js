@@ -355,6 +355,139 @@
     return r;
   };
 
+  const finishAnimations = () => evaluate(() => {
+    document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* A looping animation, like a loading skeleton, has no end. */ } });
+    document.querySelectorAll("[data-state=closed]").forEach((el) => el.dispatchEvent(new AnimationEvent("animationend", { animationName: getComputedStyle(el).animationName })));
+  });
+
+  /**
+   * A change made only in a picker (no typing) still counts as unsaved: choose a category in the Add
+   * sheet, press Escape, and the sheet should ask. Then, after closing a sheet whose trigger is gone
+   * (Needs you away from the Overview), focus should land on a control, not the page.
+   */
+  const recoveryPicker = async () => {
+    await setViewport("desktop");
+    const r = {};
+    await open("/admin");
+    await page.click((await find(ADD, ["button"])).ref);
+    await finishAnimations();
+    await sleep(400);
+    const choices = (await controls()).filter((c) => c.role === "radio" && !WRITES.test(c.name));
+    // Pick one that isn't already chosen (the form may preselect the last category).
+    const unpicked = await evaluate(() => [...document.querySelectorAll("[role=dialog] [role=radio]")].findIndex((el) => el.getAttribute("aria-checked") !== "true"));
+    if (unpicked < 0 || !choices[unpicked]) r.nonTextDirty = null;
+    else {
+      await page.click(choices[unpicked].ref);
+      await sleep(200);
+      await page.press("Escape");
+      await sleep(300);
+      r.nonTextDirty = await evaluate(() => Boolean(document.querySelector("[role=alertdialog]")));
+    }
+
+    await open("/admin/recurring");
+    try {
+      await press(await find(NEEDS, ["button"], 3));
+      await finishAnimations();
+      await sleep(300);
+      await page.press("Escape");
+      await sleep(300);
+      await finishAnimations();
+      await sleep(300);
+      r.focusReturns = await evaluate(() => {
+        const a = document.activeElement;
+        return Boolean(a && a !== document.body && a.isConnected && a.matches("a, button, input, select, textarea, [tabindex]"));
+      });
+    } catch {
+      r.focusReturns = null;
+    }
+    return r;
+  };
+
+  /**
+   * Accessibility the other numbers can't see. Text contrast (WCAG AA: 4.5:1, 3:1 for large text) on
+   * every page in light and dark; a visible focus indicator on each of the first controls Tab reaches;
+   * and no raw stored values (ISO dates, snake_case codes, HTTP codes) inside the main sheets.
+   */
+  const access = async () => {
+    await setViewport("desktop");
+    const contrastFailures = () => evaluate(() => {
+      const parse = (c) => {
+        const m = c.match(/rgba?\(([^)]+)\)/) ?? c.match(/color\(srgb ([^)]+)\)/);
+        if (!m) return null;
+        const parts = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+        const scale = c.startsWith("color(") ? 255 : 1;
+        return { r: parts[0] * scale, g: parts[1] * scale, b: parts[2] * scale, a: parts[3] ?? 1 };
+      };
+      const lum = ({ r, g, b }) => [r, g, b].map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const background = (el) => {
+        for (let node = el; node; node = node.parentElement) {
+          const bg = parse(getComputedStyle(node).backgroundColor);
+          if (bg && bg.a > 0.5) return bg;
+        }
+        return parse(getComputedStyle(document.body).backgroundColor) ?? { r: 255, g: 255, b: 255, a: 1 };
+      };
+      let failures = 0;
+      const seen = new Set();
+      for (const el of document.querySelectorAll("main *, header *, nav *")) {
+        if (seen.has(el) || el.closest("[aria-hidden=true], svg, [data-slot=chart]")) continue;
+        const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        if (!own) continue;
+        const s = getComputedStyle(el);
+        const box = el.getBoundingClientRect();
+        if (box.width <= 1 || box.height <= 1 || s.visibility === "hidden" || Number(s.opacity) < 0.5 || el.closest(":disabled, [aria-disabled=true]")) continue;
+        const fg = parse(s.color);
+        if (!fg) continue;
+        const bg = background(el);
+        const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+        const ratio = (a + 0.05) / (b + 0.05);
+        const size = parseFloat(s.fontSize), bold = Number(s.fontWeight) >= 700;
+        const large = size >= 24 || (bold && size >= 18.66);
+        if (ratio < (large ? 3 : 4.5)) failures++;
+        seen.add(el);
+      }
+      return failures;
+    });
+    let contrast = 0;
+    for (const id of Object.keys(PAGE_PATHS)) {
+      await open(PAGE_PATHS[id]);
+      for (const dark of [false, true]) {
+        await evaluate((d) => document.documentElement.classList.toggle("dark", d), dark);
+        await sleep(100);
+        contrast += await contrastFailures();
+      }
+      await evaluate(() => document.documentElement.classList.remove("dark"));
+    }
+
+    await open("/admin");
+    let unfocused = 0;
+    for (let i = 0; i < 30; i++) {
+      await page.press("Tab");
+      const visible = await evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return true;
+        const s = getComputedStyle(el), after = getComputedStyle(el, "::after");
+        const ring = (st) => (st.outlineStyle !== "none" && parseFloat(st.outlineWidth) > 0) || (st.boxShadow && st.boxShadow !== "none");
+        const svg = el.matches(".recharts-surface") && getComputedStyle(el).outlineStyle !== "none";
+        return ring(s) || ring(after) || svg;
+      });
+      if (!visible) unfocused++;
+    }
+
+    const RAW = /\b20\d\d-\d\d-\d\d\b|\bHTTP \d{3}\b|\b[a-z]+_[a-z_]+\b/;
+    let rawInSheets = 0;
+    const sheets = [["/admin", ADD], ["/admin", /^budgets$/i], ["/admin/history", /^imports$/i], ["/admin/recurring", NEEDS]];
+    for (const [path, name] of sheets) {
+      await open(path);
+      try {
+        await press(await find(name, ["button"], 2));
+        await finishAnimations();
+        await sleep(300);
+        if (await evaluate((re) => new RegExp(re).test(document.querySelector("[role=dialog]")?.innerText ?? ""), RAW.source)) rawInSheets++;
+      } catch { /* That sheet isn't there with today's data. */ }
+    }
+    return { contrast: contrast === 0, focusVisible: unfocused === 0, rawInSheets: rawInSheets === 0, counts: { contrast, unfocused, rawInSheets } };
+  };
+
   const recoveryAlerts = async () => {
     await setViewport("desktop");
     const r = {};
@@ -577,6 +710,8 @@
     case "recovery-sheet": return recoverySheet();
     case "recovery-escape": return recoveryEscape();
     case "recovery-alerts": return recoveryAlerts();
+    case "recovery-picker": return recoveryPicker();
+    case "access": return access();
     case "guards": return guards();
     case "trust-numbers": return trustNumbers();
     case "trust-portfolio": return trustPortfolio();

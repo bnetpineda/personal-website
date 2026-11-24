@@ -24,7 +24,8 @@ switch automatically with the `.dark` class. Never use raw colors (`bg-red-500`,
 | `accent` / `accent-foreground` | hover + highlighted items | lime / ink |
 | `destructive` | errors, losses, delete | `--danger` |
 | `success` | gains, positive P/L | green |
-| `warning` / `warning-foreground` | stale data, budgets ≥ 85% | amber / ink |
+| `warning` / `warning-foreground` | stale data, budgets ≥ 85% (a **fill**: badges, alerts, bars) | amber / ink |
+| `warning-text` | amber **text or icons** on paper (`text-warning-text`); `text-warning` is 1.7:1 in light mode | dark amber / amber |
 | `border`, `input`, `ring` | 2px ink outlines, focus | ink |
 | `chart-1 … chart-9` | data series, asset classes, category palette | fixed hues |
 
@@ -131,13 +132,18 @@ components without re-applying these (`--overwrite` replaces the house style).
 - **Forms**: Server Action + `useFormAction` (admin) → errors from the returned `FormState`,
   `aria-invalid` on the control, message in `FieldError`, focus moved to the first invalid field. Success
   closes the sheet, resets, and toasts the message; pass `undo` to add an "Undo" button (e.g. a new entry);
-  a `data-stay` submit button keeps the sheet open to add another. A sheet with anything typed in it ignores
+  a `data-stay` submit button keeps the sheet open to add another (keeping the date, currency, category and account). A sheet with any field changed (typed, picked or toggled) ignores
   clicks outside, and Escape or its close button ask before discarding.
-- **Plain words on screen**: no status codes, internal names or raw ISO dates. Show saved sync errors through
+- **Plain words on screen**: no status codes, internal names or raw ISO dates. Words shared across pages (Spending, No data,
+  Value due, Balance due, entry kinds and statuses) come from `labels.ts` (`TERMS`, `entryKindLabel`, `entryStatusLabel`). Show saved sync errors through
   `plainSyncError`, dates through `dayLabel`/`dayRangeLabel`. A failing account's alert offers Reconnect, not just Sync.
 - **Destructive actions**: confirm in `AlertDialog`; never `window.confirm`. Exception: cheap,
   fully reversible deletes (single cash-flow entries) run straight away with an "Undo" toast
-  (`RowActions onRestore`).
+  (`RowActions onRestore`), and Skip / Post on recurring items (Undo puts the entries and next date back). Undo
+  toasts last 12 seconds and stay while hovered or focused; after a delete, focus moves to the next row.
+- **Server filters** (History, Holdings, Earnings): `FilterLinks`, the active one lime with `aria-current`.
+- **Errors**: `ErrorState`: a sentence, Try again, Go to Overview, and the error code behind a copy button;
+  `app/admin/error.tsx` and `app/global-error.tsx` catch what the dashboard boundary can't.
 - **Data credits**: "Crypto prices by CoinGecko · FX by Frankfurter" sits at the bottom of Portfolio, where
   those prices show in detail (CoinGecko's free API asks for it); the admin has no footer.
 - **Toasts never show amounts** that weren't typed by the user — they aren't blurred by privacy mode.
@@ -218,7 +224,8 @@ components without re-applying these (`--overwrite` replaces the house style).
 
 `bun run ux:score` reports how much of a hassle the admin is, out of 10, from numbers measured in the
 real UI rather than marked by hand: actions per task against a budget (3), finding things (1.5),
-reading load and wording (1.5), trust that the app agrees with itself (1.5), forgiveness and feedback (1),
+reading load, wording and accessibility (contrast, visible focus, no raw values in sheets) (1.5), trust that the app
+agrees with itself (1.5), forgiveness and feedback (1),
 phone (1), speed (0.5). The overall score is the lower of that and an independent cold test
 (`admin-usability.cold-test.json`): someone new to the admin trying its main jobs and rating it, because
 the measured score alone once read 10/10 next to a tester's 6.5. Acceptance needs both at 9 or more, 70% in
@@ -229,7 +236,9 @@ Hide amounts blurs everything, missing data never reads as zero.
 `admin-usability.json` through `bun run ux:bridge` (re-run with the `/neo-admin-ux-score` task);
 `scripts/admin-usability.ts` scores it. `scripts/admin-usability-cold-test.md` is the cold test's script. A measurement or cold test counts only for the source it was taken from, so any change to the admin
 marks the score STALE until it is done again. `admin-usability.baseline.json` is the first measurement,
-taken before the improvements. The probe never finishes a write on live data.
+taken before the improvements. The probe never finishes a write on live data. Its `recovery-picker` (a picker-only
+change still asks before discarding; focus survives a closed sheet) and `access` sections feed the newer checks: a
+measurement without them, or one missing a page or task, scores those as failed and lists them under Blockers.
 
 It measures effort and wording, not feelings: it can't replace real-device testing or your own opinion.
 

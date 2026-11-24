@@ -71,8 +71,24 @@ export const RECOVERY_CHECKS = {
   reconnectOffered: "A failing account offers Reconnect right in the alert",
   plainErrors: "No raw error codes on screen",
   emptyStateActs: "An empty month offers a way forward",
+  nonTextDirty: "Changing only a picker in a sheet still asks before discarding it",
+  focusReturns: "Closing a sheet whose button is gone leaves focus on a control, not the page",
 } as const;
 export type RecoveryId = keyof typeof RECOVERY_CHECKS;
+
+/** Accessibility the page numbers can't see. Missing (not run) counts as failed; null means no data to check. */
+export const ACCESS_CHECKS = {
+  contrast: "Text meets WCAG AA contrast on every page, light and dark",
+  focusVisible: "Every control Tab reaches shows where focus is",
+  rawInSheets: "Sheets show no raw values (ISO dates, stored codes)",
+} as const;
+export type AccessId = keyof typeof ACCESS_CHECKS;
+
+/** A measured page with nothing in it: what a page the measurement left out counts as. */
+const UNMEASURED_PAGE: PageMetrics = {
+  labelledDestinations: 0, currentMarked: false, addReachable: false, proseWords: 10_000, longParagraphs: 10, jargonHits: 100, rawDates: 100,
+  clippedText: 100, overflow: true, tapTargets: 1, tapTargetsOk: 0, navStaysVisible: false,
+};
 
 /** Things that make a finance app hard to believe. null means it couldn't be checked with today's data. */
 export const TRUST_CHECKS = {
@@ -132,6 +148,8 @@ export interface Measurement {
   recovery: Record<string, boolean | null>;
   /** Checks a measurement didn't run count against it, as failures. */
   trust?: Record<string, boolean | null>;
+  /** Contrast, visible focus and raw values in sheets; older measurements don't have it (all failed). */
+  access?: Record<string, boolean | null>;
   navMs: number[];
   guards: {
     /** The month on show is visible on opening. */
@@ -165,10 +183,14 @@ export function taskScore(actions: number | null, budget: number) {
 }
 
 export function scoreUsability(m: Measurement) {
+  // A page or task the measurement left out (an older measurement, before a page existed) can't
+  // inflate the score: it counts as the worst result and blocks acceptance, instead of crashing.
+  const unmeasured: string[] = [];
   const pagesOf = (viewport: "desktop" | "phone") => PAGES.map((id) => {
-    const page = m.pages[viewport][id];
-    if (!page) throw new Error(`The measurement is missing ${viewport} metrics for ${id}.`);
-    return page;
+    const page = m.pages[viewport]?.[id];
+    if (page) return page;
+    unmeasured.push(`${id} (${viewport})`);
+    return UNMEASURED_PAGE;
   });
   const desktop = pagesOf("desktop");
   const phone = pagesOf("phone");
@@ -177,8 +199,9 @@ export function scoreUsability(m: Measurement) {
   // ---- effort: a task the probe skipped can't be ignored, only one marked not applicable (no such data) ----
   const taskRows = (Object.keys(TASKS) as TaskId[]).map((id) => {
     const measured = m.tasks[id];
-    if (!measured) throw new Error(`The measurement is missing task ${id}.`);
-    return { id, label: TASKS[id].label, budget: TASKS[id].budget, actions: measured.actions, na: Boolean(measured.na), score: taskScore(measured.actions, TASKS[id].budget), error: measured.error };
+    if (!measured) unmeasured.push(`task "${TASKS[id].label}"`);
+    const actions = measured?.actions ?? null;
+    return { id, label: TASKS[id].label, budget: TASKS[id].budget, actions, na: Boolean(measured?.na), score: taskScore(actions, TASKS[id].budget), error: measured ? measured.error : "not measured" };
   });
   const scored = taskRows.filter((t) => !t.na);
   const notApplicable = taskRows.length - scored.length;
@@ -189,12 +212,16 @@ export function scoreUsability(m: Measurement) {
       0.6 * mean(both.map((p) => p.labelledDestinations / DESTINATIONS)) +
       0.2 * mean(both.map((p) => (p.currentMarked ? 1 : 0))) +
       0.2 * mean(both.map((p) => (p.addReachable ? 1 : 0))),
+    // Reading load and wording, plus whether the text can be read at all (contrast) and found with a
+    // keyboard (focus), and no raw values hiding in sheets.
     clarity:
-      0.3 * linear(mean(desktop.map((p) => p.longParagraphs)), 0, 3) +
-      0.25 * linear(desktop.reduce((sum, p) => sum + p.jargonHits, 0), 0, 15) +
-      0.1 * linear(desktop.reduce((sum, p) => sum + p.rawDates, 0), 0, 10) +
-      0.2 * linear(mean(desktop.map((p) => p.proseWords)), 200, 700) +
-      0.15 * linear(desktop.reduce((sum, p) => sum + p.clippedText, 0), 0, 10),
+      0.8 *
+        (0.3 * linear(mean(desktop.map((p) => p.longParagraphs)), 0, 3) +
+          0.25 * linear(desktop.reduce((sum, p) => sum + p.jargonHits, 0), 0, 15) +
+          0.1 * linear(desktop.reduce((sum, p) => sum + p.rawDates, 0), 0, 10) +
+          0.2 * linear(mean(desktop.map((p) => p.proseWords)), 200, 700) +
+          0.15 * linear(desktop.reduce((sum, p) => sum + p.clippedText, 0), 0, 10)) +
+      0.2 * mean((Object.keys(ACCESS_CHECKS) as AccessId[]).filter((id) => m.access?.[id] !== null).map((id) => (m.access?.[id] === true ? 1 : 0))),
     recovery: mean((Object.keys(RECOVERY_CHECKS) as RecoveryId[]).map((id) => (m.recovery[id] === true ? 1 : 0))),
     // Not applicable today (null) is left out; anything missing counts as failed.
     trust: mean((Object.keys(TRUST_CHECKS) as TrustId[]).filter((id) => m.trust?.[id] !== null).map((id) => (m.trust?.[id] === true ? 1 : 0))),
@@ -221,6 +248,7 @@ export function scoreUsability(m: Measurement) {
     m.guards.privacyBlurred < m.guards.privacyTotal && `Hide amounts leaves ${m.guards.privacyTotal - m.guards.privacyBlurred} of ${m.guards.privacyTotal} amounts readable`,
     !m.guards.unknownNotZero && "A month with missing statements shows a false zero",
     !m.production && "Not measured on a production build",
+    unmeasured.length > 0 && `Not measured (measure again): ${unmeasured.join(", ")}`,
     notApplicable > 3 && `${notApplicable} tasks had no data to run against`,
     ...scored.filter((t) => t.actions == null).map((t) => `Task can't be completed: ${t.label}`),
   ].filter((b): b is string => Boolean(b));

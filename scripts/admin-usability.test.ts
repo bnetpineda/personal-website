@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AREAS, PAGES, RECOVERY_CHECKS, TASKS, TRUST_CHECKS, linear, overallScore, scoreUsability, taskScore, type ColdTest, type Measurement, type PageMetrics, type TaskId } from "./admin-usability";
+import { ACCESS_CHECKS, AREAS, PAGES, RECOVERY_CHECKS, TASKS, TRUST_CHECKS, linear, overallScore, scoreUsability, taskScore, type ColdTest, type Measurement, type PageMetrics, type TaskId } from "./admin-usability";
 
 const easyPage: PageMetrics = {
   labelledDestinations: 4, currentMarked: true, addReachable: true, proseWords: 100, longParagraphs: 0, jargonHits: 0, rawDates: 0,
@@ -16,6 +16,7 @@ const perfect = (): Measurement => ({
   },
   recovery: Object.fromEntries(Object.keys(RECOVERY_CHECKS).map((id) => [id, true])),
   trust: Object.fromEntries(Object.keys(TRUST_CHECKS).map((id) => [id, true])),
+  access: Object.fromEntries(Object.keys(ACCESS_CHECKS).map((id) => [id, true])),
   navMs: [500, 600, 700],
   guards: { monthVisible: true, monthExplained: true, privacyTotal: 10, privacyBlurred: 10, unknownNotZero: true },
 });
@@ -61,7 +62,8 @@ describe("admin usability score", () => {
   test("a recovery check that couldn't run earns nothing", () => {
     const m = perfect();
     m.recovery.reconnectOffered = null;
-    expect(scoreUsability(m).areas.find((a) => a.id === "recovery")!.score).toBeCloseTo(10 / 11);
+    const checks = Object.keys(RECOVERY_CHECKS).length;
+    expect(scoreUsability(m).areas.find((a) => a.id === "recovery")!.score).toBeCloseTo((checks - 1) / checks);
   });
 
   test("a trust check with no data to check is left out, but one that wasn't run counts as failed", () => {
@@ -95,13 +97,34 @@ describe("admin usability score", () => {
     expect(overallScore(scoreUsability(m), { rating: 10, sourceHash: "x", testedAt: "2026-11-05", tester: "fixture", remaining: [] }, "x").accepted).toBe(false);
   });
 
-  test("omitted tasks or pages can't inflate the score", () => {
+  test("omitted tasks or pages can't inflate the score: they count as failed and block, without crashing", () => {
     const noTask = perfect();
     delete noTask.tasks["fix-account"];
-    expect(() => scoreUsability(noTask)).toThrow("missing task fix-account");
+    const task = scoreUsability(noTask);
+    expect(task.total).toBeLessThan(10);
+    expect(task.accepted).toBe(false);
+    expect(task.blockers.join()).toContain("Not measured");
+    // An older measurement, taken before Categories replaced Settings, scores instead of crashing.
     const noPage = perfect();
-    delete noPage.pages.phone.accounts;
-    expect(() => scoreUsability(noPage)).toThrow("phone metrics for accounts");
+    delete noPage.pages.phone.categories;
+    delete noPage.pages.desktop.categories;
+    const page = scoreUsability(noPage);
+    expect(page.accepted).toBe(false);
+    expect(page.blockers.join()).toContain("categories (desktop)");
+    expect(page.total).toBeLessThan(10);
+  });
+
+  test("accessibility checks count in clarity: a missing or failed one costs, one without data is left out", () => {
+    const clarity = (m: Measurement) => scoreUsability(m).areas.find((a) => a.id === "clarity")!.score;
+    const failed = perfect();
+    failed.access!.contrast = false;
+    expect(clarity(failed)).toBeCloseTo(1.5 * (0.8 + 0.2 * (2 / 3)));
+    const older = perfect();
+    delete older.access;
+    expect(clarity(older)).toBeCloseTo(1.5 * 0.8);
+    const na = perfect();
+    na.access!.rawInSheets = null;
+    expect(clarity(na)).toBeCloseTo(1.5);
   });
 
   test("a task with no data to run against is left out, but too many of them block", () => {
