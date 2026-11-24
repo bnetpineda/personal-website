@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { EntrySuggestion } from "@/lib/dal";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { getAddEntryData, getAddEntrySuggestions } from "../_actions/cash-flows";
-import { CashFlowForm, type CashFlowFormProps, type FormCategory } from "./cash-flow-form";
+import type { CashFlowFormProps, FormCategory } from "./cash-flow-form";
 import { FormSheetContent, notify } from "./form";
 
 export interface AddEntryData {
@@ -27,31 +27,12 @@ export interface AddEntryProps extends Omit<AddEntryData, "suggestions"> {
 
 const requestedKind = (value: string | null): CashFlowKind | null => (value === "expense" || value === "income" ? value : null);
 
-function AddEntryForm({ kind, onKind, categories, accounts, suggestions, defaults, viewedMonth }: AddEntryData & { kind: CashFlowKind; onKind: (kind: CashFlowKind) => void; viewedMonth?: string }) {
-  return (
-    <div className="flex flex-col gap-6">
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        value={kind}
-        onValueChange={(value) => value && onKind(value as CashFlowKind)}
-        aria-label="Entry type"
-      >
-        <ToggleGroupItem value="expense">Expense</ToggleGroupItem>
-        <ToggleGroupItem value="income">Income</ToggleGroupItem>
-      </ToggleGroup>
-      <CashFlowForm
-        key={kind}
-        kind={kind}
-        categories={categories[kind]}
-        accounts={accounts}
-        suggestions={suggestions.filter((s) => s.kind === kind)}
-        defaults={defaults[kind]}
-        viewedMonth={viewedMonth}
-        autoFocus
-      />
-    </div>
-  );
+// The form (date picker, date-fns, suggestions) loads when a sheet first opens, or when the pointer reaches Add.
+const AddEntryForm = dynamic(() => import("./add-entry-form").then((m) => m.AddEntryForm), { loading: Loading });
+const preloadForm = () => void import("./add-entry-form");
+
+function Loading() {
+  return <div role="status" aria-label="Loading" className="flex justify-center py-8"><Spinner /></div>;
 }
 
 /**
@@ -88,7 +69,7 @@ export function AddEntry({ kind: initialKind, viewedMonth, ...data }: AddEntryPr
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" onPointerEnter={preloadForm} onFocus={preloadForm}>
           <Plus /> Add
         </Button>
       </SheetTrigger>
@@ -119,7 +100,7 @@ export function AddEntryAnywhere() {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" onPointerEnter={preloadForm} onFocus={preloadForm}>
           <Plus /> Add
         </Button>
       </SheetTrigger>
@@ -128,7 +109,7 @@ export function AddEntryAnywhere() {
         description="For cash and anything your accounts don't sync."
         onClose={() => setOpen(false)}
       >
-        {data ? <AddEntryForm {...data} kind={kind} onKind={setKind} /> : <div role="status" aria-label="Loading" className="flex justify-center py-8"><Spinner /></div>}
+        {data ? <AddEntryForm {...data} kind={kind} onKind={setKind} /> : <Loading />}
       </FormSheetContent>
     </Sheet>
   );

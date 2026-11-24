@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -27,10 +27,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
-import { Button } from "@/components/ui/button";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
-import { Kbd } from "@/components/ui/kbd";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { addMonths, currentMonth, isMonth, monthLabel } from "@/lib/finance/dates";
 import { syncConnections } from "../_actions/connections";
 import { notify } from "./form";
@@ -48,8 +45,6 @@ const PAGES = [
   { href: "/admin/categories", label: "Categories and rules", icon: Tags },
 ] as const;
 
-const noSubscribe = () => () => {};
-
 /** The same download as the account menu's Export a backup (a route handler that sends the file). */
 function downloadBackup() {
   const link = document.createElement("a");
@@ -57,30 +52,11 @@ function downloadBackup() {
   link.download = "";
   link.click();
 }
-/** ⌘ on Apple keyboards, Ctrl elsewhere (Ctrl until the browser says otherwise, so hydration matches). */
-function useModifierLabel() {
-  return useSyncExternalStore(noSubscribe, () => (/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"), () => "Ctrl");
-}
-
-/** Search and commands, the fast way to everything; the visible navigation sits beside it. */
-export function CommandButton({ onOpen }: { onOpen: () => void }) {
-  const modifier = useModifierLabel();
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="outline" size="sm" data-command-trigger onClick={onOpen} aria-label="Search and commands" aria-keyshortcuts="Control+K Meta+K">
-          <Search />
-          <span className="hidden 2xl:inline">Search</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Search entries, jump anywhere or run an action <Kbd>{modifier} K</Kbd></TooltipContent>
-    </Tooltip>
-  );
-}
 
 /**
  * ⌘K / Ctrl+K anywhere in the admin: search entries, jump to a page, add an entry, sync, step the
- * Overview's month, hide amounts or switch theme, without leaving the keyboard.
+ * Overview's month, hide amounts or switch theme, without leaving the keyboard. The shell loads this
+ * (and cmdk) on first open; the shortcut and button live in ./command-button.
  */
 export function CommandMenu({
   open,
@@ -99,16 +75,6 @@ export function CommandMenu({
   const [, startTransition] = useTransition();
   const opener = useRef<{ element: HTMLElement | null; href: string } | null>(null);
   const skipFocusReturn = useRef(false);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "k" || !(event.metaKey || event.ctrlKey) || event.altKey) return;
-      event.preventDefault();
-      onOpenChange(!open);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
 
   const onOverview = pathname === "/admin";
   const current = currentMonth();

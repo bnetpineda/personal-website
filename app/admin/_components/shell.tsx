@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -10,7 +11,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AddEntryAnywhere } from "./add-entry";
 import { BottomNav, MoreMenu, SideNav } from "./admin-nav";
-import { CommandButton, CommandMenu } from "./command-menu";
+import { CommandButton, useCommandShortcut } from "./command-button";
 import { NeedsYouAnywhere } from "./needs-you-anywhere";
 import { PRIVACY_COOKIE } from "./nav";
 import { PrivacyHiddenContext } from "./privacy";
@@ -24,6 +25,9 @@ interface AdminUi {
 }
 
 const AdminUiContext = createContext<AdminUi | null>(null);
+
+// cmdk and the menu's commands load on first open (or when the pointer reaches the button).
+const CommandMenu = dynamic(() => import("./command-menu").then((m) => m.CommandMenu), { ssr: false });
 
 export function useAdminUi(): AdminUi {
   const ui = useContext(AdminUiContext);
@@ -41,7 +45,12 @@ export function useAdminUi(): AdminUi {
 export function Shell({ initialPrivate, alerts, children }: { initialPrivate: boolean; alerts: number; children: ReactNode }) {
   const [hidden, setHidden] = useState(initialPrivate);
   const [commandOpen, setCommandOpen] = useState(false);
+  // Mounted from the first open on, so closing keeps its focus handling and the next open is instant.
+  const [commandUsed, setCommandUsed] = useState(false);
   const overview = usePathname() === "/admin";
+  const openCommand = useCallback(() => { setCommandUsed(true); setCommandOpen(true); }, []);
+  const toggleCommand = useCallback(() => { setCommandUsed(true); setCommandOpen((open) => !open); }, []);
+  useCommandShortcut(toggleCommand);
 
   const toggle = () => {
     const next = !hidden;
@@ -51,7 +60,7 @@ export function Shell({ initialPrivate, alerts, children }: { initialPrivate: bo
   const privacy = { hidden, toggle };
 
   return (
-    <AdminUiContext.Provider value={{ privacy, alerts, openCommand: () => setCommandOpen(true) }}>
+    <AdminUiContext.Provider value={{ privacy, alerts, openCommand }}>
       <PrivacyHiddenContext.Provider value={hidden}>
       <a href="#main-content" className="sr-only rounded-md border-2 border-border bg-background px-4 py-2 text-foreground focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50">Skip to content</a>
       <SideNav />
@@ -69,7 +78,7 @@ export function Shell({ initialPrivate, alerts, children }: { initialPrivate: bo
         )}
       </div>
       <BottomNav />
-      <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} privacy={privacy} />
+      {commandUsed && <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} privacy={privacy} />}
       <Toaster />
       </PrivacyHiddenContext.Provider>
     </AdminUiContext.Provider>
