@@ -9,6 +9,7 @@ import { holdingCosts, type HoldingCost } from "./imports/holding-costs";
 import { readSpotFifo } from "./imports/spot-fifo";
 import { accountTotals, navTotals, snapshotDay, type NavPoint } from "./performance";
 import { loadFxTable } from "./service";
+import { logError } from "@/lib/log";
 
 /*
  * Portfolio history. No auth check here: shared by the cron route (CRON_SECRET) and by pages and
@@ -84,7 +85,7 @@ export async function recordPortfolioQuietly(): Promise<void> {
   try {
     await recordPortfolio();
   } catch (err) {
-    console.error("[admin] portfolio snapshot failed", err);
+    logError("portfolio snapshot failed", err);
   }
 }
 

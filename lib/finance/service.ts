@@ -10,6 +10,7 @@ import { addDays, todayManila } from "./dates";
 import { datedPairs, LOOKBACK_DAYS, missingRanges, rateKey, rateOn, ratesToFetch, type WantedRate } from "./fx-history";
 import { dueThrough, scheduleOf } from "./recurrence";
 import { fetchFxRate, fetchFxRates } from "./prices";
+import { logError, logWarning } from "@/lib/log";
 
 /*
  * FX/snapshot operations. No auth check here: this is shared by the cron route
@@ -191,7 +192,7 @@ export async function snapshotQuietly(): Promise<void> {
   try {
     await upsertTodaySnapshot();
   } catch (err) {
-    console.error("[admin] net-worth snapshot failed", err);
+    logError("net-worth snapshot failed", err);
   }
 }
 
@@ -288,8 +289,8 @@ async function postDueRecurringOnce(today: string): Promise<RecurringRunSummary 
 export async function postDueRecurringQuietly(): Promise<void> {
   try {
     const { failed } = await postDueRecurring();
-    if (failed.length > 0) console.warn("[admin] recurring items not posted", failed);
+    if (failed.length > 0) logWarning("recurring items not posted", failed.length);
   } catch (err) {
-    console.error("[admin] posting recurring items failed", err);
+    logError("posting recurring items failed", err);
   }
 }

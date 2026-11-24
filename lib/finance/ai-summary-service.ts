@@ -13,6 +13,7 @@ import { addMonths, currentMonth, monthLabel, monthRange, todayManila } from "./
 import { averageMonthlySpending, goalProgress } from "./goals";
 import { missingStatementProviders, STATEMENT_PROVIDERS, statementCoverage } from "./imports/coverage";
 import { currentNetWorth, loadFxTable } from "./service";
+import { logError } from "@/lib/log";
 
 /*
  * The Overview's AI feedback. No auth check here: the cron route (CRON_SECRET) and a Server Action
@@ -125,7 +126,7 @@ export async function writeAiSummaryQuietly(): Promise<SummaryRun["status"] | "f
   try {
     return (await writeAiSummary()).status;
   } catch (error) {
-    console.error("[admin] AI summary failed", error);
+    logError("AI summary failed", error);
     return "failed";
   }
 }

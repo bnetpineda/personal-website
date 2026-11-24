@@ -12,6 +12,7 @@ import { fetchHistory } from "../imports/providers";
 import { ingestEntries } from "../imports/service";
 import { ImportError, type HistoryCoverage } from "../imports/types";
 import { saveNav } from "../portfolio";
+import { logError } from "@/lib/log";
 
 /* Shared by authenticated Server Actions/DAL and the secret-protected daily cron. */
 export async function loadConnectionViews(): Promise<ConnectionView[]> {
@@ -44,7 +45,7 @@ async function resealCredential(provider: SyncProvider, sealed: string, credenti
       .returning({ provider: accountConnections.provider });
     return updated.length > 0;
   } catch (error) {
-    console.error(`[admin] ${provider} credential re-encryption failed`, error instanceof Error ? error.message : "unknown error");
+    logError(`${provider} credential re-encryption failed`, error);
     return false;
   }
 }
@@ -61,14 +62,14 @@ export async function resealAllCredentials(): Promise<number> {
       try {
         credentials = openCredentials(row.encryptedCredentials, row.provider, env.sessionSecret());
       } catch {
-        console.error(`[admin] ${row.provider} credential could not be opened for re-encryption`);
+        logError(`${row.provider} credential could not be opened for re-encryption`);
         continue;
       }
       if (await resealCredential(row.provider, row.encryptedCredentials, credentials)) moved++;
     }
     return moved;
   } catch (error) {
-    console.error("[admin] credential re-encryption failed", error instanceof Error ? error.message : "unknown error");
+    logError("credential re-encryption failed", error);
     return 0;
   }
 }
@@ -107,7 +108,7 @@ export async function syncAccount(provider: SyncProvider): Promise<SyncResult> {
       await ingestEntries(history.entries, { provider, id: lease });
       historyCoverage = history.coverage;
       // Best effort: a provider's own daily value only fills earlier days of the Portfolio chart.
-      if (history.nav?.length) await saveNav(provider, history.nav).catch((err) => console.error("[admin] NAV save failed", err));
+      if (history.nav?.length) await saveNav(provider, history.nav).catch((err) => logError("NAV save failed", err));
     } catch (error) {
       historyError = error instanceof ImportError || error instanceof ConnectionError ? error.message : "Transaction history could not sync. Check report fields and retry; earlier imports were kept.";
     }

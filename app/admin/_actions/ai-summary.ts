@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { writeAiSummary } from "@/lib/finance/ai-summary-service";
 import type { FormState } from "@/lib/finance/schemas";
+import { logError } from "@/lib/log";
 
 /** "Refresh" on the Overview's feedback panel: always writes a new one. No amounts in the message. */
 export async function refreshAiSummary(): Promise<FormState> {
@@ -14,7 +15,7 @@ export async function refreshAiSummary(): Promise<FormState> {
     revalidatePath("/admin");
     return { ok: true, message: "Feedback updated." };
   } catch (error) {
-    console.error("[admin] AI summary failed", error);
+    logError("AI summary failed", error);
     return { ok: false, message: "The AI Gateway didn't answer. Try again in a minute." };
   }
 }

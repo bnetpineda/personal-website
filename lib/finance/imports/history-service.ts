@@ -14,6 +14,7 @@ import { pairSchema, parseSpotPage } from "./spot";
 import { readSpotFifo } from "./spot-fifo";
 import { ImportError } from "./types";
 import { heldUsdtPairs } from "./holding-costs";
+import { logError } from "@/lib/log";
 
 export const utcYesterday = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - 1).toISOString().slice(0, 10);
 export const addUtcDays = (day: string, n: number) => new Date(Date.parse(day + "T00:00:00Z") + n * 86_400_000).toISOString().slice(0, 10);
@@ -124,7 +125,7 @@ export async function advanceHistory(id: string, io: ProviderIO = defaultIO, loa
     try {
       await readSpotFifo(job.accountKey, null);
     } catch (error) {
-      console.error("[admin] spot fifo refresh failed", error);
+      logError("spot fifo refresh failed", error);
     }
     return { ok: true, message: `Saved ${Number(saved.rows[0].inserted)} new history entries.${complete ? " This stream is caught up to the available data." : " More history is ready to import."}`, more: !complete };
   } catch (error) {

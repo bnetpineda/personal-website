@@ -5,6 +5,7 @@ import { importedEntries, spotFifo as spotFifoCache, spotFifoMeta } from "@/lib/
 import { summarizeSpotTrades } from "./spot";
 import type { PreparedSpotCosts } from "./holding-costs";
 import type { SpotTrade } from "./types";
+import { logError } from "@/lib/log";
 
 const tradeRows = {
   accountKey: importedEntries.accountKey,
@@ -71,7 +72,7 @@ export async function readSpotFifo(accountKey: string, asOf: string | null): Pro
     await db.batch([replace, ...prune, ...insertGroups, saveMeta]);
   } catch (error) {
     // The cache is an optimization. A failed save must never break the page that asked for the numbers.
-    console.error("[admin] spot fifo cache save failed", error);
+    logError("spot fifo cache save failed", error);
   }
   return { fifo: summary.fifo, ignoredBases: new Set(summary.ignoredBases), paymentAssets: new Set(summary.paymentAssets) };
 }

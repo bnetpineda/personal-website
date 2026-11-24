@@ -14,6 +14,7 @@ import { applyCategoryRules, ingestQuery } from "@/lib/finance/imports/service";
 import { ImportError, sameSource, sourceKey, type HistoryCoverage, type ImportEntry } from "@/lib/finance/imports/types";
 import { saveNav } from "@/lib/finance/portfolio";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
+import { logError } from "@/lib/log";
 
 function failure(error: unknown): FormState {
   return { ok: false, message: error instanceof ImportError || error instanceof ConnectionError ? error.message : "The history could not be imported. Check report fields or provider access. Previous records were kept." };
@@ -49,7 +50,7 @@ export async function importInvestmentReport(data: FormData): Promise<FormState>
         fromDate: parsed.coverage.from, toDate: parsed.coverage.to, entries: parsed.entries.length }).onConflictDoNothing(),
     ]);
     // Best effort, like on sync: the entries above are already saved.
-    const navDays = await saveNav("ibkr", parsed.nav ?? []).catch((err) => { console.error("[admin] IBKR NAV save failed", err); return 0; });
+    const navDays = await saveNav("ibkr", parsed.nav ?? []).catch((err) => { logError("IBKR NAV save failed", err); return 0; });
     await applyCategoryRules();
     const ai = await categorizeQuietly();
     revalidatePath("/admin", "layout");

@@ -6,6 +6,7 @@ import { cashFlows, categories, categoryRules, importedEntries, type ImportedEnt
 import { SITE } from "@/lib/constants";
 import { env } from "@/lib/env";
 import { postingRates, twinCtes } from "./service";
+import { logError } from "@/lib/log";
 import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, rememberedDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
   type AiDecision, type AiExample } from "./ai-review";
 import { payeeKey } from "../payee";
@@ -201,7 +202,7 @@ async function decide(classifier: Classifier, batch: ImportedEntry[], options: t
       output: Output.object({ schema: aiOutputSchema }) });
     return validateDecisions(batch, options, output);
   } catch (error) {
-    console.error("AI categorization failed", error);
+    logError("AI categorization failed", error);
     throw new ImportError("AI categorization is unavailable right now. New activity stays uncategorized and is retried on the next sync.");
   }
 }

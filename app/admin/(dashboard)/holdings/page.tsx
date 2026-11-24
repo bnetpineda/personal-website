@@ -21,6 +21,7 @@ import { ConnectionStatus, HoldingsTable } from "../../_components/holdings-tabl
 import { NetWorthHistory } from "../../_components/net-worth-history";
 import { PortfolioAccounts, type PortfolioAccount } from "../../_components/portfolio-accounts";
 import { EmptyState, MissingFxAlert, Money, PageHeader, Panel, Pct, StatCards } from "../../_components/ui";
+import { logError } from "@/lib/log";
 
 export const metadata: Metadata = {
   title: "Portfolio",
@@ -78,7 +79,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
     try {
       await savePortfolioRows(portfolioRows(connections, fx, binanceCosts));
     } catch (err) {
-      console.error("[admin] portfolio snapshot failed", err);
+      logError("portfolio snapshot failed", err);
     }
   });
 

@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import type { TableCount } from "@/lib/finance/backup";
 import { previewBackup, readBackupFile, restoreBackup } from "@/lib/finance/backup-service";
 import type { FormState } from "@/lib/finance/schemas";
+import { logError } from "@/lib/log";
 
 export interface RestorePreview extends FormState {
   counts?: Omit<TableCount, "table">[];
@@ -23,7 +24,7 @@ export async function previewRestore(formData: FormData): Promise<RestorePreview
     const fresh = counts.reduce((sum, c) => sum + c.fresh, 0);
     return { ok: true, counts: counts.map(({ label, fresh, present }) => ({ label, fresh, present })), fresh };
   } catch (error) {
-    console.error("[admin] backup preview failed", error);
+    logError("backup preview failed", error);
     return { ok: false, message: "The backup couldn't be checked. Try again." };
   }
 }
@@ -37,7 +38,7 @@ export async function restoreFromBackup(formData: FormData): Promise<FormState> 
   try {
     fresh = (await restoreBackup(parsed.backup)).reduce((sum, c) => sum + c.fresh, 0);
   } catch (error) {
-    console.error("[admin] backup restore failed", error);
+    logError("backup restore failed", error);
     return { ok: false, message: "The restore didn't finish. Nothing already saved was changed; run it again to add the rest." };
   }
   revalidatePath("/admin", "layout");

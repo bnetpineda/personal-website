@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { SlidersHorizontal, Tags, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { logError } from "@/lib/log";
 import {
   SEARCH_LIMIT,
   getAccounts,
@@ -148,7 +149,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     try {
       await ensureTodaySnapshot();
     } catch (err) {
-      console.error("[admin] ensureTodaySnapshot failed", err);
+      logError("ensureTodaySnapshot failed", err);
     }
   });
 
