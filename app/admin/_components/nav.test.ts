@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dashboardCategoryFilter, dashboardHref, dashboardMonthHref, isNavActive, nextMonthWithin, openingMonth } from "./nav";
+import { dashboardCategoryFilter, dashboardHref, dashboardMonthHref, exportCsvHref, isNavActive, nextMonthWithin, openingMonth } from "./nav";
 
 describe("dashboard navigation", () => {
   test("month navigation exits all-time search without dropping the shared filters", () => {
@@ -9,6 +9,17 @@ describe("dashboard navigation", () => {
     expect(url.searchParams.get("kind")).toBe("income");
     expect(url.searchParams.get("category")).toBe("7");
     expect(url.searchParams.has("q")).toBe(false);
+  });
+
+  test("month navigation clears the search filters too", () => {
+    const href = dashboardMonthHref({ from: "2026-01-01", to: "2026-02-01", min: 100, max: 900, account: "GoTyme", page: 3, kind: "expense" }, "2026-09");
+    expect(href).toBe("/admin?kind=expense&month=2026-09");
+  });
+
+  test("the CSV export carries the list's filters, not the page or the add sheet", () => {
+    expect(exportCsvHref({ month: "2026-09", kind: "expense", category: 4, page: 2, add: "expense" })).toBe("/admin/export/csv?kind=expense&category=4&month=2026-09");
+    expect(exportCsvHref({ q: "grab", min: 0, account: "GoTyme" })).toBe("/admin/export/csv?q=grab&min=0&account=GoTyme");
+    expect(exportCsvHref({})).toBe("/admin/export/csv");
   });
 
   test("choosing this month keeps it in the URL, so it isn't redirected to an older month", () => {

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, getTableColumns, gte, ilike, isNotNull, isNull, lt, max, or, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, isNull, lt, lte, max, or, sql, sum, type SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import {
@@ -24,8 +24,10 @@ import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
 import { IMPORTER_NOTE_PATTERNS } from "@/lib/finance/notes";
-import { statementCoverage } from "@/lib/finance/imports/coverage";
 import { loadStatementMonths } from "@/lib/finance/imports/statement-months";
+import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE, isSearching, type EntryFilters } from "@/lib/finance/entry-filters";
+import type { EntryKind } from "@/lib/finance/imports/types";
+import { STATEMENT_PROVIDERS, statementCoverage } from "@/lib/finance/imports/coverage";
 import { teachGroups } from "@/lib/finance/imports/teach";
 import { currentNetWorth, loadFxTable } from "@/lib/finance/service";
 import { latestAiSummary } from "@/lib/finance/ai-summary-service";
@@ -99,20 +101,37 @@ export type CashFlowRow = Awaited<ReturnType<typeof getCashFlows>>[number];
 /** Escapes LIKE wildcards so a search for "50%" matches literally. */
 const likeTerm = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-export const SEARCH_LIMIT = 200;
-/** Safety cap for one month's list (far above real use). */
-const MONTH_LIMIT = 5000;
+/** Entries per page of an all-time search (see lib/finance/entry-filters.ts). */
+export const SEARCH_LIMIT = SEARCH_PAGE_SIZE;
+/** Safety cap for one month's list, an export, or a search grown page by page (far above real use). */
+export const MONTH_LIMIT = SEARCH_PAGE_SIZE * MAX_SEARCH_PAGES;
 
 /**
- * Entries for the Activity page: one month, or — with a search term — all time
- * (newest first, capped at SEARCH_LIMIT), optionally of one kind.
+ * Entries for the Activity panel: one month, or — with a search term or any filter — all time
+ * (newest first, `limit` of them), optionally of one kind or category.
  */
-export async function getCashFlows({ kind, month, q }: { kind?: CashFlowKind; month?: string; q?: string }) {
+export async function getCashFlows({ kind, category, month, q, filters, limit }: {
+  kind?: CashFlowKind;
+  category?: number;
+  month?: string;
+  q?: string;
+  filters?: EntryFilters;
+  limit?: number;
+}) {
   await requireAdmin();
-  const where: (SQL | undefined)[] = [kind ? eq(cashFlows.kind, kind) : undefined];
-  if (q) {
-    const term = likeTerm(q);
-    where.push(or(ilike(cashFlows.description, term), ilike(cashFlows.notes, term), ilike(cashFlows.account, term), ilike(categories.name, term)));
+  const f: EntryFilters = filters ?? { q: q ?? "", from: null, to: null, min: null, max: null, account: null };
+  const where: (SQL | undefined)[] = [kind ? eq(cashFlows.kind, kind) : undefined, category ? eq(cashFlows.categoryId, category) : undefined];
+  const searching = isSearching(f);
+  if (searching) {
+    if (f.q) {
+      const term = likeTerm(f.q);
+      where.push(or(ilike(cashFlows.description, term), ilike(cashFlows.notes, term), ilike(cashFlows.account, term), ilike(categories.name, term)));
+    }
+    if (f.from) where.push(gte(cashFlows.occurredOn, f.from));
+    if (f.to) where.push(lte(cashFlows.occurredOn, f.to));
+    if (f.min != null) where.push(gte(cashFlows.amountPhp, f.min));
+    if (f.max != null) where.push(lte(cashFlows.amountPhp, f.max));
+    if (f.account) where.push(eq(sql`lower(${cashFlows.account})`, f.account.toLowerCase()));
   } else if (month) {
     const { start, end } = monthRange(month);
     where.push(gte(cashFlows.occurredOn, start), lt(cashFlows.occurredOn, end));
@@ -123,7 +142,7 @@ export async function getCashFlows({ kind, month, q }: { kind?: CashFlowKind; mo
     .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
     .where(and(...where))
     .orderBy(desc(cashFlows.occurredOn), desc(cashFlows.createdAt))
-    .limit(q ? SEARCH_LIMIT : MONTH_LIMIT);
+    .limit(Math.min(limit ?? (searching ? SEARCH_LIMIT : MONTH_LIMIT), MONTH_LIMIT));
 }
 
 export interface EntrySuggestion {
@@ -251,7 +270,7 @@ export async function getRecurring(kind?: CashFlowKind) {
 }
 
 /** Imported entries of one kind posted to Transactions since `since`, for spotting payers and charges that repeat. */
-export async function getImportedFlows(kind: CashFlowKind, since: string) {
+export async function getImportedFlows(kind: CashFlowKind, since: string, importKinds?: readonly EntryKind[]) {
   await requireAdmin();
   return getDb()
     .select({ description: importedEntries.description, occurredOn: cashFlows.occurredOn, amount: cashFlows.amount, currency: cashFlows.currency,
@@ -259,7 +278,36 @@ export async function getImportedFlows(kind: CashFlowKind, since: string) {
     .from(cashFlows)
     .innerJoin(importedEntries, eq(importedEntries.id, cashFlows.id))
     .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
-    .where(and(eq(cashFlows.kind, kind), gte(cashFlows.occurredOn, since)));
+    .where(and(eq(cashFlows.kind, kind), gte(cashFlows.occurredOn, since), importKinds?.length ? inArray(importedEntries.kind, [...importKinds]) : undefined));
+}
+
+/** A calendar year's income entries in PHP, with their category: what the tax estimate adds up. */
+export async function getIncomeForYear(year: number) {
+  await requireAdmin();
+  return getDb()
+    .select({ occurredOn: cashFlows.occurredOn, amountPhp: cashFlows.amountPhp, categoryId: cashFlows.categoryId })
+    .from(cashFlows)
+    .where(and(eq(cashFlows.kind, "income"), gte(cashFlows.occurredOn, `${year}-01-01`), lt(cashFlows.occurredOn, `${year + 1}-01-01`)));
+}
+
+/** The years with any recorded income, newest first. */
+export async function getIncomeYears(): Promise<number[]> {
+  await requireAdmin();
+  const year = sql<number>`extract(year from ${cashFlows.occurredOn})::int`;
+  const rows = await getDb().selectDistinct({ year }).from(cashFlows).where(eq(cashFlows.kind, "income")).orderBy(desc(year));
+  return rows.map((r) => Number(r.year));
+}
+
+/** Tax already taken at source in a year (bank interest, dividends), per currency, as imports report it. */
+export async function getTaxWithheld(year: number) {
+  await requireAdmin();
+  const e = importedEntries;
+  const rows = await getDb()
+    .select({ provider: e.provider, currency: e.currency, total: sql<string>`sum(abs(${e.amount}))` })
+    .from(e)
+    .where(and(eq(e.kind, "tax"), gte(e.occurredOn, `${year}-01-01`), lt(e.occurredOn, `${year + 1}-01-01`)))
+    .groupBy(e.provider, e.currency);
+  return rows.map((r) => ({ provider: r.provider, currency: r.currency, total: Number(r.total) }));
 }
 
 /** Imported income posted to Transactions since `since`, for spotting payers that repeat. */

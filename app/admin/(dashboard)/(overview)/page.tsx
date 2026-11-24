@@ -34,6 +34,7 @@ import { computeNetWorth, fxToPhp, holdingMetrics, monthBudget, monthlySeries, s
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, connectionStatus, includedPositions, isConnectionStale, needsNewCredentials } from "@/lib/finance/connections/meta";
 import { dashboardMonth } from "@/lib/finance/dashboard";
+import { MAX_SEARCH_PAGES, filterDatesLabel, isSearching, parseEntryFilters, searchPage } from "@/lib/finance/entry-filters";
 import { addDays, addMonths, currentMonth, dayRangeLabel, daysBetween, isMonth, monthComparison, monthLabel, shortDayLabel, timeAgo, todayManila } from "@/lib/finance/dates";
 import { missingBalanceProviders, missingStatementProviders } from "@/lib/finance/imports/coverage";
 import { groupAlerts } from "@/lib/finance/notifications";
@@ -72,7 +73,7 @@ export const maxDuration = 120;
 const optional = <T, F>(label: string, read: Promise<T>, fallback: F) => optionalRead(`Overview ${label}`, read, fallback);
 
 /** Type and category filters are in the URL too, but the client applies them (see useDashboardFilters). */
-type Params = { month?: string; q?: string; kind?: string; category?: string; add?: string };
+type Params = { month?: string; q?: string; kind?: string; category?: string; add?: string; from?: string; to?: string; min?: string; max?: string; account?: string; page?: string };
 
 /** A statement balance older than this reads as out of date next to net worth. */
 const STALE_BALANCE_DAYS = 40;
@@ -90,12 +91,15 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const now = new Date();
   const today = todayManila(now);
   const current = currentMonth(now);
-  const q = typeof params.q === "string" ? params.q.trim().slice(0, 100) : "";
+  const filters = parseEntryFilters(params);
+  const q = filters.q;
+  const searching = isSearching(filters);
+  const page = searchPage(params);
   const recordedRows = await getRecordedMonths();
   const recordedMonths = [...new Set(recordedRows.map((r) => r.month))];
   const latest = openingMonth(recordedRows, current);
   // Opening with no month chosen lands on data: this month, or the latest one that has records.
-  if (latest && !isMonth(params.month) && !q) redirect(dashboardHref({ month: latest, kind: params.kind, category: params.category, add: params.add }));
+  if (latest && !isMonth(params.month) && !searching) redirect(dashboardHref({ month: latest, kind: params.kind, category: params.category, add: params.add }));
   const month = isMonth(params.month) ? params.month : current;
   const comparison = monthComparison(month, today);
 
@@ -130,7 +134,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     getSnapshotsSince(addDays(today, -30)),
     getLatestPortfolioSnapshots(),
     getMonthlyTotals(month, 12),
-    getCashFlows({ month, q: q || undefined }),
+    getCashFlows({ month, filters, limit: searching ? page * SEARCH_LIMIT : undefined }),
     getCategoryTotals("expense", month),
     getCategoryTotals("income", month),
     getCategories(),
@@ -546,7 +550,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <ActivityFeed
             className="min-w-0 scroll-mt-20 md:col-span-2 xl:col-span-6 xl:row-span-9 xl:min-h-0"
             entries={activity}
-            search={q ? { q, capped: entries.length >= SEARCH_LIMIT ? SEARCH_LIMIT : null } : null}
+            search={searching ? { q, filters, dates: filterDatesLabel(filters), shown: entries.length, more: entries.length >= page * SEARCH_LIMIT && page < MAX_SEARCH_PAGES ? page + 1 : null } : null}
             month={month}
             current={current}
             coverageNote={coverageNote}

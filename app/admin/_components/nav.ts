@@ -13,6 +13,11 @@ export const NAV_DESTINATIONS = [
   { href: "/admin/connections", label: "Accounts" },
 ] as const;
 
+/** Pages needed a few times a year, so they sit in the account menu (the phone's More menu) and ⌘K, not the bar. */
+export const SECONDARY_DESTINATIONS = [
+  { href: "/admin/tax", label: "Tax estimate" },
+] as const;
+
 export const PORTFOLIO_SECTIONS = [
   { href: "/admin/holdings", label: "Holdings" },
   { href: "/admin/earnings", label: "Earnings" },
@@ -43,14 +48,45 @@ export function nextMonthWithin(month: string, current: string): string | null {
   return next <= current ? next : null;
 }
 
-export type DashboardParams ={ kind?: string | null; month?: string | null; category?: number | string | null; q?: string | null; add?: string | null };
+export type DashboardParams = {
+  kind?: string | null;
+  month?: string | null;
+  category?: number | string | null;
+  q?: string | null;
+  add?: string | null;
+  /** Search filters (see lib/finance/entry-filters.ts): dates, PHP amounts and an account. */
+  from?: string | null;
+  to?: string | null;
+  min?: number | string | null;
+  max?: number | string | null;
+  account?: string | null;
+  /** How many pages of an all-time search are on show. */
+  page?: number | string | null;
+};
+
+/** Everything that makes the list a search across all months, cleared. */
+export const NO_SEARCH = { q: null, from: null, to: null, min: null, max: null, account: null, page: null } as const satisfies DashboardParams;
 
 /**
  * Choosing a month leaves all-time search, but keeps the selected type and category. The month stays
  * in the URL even for this month: a bare /admin opens on the latest month with records.
  */
 export function dashboardMonthHref(params: DashboardParams, month: string) {
-  return dashboardHref({ ...params, month, q: null });
+  return dashboardHref({ ...params, month, ...NO_SEARCH });
+}
+
+/**
+ * The CSV export of what the Activity panel lists: the month, or the search across all months, and
+ * the type and category filters on top.
+ */
+export function exportCsvHref(params: DashboardParams) {
+  const q = new URLSearchParams();
+  for (const key of ["kind", "category", "month", "q", "from", "to", "min", "max", "account"] as const) {
+    const value = params[key];
+    if (value != null && value !== "") q.set(key, String(value));
+  }
+  const s = q.toString();
+  return s ? `/admin/export/csv?${s}` : "/admin/export/csv";
 }
 
 /** Selecting a category leaves the type filter alone (a category implies its type), so clearing it restores what was on before. */

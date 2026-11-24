@@ -14,7 +14,18 @@ export function useDashboardFilters() {
   const kindParam = params.get("kind");
   const kind: CashFlowKind | null = kindParam === "expense" || kindParam === "income" ? kindParam : null;
   const category = Number(params.get("category")) || null;
-  const current: DashboardParams = { kind, category, month: params.get("month"), q: params.get("q") };
+  const current: DashboardParams = {
+    kind,
+    category,
+    month: params.get("month"),
+    q: params.get("q"),
+    from: params.get("from"),
+    to: params.get("to"),
+    min: params.get("min"),
+    max: params.get("max"),
+    account: params.get("account"),
+    page: params.get("page"),
+  };
 
   /** Dashboard URL with some filters changed and the rest kept. */
   const hrefWith = (next: Partial<DashboardParams>) => dashboardHref({ ...current, ...next });
@@ -22,5 +33,5 @@ export function useDashboardFilters() {
   /** Changes type/category in place: a history entry (Back undoes it) without a server request. */
   const set = (next: Partial<Pick<DashboardParams, "kind" | "category">>) => window.history.pushState(null, "", hrefWith(next));
 
-  return { kind, category, q: current.q, month: current.month, hrefWith, monthHref, set };
+  return { kind, category, q: current.q, month: current.month, params: current, hrefWith, monthHref, set };
 }

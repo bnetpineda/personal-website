@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Form from "next/form";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
-import { ArrowLeft, ArrowRight, GraduationCap, Repeat, Search, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Download, GraduationCap, ListFilter, Repeat, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
@@ -14,11 +16,13 @@ import { Swatch } from "@/components/ui/swatch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { dayLabel, monthLabel } from "@/lib/finance/dates";
+import type { EntryFilters } from "@/lib/finance/entry-filters";
 import { filingNote } from "@/lib/finance/notes";
 import { deleteCashFlow, restoreCashFlow } from "../_actions/cash-flows";
 import { CashFlowForm, type FormCategory } from "./cash-flow-form";
 import { CategoryPicker } from "./category-picker";
 import { useDashboardFilters } from "./dashboard-filters";
+import { NO_SEARCH, exportCsvHref } from "./nav";
 import { EditableRow } from "./row-actions";
 import { EmptyState, Money, Panel, Pct } from "./ui";
 
@@ -72,8 +76,8 @@ export function ActivityFeed({
   className,
 }: {
   entries: ActivityEntry[];
-  /** Set when the list is a search across all months (`capped`: only the newest results came back). */
-  search: { q: string; capped: number | null } | null;
+  /** Set when the list is a search across all months (`more`: the page that loads older results, when there are any). */
+  search: { q: string; filters: EntryFilters; dates: string | null; shown: number; more: number | null } | null;
   /** The month on show and this month (YYYY-MM). */
   month: string;
   current: string;
@@ -90,6 +94,9 @@ export function ActivityFeed({
 }) {
   const filters = useDashboardFilters();
   const searchInput = useRef<HTMLInputElement>(null);
+  const filtersId = useId();
+  const hasFilters = Boolean(search && (search.filters.from || search.filters.to || search.filters.min != null || search.filters.max != null || search.filters.account));
+  const [filtersOpen, setFiltersOpen] = useState(hasFilters);
   // "/" jumps to the search box from anywhere on the page (not while typing elsewhere).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -112,19 +119,19 @@ export function ActivityFeed({
   const byDay = new Map<string, ActivityEntry[]>();
   for (const e of visible) byDay.set(e.occurredOn, [...(byDay.get(e.occurredOn) ?? []), e]);
 
+  const active = search?.filters;
   const toolbar = (
     <div className="flex flex-col gap-2">
       {/* Always mounted, so screen readers hear the new count when a filter changes. */}
       <p role="status" className="sr-only">
         {visible.length} {visible.length === 1 ? "entry" : "entries"} shown
       </p>
-      <Form action="/admin" role="search">
+      <Form action="/admin" role="search" key={JSON.stringify(active ?? null)}>
         {filters.month && <input type="hidden" name="month" value={filters.month} />}
         {filters.kind && <input type="hidden" name="kind" value={filters.kind} />}
         {category && <input type="hidden" name="category" value={category.id} />}
         <ButtonGroup className="w-full">
           <Input
-            key={search?.q ?? ""}
             name="q"
             type="search"
             defaultValue={search?.q ?? ""}
@@ -134,14 +141,67 @@ export function ActivityFeed({
             aria-label="Search entries"
             autoComplete="off"
           />
+          <Button
+            type="button"
+            variant={filtersOpen ? "default" : "outline"}
+            size="icon"
+            aria-label="Filters: dates, amounts, account"
+            aria-expanded={filtersOpen}
+            aria-controls={filtersId}
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            <ListFilter />
+          </Button>
           <SearchButton />
+          <Button asChild variant="outline" size="icon">
+            <a href={exportCsvHref(filters.params)} download aria-label={search ? "Download these results as CSV" : `Download ${monthLabel(month)} as CSV`} title="Download as CSV">
+              <Download />
+            </a>
+          </Button>
         </ButtonGroup>
+        {filtersOpen && (
+          <FieldGroup id={filtersId} className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Field>
+              <FieldLabel htmlFor={`${filtersId}-from`}>From</FieldLabel>
+              <DatePicker id={`${filtersId}-from`} name="from" defaultValue={active?.from ?? undefined} today={today} placeholder="Any date" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${filtersId}-to`}>To</FieldLabel>
+              <DatePicker id={`${filtersId}-to`} name="to" defaultValue={active?.to ?? undefined} today={today} placeholder="Any date" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${filtersId}-account`}>Account</FieldLabel>
+              <Input id={`${filtersId}-account`} name="account" list={`${filtersId}-accounts`} maxLength={60} placeholder="Any" defaultValue={active?.account ?? ""} autoComplete="off" />
+              <datalist id={`${filtersId}-accounts`}>
+                {accounts.map((a) => (
+                  <option key={a} value={a} />
+                ))}
+              </datalist>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${filtersId}-min`}>At least (PHP)</FieldLabel>
+              <Input id={`${filtersId}-min`} name="min" inputMode="decimal" placeholder="0" defaultValue={active?.min ?? ""} autoComplete="off" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${filtersId}-max`}>At most (PHP)</FieldLabel>
+              <Input id={`${filtersId}-max`} name="max" inputMode="decimal" placeholder="Any" defaultValue={active?.max ?? ""} autoComplete="off" />
+            </Field>
+            <div className="col-span-2 flex items-end gap-2 sm:col-span-1">
+              <Button type="submit" size="sm">Apply</Button>
+              {search && (
+                <Button asChild variant="ghost" size="sm">
+                  <Link href={filters.hrefWith(NO_SEARCH)}>Clear</Link>
+                </Button>
+              )}
+            </div>
+          </FieldGroup>
+        )}
       </Form>
       {(search || category) && (
         <div className="flex flex-wrap items-center gap-2">
           {search && (
             <Button asChild variant="outline" size="xs" touch>
-              <Link href={filters.hrefWith({ q: null })} aria-label={`Back to ${monthLabel(month)}; clear search for ${search.q}`}>
+              <Link href={filters.hrefWith(NO_SEARCH)} aria-label={`Back to ${monthLabel(month)}; clear the search`}>
                 <ArrowLeft /> Back to {monthLabel(month, "short")}
               </Link>
             </Button>
@@ -156,8 +216,8 @@ export function ActivityFeed({
           <p className="font-mono text-xs text-muted-foreground">
             {search ? (
               <>
-                “{search.q}” · {visible.length} {visible.length === 1 ? "result" : "results"}
-                {search.capped != null && ` · newest ${search.capped}`} · out <Money value={sum("expense")} /> · in <Money value={sum("income")} />
+                <FilterSummary filters={search.filters} dates={search.dates} /> · {visible.length} {visible.length === 1 ? "result" : "results"}
+                {search.more != null && ` · newest ${search.shown}`} · out <Money value={sum("expense")} /> · in <Money value={sum("income")} />
               </>
             ) : category?.kind === "expense" ? (
               <CategorySummary spent={totals.byCategory[category.id] ?? (coverageNote ? null : 0)} of={totals.expense} budget={category.monthlyBudget} share="spending" />
@@ -302,6 +362,13 @@ export function ActivityFeed({
               </ItemGroup>
             </section>
           ))}
+          {search?.more != null && (
+            <Button asChild variant="outline" size="sm" className="self-center">
+              <Link href={filters.hrefWith({ page: search.more })} scroll={false}>
+                Show older results
+              </Link>
+            </Button>
+          )}
         </div>
       )}
     </Panel>
@@ -346,6 +413,27 @@ function FiledBy({ notes }: { notes: string | null }) {
     <span title={label} className="inline-flex text-muted-foreground">
       <Icon aria-label={label} className="size-3" />
     </span>
+  );
+}
+
+/** What the search is for, in words: “grab” · Jan 1 – Mar 31, 2026 · ₱1,000 to ₱5,000 · GoTyme. */
+function FilterSummary({ filters: f, dates }: { filters: EntryFilters; dates: string | null }) {
+  const parts: React.ReactNode[] = [];
+  if (f.q) parts.push(<>“{f.q}”</>);
+  if (dates) parts.push(dates);
+  if (f.min != null && f.max != null) parts.push(<><Money value={f.min} /> to <Money value={f.max} /></>);
+  else if (f.min != null) parts.push(<>at least <Money value={f.min} /></>);
+  else if (f.max != null) parts.push(<>at most <Money value={f.max} /></>);
+  if (f.account) parts.push(f.account);
+  return (
+    <>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && " · "}
+          {part}
+        </span>
+      ))}
+    </>
   );
 }
 
