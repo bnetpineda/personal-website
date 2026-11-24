@@ -43,11 +43,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
           icon: "shrink-0",
           success: "[&_[data-icon]]:text-success",
           error: "[&_[data-icon]]:text-destructive",
-          warning: "[&_[data-icon]]:text-warning",
+          warning: "[&_[data-icon]]:text-warning-text",
           actionButton:
-            "shrink-0 cursor-pointer rounded-md border-2 border-border bg-primary px-3 py-1 font-display text-xs tracking-wide text-primary-foreground uppercase shadow-xs active:translate-0.5 active:shadow-none",
+            "shrink-0 cursor-pointer rounded-md border-2 border-border bg-primary px-3 py-1 font-display text-xs tracking-wide text-primary-foreground uppercase shadow-xs active:translate-0.5 active:shadow-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-4",
           cancelButton:
-            "shrink-0 cursor-pointer rounded-md border-2 border-border bg-card px-3 py-1 font-display text-xs tracking-wide text-card-foreground uppercase",
+            "shrink-0 cursor-pointer rounded-md border-2 border-border bg-card px-3 py-1 font-display text-xs tracking-wide text-card-foreground uppercase pointer-coarse:min-h-11 pointer-coarse:px-4",
         },
       }}
       {...props}

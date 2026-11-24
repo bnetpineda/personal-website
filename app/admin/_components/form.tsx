@@ -29,6 +29,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { initialFormState, type FormState } from "@/lib/finance/form-state";
+import { FormSnapshots, type FormView } from "./form-dirty";
 
 /* Form plumbing shared by every admin form (Server Action + shadcn Field). */
 
@@ -85,16 +86,27 @@ export function FormSheetContent({
   onCloseAutoFocus?: ComponentProps<typeof SheetContent>["onCloseAutoFocus"];
   children: ReactNode;
 }) {
-  // Something typed survives a stray click outside; Escape and the close button ask before throwing it away.
-  const dirty = useRef(false);
+  // A change survives a stray click outside; Escape and the close button ask before throwing it away.
+  // Every form is snapshotted before its first interaction, so selects, toggles, date pickers and
+  // checkboxes count as changes too, not only typing.
+  const snapshots = useRef(new FormSnapshots());
   const content = useRef<HTMLDivElement>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const forms = (): FormView[] =>
+    [...(content.current?.querySelectorAll("form") ?? [])].map((form) => ({ form, entries: () => new FormData(form).entries() }));
+  const remember = () => snapshots.current.remember(forms());
   const hasTyped = () =>
-    dirty.current ||
-    [...(content.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input:not([type="hidden"]), textarea') ?? [])].some((field) => field.value !== field.defaultValue);
+    snapshots.current.changed(forms()) ||
+    // A field outside any form still counts once typed into.
+    [...(content.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input:not([type="hidden"]), textarea') ?? [])].some(
+      (field) => !field.form && field.value !== field.defaultValue
+    );
   return (
     <SheetContent
       ref={content}
+      onPointerDownCapture={remember}
+      onKeyDownCapture={remember}
+      onFocusCapture={remember}
       className={wide ? "sm:max-w-2xl" : undefined}
       onInteractOutside={(event) => {
         if (hasTyped()) event.preventDefault();
@@ -111,7 +123,7 @@ export function FormSheetContent({
         setConfirmingClose(true);
       }}
       onCloseAutoFocus={(event) => {
-        dirty.current = false;
+        snapshots.current = new FormSnapshots();
         onCloseAutoFocus?.(event);
       }}
     >
@@ -121,8 +133,8 @@ export function FormSheetContent({
       </SheetHeader>
       {/* The house scrollbar (shows on hover), like the dashboard panels. */}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-4 pb-8" onInput={() => { dirty.current = true; }}>
-          <FormSheetContext.Provider value={{ close: onClose, markClean: () => { dirty.current = false; } }}>{children}</FormSheetContext.Provider>
+        <div className="px-4 pb-8">
+          <FormSheetContext.Provider value={{ close: onClose, markClean: () => snapshots.current.reset(forms()) }}>{children}</FormSheetContext.Provider>
         </div>
       </ScrollArea>
       <AlertDialog open={confirmingClose} onOpenChange={setConfirmingClose}>
@@ -136,7 +148,7 @@ export function FormSheetContent({
             <Button
               variant="destructive"
               onClick={() => {
-                dirty.current = false;
+                snapshots.current = new FormSnapshots();
                 setConfirmingClose(false);
                 // Past the guard: the sheet is closing for good, so nothing here should stop it.
                 onClose();
@@ -160,22 +172,40 @@ export function notify(state: FormState, undo?: Undo) {
     toast.error(state.message);
     return;
   }
-  toast.success(state.message, {
-    action: undo
-      ? {
-          label: "Undo",
-          onClick: async () => {
-            try {
-              notify(await undo());
-            } catch {
-              toast.error("Couldn't undo — check your connection.");
-            }
-          },
+  if (!undo) {
+    toast.success(state.message, { duration: 4000 });
+    return;
+  }
+  // Undo stays up 12 seconds, and longer while the pointer is over it or keyboard focus is in it
+  // (sonner only pauses on hover), so it can be reached with Alt+T and Tab.
+  const testId = `undo-toast-${++undoToasts}`;
+  const id = toast.success(state.message, {
+    action: {
+      label: "Undo",
+      onClick: async () => {
+        try {
+          notify(await undo());
+        } catch {
+          toast.error("Couldn't undo — check your connection.");
         }
-      : undefined,
-    duration: undo ? 8000 : 4000,
+      },
+    },
+    duration: Number.POSITIVE_INFINITY,
+    testId,
   });
+  const expire = () => {
+    const element = document.querySelector(`[data-testid="${testId}"]`);
+    if (element && (element.matches(":hover") || element.contains(document.activeElement))) {
+      setTimeout(expire, 2000);
+      return;
+    }
+    toast.dismiss(id);
+  };
+  setTimeout(expire, UNDO_TOAST_MS);
 }
+
+const UNDO_TOAST_MS = 12_000;
+let undoToasts = 0;
 
 /**
  * useActionState + manual dispatch (no React 19 auto-reset, so typed values survive errors).
@@ -241,11 +271,20 @@ export function FormField({
   wide?: boolean;
   children: ReactNode;
 }) {
+  const hintId = error ? `${id}-error` : description ? `${id}-description` : undefined;
+  // Screen readers read the error (or hint) with the control. The control can be any component
+  // (Input, a Select trigger, a date picker button), so the link goes on whatever carries the id.
+  useEffect(() => {
+    const control = document.getElementById(id);
+    if (!control) return;
+    if (hintId) control.setAttribute("aria-describedby", hintId);
+    else control.removeAttribute("aria-describedby");
+  }, [id, hintId]);
   return (
     <Field data-invalid={error ? true : undefined} className={cn(wide && "sm:col-span-2")}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       {children}
-      {error ? <FieldError>{error}</FieldError> : description ? <FieldDescription>{description}</FieldDescription> : null}
+      {error ? <FieldError id={hintId}>{error}</FieldError> : description ? <FieldDescription id={hintId}>{description}</FieldDescription> : null}
     </Field>
   );
 }
