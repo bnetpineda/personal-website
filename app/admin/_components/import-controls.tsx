@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import type { Category } from "@/lib/db/schema";
 import type { FormState } from "@/lib/finance/form-state";
-import { importGoTymeStatements, importMariBankStatements, importWiseStatements, saveCategoryRule, setRuleEnabled } from "../_actions/imports";
+import { importGoTymeStatements, importMariBankStatements, importWiseStatements, setRuleEnabled } from "../_actions/imports";
+import { saveRule } from "../_actions/rules";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
+import { entryKindLabel } from "./labels";
 import { Money, PrivateFigure } from "./ui";
 
 export function NativeAmount({ value, currency, crypto = false }: { value: number; currency: string; crypto?: boolean }) {
@@ -122,17 +124,32 @@ export function AddRuleButton({ categories }: { categories: Category[] }) {
   return <FormSheet trigger={<Button variant="outline" size="sm"><Plus />Category rule</Button>} title="Add category rule"
     description="Matching income and expenses post straight to this category before AI sees them. The most specific text wins."><RuleForm categories={categories} /></FormSheet>;
 }
-function RuleForm({ categories }: { categories: Category[] }) {
-  const { state, pending, onSubmit, formKey } = useFormAction(saveCategoryRule);
-  const [kind, setKind] = useState("expense");
-  return <form key={formKey} onSubmit={onSubmit} className="flex flex-col gap-6"><FieldGroup>
-    <FormField id="rule-text" label="Description contains"><Input id="rule-text" name="contains" placeholder="e.g. Spotify" minLength={2} maxLength={120} required /></FormField>
-    <FormField id="rule-provider" label="Account"><Select name="provider" defaultValue="any"><SelectTrigger id="rule-provider"><SelectValue /></SelectTrigger><SelectContent>
+export interface RuleDTO {
+  id: string;
+  contains: string;
+  provider: string | null;
+  kind: "income" | "expense";
+  categoryId: number;
+}
+
+/** Adds a rule, or edits `rule`. Validation errors show beside each field, like every other admin form. */
+export function RuleForm({ categories, rule }: { categories: Category[]; rule?: RuleDTO }) {
+  const { state, pending, onSubmit, formKey, error } = useFormAction(saveRule);
+  const [kind, setKind] = useState<string>(state.values?.kind ?? rule?.kind ?? "expense");
+  const uid = useId();
+  const id = (name: string) => `${uid}-${name}`;
+  const value = (name: string, fallback?: string) => state.values?.[name] ?? fallback;
+  return <form key={formKey} onSubmit={onSubmit} noValidate className="flex flex-col gap-6"><FieldGroup>
+    {rule && <input type="hidden" name="id" value={rule.id} />}
+    <FormField id={id("text")} label="Description contains" error={error("contains")}>
+      <Input id={id("text")} name="contains" placeholder="e.g. Spotify" maxLength={120} defaultValue={value("contains", rule?.contains)} aria-invalid={Boolean(error("contains"))} />
+    </FormField>
+    <FormField id={id("provider")} label="Account" error={error("provider")}><Select name="provider" defaultValue={value("provider", rule?.provider ?? "any")}><SelectTrigger id={id("provider")} aria-invalid={Boolean(error("provider"))}><SelectValue /></SelectTrigger><SelectContent>
       <SelectItem value="any">Any account</SelectItem><SelectItem value="wise">Wise</SelectItem><SelectItem value="maribank">MariBank</SelectItem><SelectItem value="gotyme">GoTyme</SelectItem><SelectItem value="ibkr">IBKR</SelectItem>
     </SelectContent></Select></FormField>
-    <FormField id="rule-kind" label="Entry type"><Select name="kind" value={kind} onValueChange={setKind}><SelectTrigger id="rule-kind"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="expense">Expense</SelectItem><SelectItem value="income">Income</SelectItem></SelectContent></Select></FormField>
-    <FormField id="rule-category" label="Category"><Select key={kind} name="categoryId" required><SelectTrigger id="rule-category"><SelectValue placeholder="Choose a category" /></SelectTrigger><SelectContent>
-      {categories.filter((c) => !c.archived && c.kind === kind).map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+    <FormField id={id("kind")} label="Entry type" error={error("kind")}><Select name="kind" value={kind} onValueChange={setKind}><SelectTrigger id={id("kind")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="expense">{entryKindLabel("expense")}</SelectItem><SelectItem value="income">{entryKindLabel("income")}</SelectItem></SelectContent></Select></FormField>
+    <FormField id={id("category")} label="Category" error={error("categoryId")}><Select key={kind} name="categoryId" defaultValue={kind === (rule?.kind ?? "expense") ? value("categoryId", rule ? String(rule.categoryId) : undefined) : undefined}><SelectTrigger id={id("category")} aria-invalid={Boolean(error("categoryId"))}><SelectValue placeholder="Choose a category" /></SelectTrigger><SelectContent>
+      {categories.filter((c) => (!c.archived || c.id === rule?.categoryId) && c.kind === kind).map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
     </SelectContent></Select></FormField>
-  </FieldGroup><p className="text-sm text-muted-foreground">Rules skip transfers, trades, unknown entry types and crypto amounts. Pause an old rule before replacing it.</p><FormFooter state={state} pending={pending}>Save rule</FormFooter></form>;
+  </FieldGroup><p className="text-sm text-muted-foreground">Rules skip transfers, trades, unknown entry types and crypto amounts. Matching entries post to the category straight away.</p><FormFooter state={state} pending={pending}>Save rule</FormFooter></form>;
 }

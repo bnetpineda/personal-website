@@ -7,7 +7,6 @@ import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { cashFlows, categories, categoryRules, importedEntries } from "@/lib/db/schema";
 import { payeeKey } from "@/lib/finance/payee";
-import { providerSchema } from "@/lib/finance/connections/types";
 import { applyCategoryRules, ingestEntries, saveStatementBalances } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { actionDeadline } from "@/lib/finance/deadline";
@@ -104,18 +103,7 @@ export async function importGoTymeStatements(data: FormData): Promise<FormState>
   return importStatementPdfs(data, "GoTyme", parseGoTymeStatement);
 }
 
-export async function saveCategoryRule(_previous: FormState, data: FormData): Promise<FormState> {
-  await requireAdmin();
-  const parsed = z.object({ contains: z.string().trim().min(2).max(120), provider: z.union([providerSchema, z.literal("any")]),
-    kind: z.enum(["income", "expense"]), categoryId: z.coerce.number().int().positive() }).safeParse(Object.fromEntries(data));
-  if (!parsed.success) return { ok: false, message: "Enter matching text and choose a category of the same type." };
-  const value = parsed.data;
-  const [category] = await getDb().select().from(categories).where(eq(categories.id, value.categoryId));
-  if (!category || category.archived || category.kind !== value.kind) return { ok: false, message: "Choose an active category matching income or expense." };
-  await getDb().insert(categoryRules).values({ ...value, provider: value.provider === "any" ? null : value.provider, autoPost: true });
-  revalidatePath("/admin", "layout");
-  return { ok: true, message: "Rule saved. It runs before AI on the next import or sync." };
-}
+// Adding and editing category rules: saveRule in ./rules.ts.
 /**
  * Teach once: the category for every payment from or to this payee. Saves a rule for future imports
  * and re-files the payee's past AI-filed entries; manual and rule decisions are left alone. Both

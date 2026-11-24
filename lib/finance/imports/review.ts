@@ -13,10 +13,12 @@ export function matchingRule(entry: ImportEntry, rules: CategoryRule[]): Categor
   if (!canPost(entry) || entry.kind === "transfer" || entry.kind === "other") return null;
   const candidates = rules.filter((r) => r.enabled && (!r.provider || r.provider === entry.provider) &&
     r.kind === (entry.amount > 0 ? "income" : "expense") && entry.description.toLowerCase().includes(r.contains.toLowerCase()))
-    .sort((a, b) => b.contains.length - a.contains.length || a.id.localeCompare(b.id));
+    // Every rule saved today posts automatically; a few old ones only suggested ("Left to AI"). Two
+    // equally specific rules for the same category agree, and the one that posts wins.
+    .sort((a, b) => b.contains.length - a.contains.length || Number(b.autoPost) - Number(a.autoPost) || a.id.localeCompare(b.id));
   const best = candidates[0];
   if (!best) return null;
-  if (candidates.some((r) => r.contains.length === best.contains.length && (r.categoryId !== best.categoryId || r.autoPost !== best.autoPost))) return null;
+  if (candidates.some((r) => r.contains.length === best.contains.length && r.categoryId !== best.categoryId)) return null;
   return best;
 }
 

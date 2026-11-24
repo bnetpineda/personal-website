@@ -2,16 +2,18 @@ import type { Metadata } from "next";
 import { Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Swatch } from "@/components/ui/swatch";
 import { getCategories, getCategoryUsage } from "@/lib/dal";
 import { PROVIDER_META } from "@/lib/finance/connections/meta";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { getCategoryRules } from "@/lib/finance/imports/dal";
 import { deleteCategory, setCategoryArchived } from "../../_actions/categories";
+import { deleteRule } from "../../_actions/rules";
 import { CategoryForm } from "../../_components/category-form";
 import { FormSheet } from "../../_components/form";
-import { AddRuleButton, RuleToggle } from "../../_components/import-controls";
+import { AddRuleButton, RuleForm, RuleToggle } from "../../_components/import-controls";
+import { entryKindLabel } from "../../_components/labels";
 import { EditableRow } from "../../_components/row-actions";
 import { Money, PageHeader, Panel } from "../../_components/ui";
 
@@ -107,17 +109,28 @@ export default async function CategoriesPage() {
           ) : (
             <ItemGroup>
               {rules.map((r) => (
-                <Item key={r.id} size="sm">
+                <EditableRow
+                  key={r.id}
+                  name={`rule “${r.contains}”`}
+                  editTitle="Edit category rule"
+                  editDescription="Matching income and spending post straight to this category before AI sees them. The most specific text wins."
+                  editForm={<RuleForm categories={categories} rule={{ id: r.id, contains: r.contains, provider: r.provider, kind: r.kind, categoryId: r.categoryId }} />}
+                  onDelete={deleteRule.bind(null, r.id)}
+                  deleteWarning="Entries it already filed keep their category. New imports go to AI instead."
+                  extra={<RuleToggle id={r.id} enabled={r.enabled} name={r.contains} />}
+                >
                   <ItemContent>
-                    <ItemTitle>“{r.contains}” → {categories.find((c) => c.id === r.categoryId)?.name ?? "Unavailable category"}</ItemTitle>
+                    <ItemTitle>
+                      “{r.contains}” → {categories.find((c) => c.id === r.categoryId)?.name ?? "Unavailable category"}
+                      {!r.enabled && <Badge variant="outline">Paused</Badge>}
+                    </ItemTitle>
                     <ItemDescription>
-                      {r.provider ? PROVIDER_META[r.provider].name : "Any account"} · {r.kind} · {r.autoPost ? "Posts automatically" : "Left to AI"} · {r.enabled ? "Active" : "Paused"}
+                      {r.provider ? PROVIDER_META[r.provider].name : "Any account"} · {entryKindLabel(r.kind)}
+                      {/* Rules saved today always post; a few old ones only suggested. Editing one brings it in line. */}
+                      {!r.autoPost && " · Only suggests: edit it to post automatically"}
                     </ItemDescription>
                   </ItemContent>
-                  <ItemActions>
-                    <RuleToggle id={r.id} enabled={r.enabled} name={r.contains} />
-                  </ItemActions>
-                </Item>
+                </EditableRow>
               ))}
             </ItemGroup>
           )}

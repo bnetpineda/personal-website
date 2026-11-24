@@ -141,6 +141,11 @@ describe("review and accounting", () => {
     expect(matchingRule(imported({ provider: "binance", currency: "USD" }), [rule()])).toBeNull();
     expect(matchingRule(imported({ amount: 15 }), [rule()])).toBeNull();
   });
+  test("an old suggest-only rule beside an equal one for the same category isn't a conflict: the posting one wins", () => {
+    const legacy = rule({ id: "00000000-0000-4000-8000-000000000001", autoPost: false });
+    const current = rule({ id: "00000000-0000-4000-8000-000000000002", autoPost: true });
+    expect(matchingRule(imported(), [legacy, current])?.id).toBe(current.id);
+  });
   test("suggests only unambiguous equal transfers and never same-account purchases", () => {
     const a = imported(), b = imported({ provider: "ibkr", accountKey: "TEST", amount: 15 });
     expect(transferSuggestions([a, b])).toHaveLength(1);
