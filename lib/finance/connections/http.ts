@@ -7,12 +7,13 @@ const HOSTS = new Set(["api.binance.com", "ndcdyn.interactivebrokers.com", "api.
 const POST_URL = "https://api.hyperliquid.xyz/info";
 
 /** Reads only: fixed hosts, no redirects, bounded time/body. URLs with tokens are never logged. */
-export function readText(url: URL, headers: Record<string, string> = {}, signal?: AbortSignal, body?: unknown): Promise<string> {
+/** `transport` is node:https in production; tests pass a fake to check the guards without the network. */
+export function readText(url: URL, headers: Record<string, string> = {}, signal?: AbortSignal, body?: unknown, transport: typeof send = send): Promise<string> {
   if (url.protocol !== "https:" || !HOSTS.has(url.hostname) || url.port || url.username || url.password || (body !== undefined && url.href !== POST_URL)) {
     throw new ConnectionError("Unsupported account API address.");
   }
   return new Promise((resolve, reject) => {
-    const request = send(url, {
+    const request = transport(url, {
       method: body === undefined ? "GET" : "POST",
       headers: { accept: "application/json, application/xml, text/plain", "User-Agent": "PersonalFinanceDashboard/1.0", ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
