@@ -14,7 +14,7 @@ import { EmptyState, Panel } from "./ui";
 
 const TONE = {
   good: { icon: CircleCheck, className: "text-success", label: "Going well" },
-  watch: { icon: TriangleAlert, className: "text-warning", label: "Worth watching" },
+  watch: { icon: TriangleAlert, className: "text-warning-text", label: "Worth watching" },
   act: { icon: OctagonAlert, className: "text-destructive", label: "Needs action" },
 } as const;
 

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getConnections, getFx, getRecordedMonths } from "@/lib/dal";
 import { fxToPhp, sumInPhp } from "@/lib/finance/calc";
@@ -9,6 +8,7 @@ import { currentMonth, isMonth, monthLabel } from "@/lib/finance/dates";
 import { getEarnings } from "@/lib/finance/imports/dal";
 import { amountInUsd, unitPricesUsd } from "@/lib/finance/returns";
 import { PortfolioSections } from "../../_components/admin-nav";
+import { FilterLinks } from "../../_components/filter-links";
 import { openingMonth } from "../../_components/nav";
 import { NativeAmount } from "../../_components/import-controls";
 import { EmptyState, InfoNote, Money, MonthPicker, PageHeader, Panel, StatCards } from "../../_components/ui";
@@ -62,8 +62,13 @@ export default async function EarningsPage({ searchParams }: { searchParams: Pro
     </PageHeader>
     <PortfolioSections />
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      <Button asChild size="sm" variant={allTime ? "default" : "outline"}><Link href="/admin/earnings">All time</Link></Button>
-      <Button asChild size="sm" variant={allTime ? "outline" : "default"}><Link href={`/admin/earnings?month=${allTime ? startMonth : month}`}>By month</Link></Button>
+      <FilterLinks
+        label="Earnings period"
+        links={[
+          { key: "all", label: "All time", href: "/admin/earnings", active: allTime },
+          { key: "month", label: "By month", href: `/admin/earnings?month=${allTime ? startMonth : month}`, active: !allTime },
+        ]}
+      />
       <InfoNote title="How earnings add up">
         <p>Totals cover imported Binance, IBKR and Hyperliquid records {allTime ? "across all imported dates" : "for this month"}, in their original currency, including activity AI hasn&apos;t filed yet. Ignored entries are excluded.</p>
         <p>Contributions count deposits and withdrawals filed as transfers; transfers between your own investment accounts are excluded. For the return with transfers taken out, see the Return card on <Link href="/admin/holdings" className="underline underline-offset-4">Holdings</Link>.</p>

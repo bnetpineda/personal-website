@@ -34,7 +34,7 @@ function StatementStatus({ coverage, balances, now }: { coverage?: StatementCove
     {asOf ? <p className="text-sm">
       Balance {balances.filter((b) => b.amount !== 0).map((b, i) => <span key={b.currency}>{i > 0 && " · "}<Money value={b.amount} currency={b.currency} /></span>)} on {dayLabel(asOf)}, counted in net worth.
     </p> : <p className="text-sm text-muted-foreground">No balance saved yet: upload your latest statement to count it in net worth.</p>}
-    {coverage.missing.length > 0 && <p className="text-sm text-warning">No activity in {coverage.missing.map((m) => monthLabel(m, "short")).join(", ")}. Upload {coverage.missing.length === 1 ? "that statement" : "those statements"} if you have them.</p>}
+    {coverage.missing.length > 0 && <p className="text-sm text-warning-text">No activity in {coverage.missing.map((m) => monthLabel(m, "short")).join(", ")}. Upload {coverage.missing.length === 1 ? "that statement" : "those statements"} if you have them.</p>}
   </>;
 }
 
@@ -129,13 +129,13 @@ export function ConnectedAccounts({ connections, fx, statements, balances }: {
                   {connection?.lastSyncedAt && <> · Updated {timeAgo(connection.lastSyncedAt, now)}</>}
                 </p>
                 {(total.missingFx.length > 0 || total.missingPrices.length > 0) && (
-                  <p className="text-sm text-warning">Partial total: some holdings have no price or exchange rate.</p>
+                  <p className="text-sm text-warning-text">Partial total: some holdings have no price or exchange rate.</p>
                 )}
               </> : <p className="text-sm text-muted-foreground">{meta.description} Connect once to start syncing.</p>}
               {attention && snapshot && <p className="text-xs text-muted-foreground">Value and holdings are from that update, at that day&apos;s prices.</p>}
               {connection?.error && connection.lastAttemptAt && <p className="font-mono text-xs text-muted-foreground">Last attempt {timeAgo(connection.lastAttemptAt, now)}</p>}
               {connection?.error && <p role="status" className="text-sm text-destructive">{plainSyncError(meta.name, connection.error)}</p>}
-              {connection?.historyError && <p role="status" className="text-sm text-warning">History: {plainSyncError(meta.name, connection.historyError)}</p>}
+              {connection?.historyError && <p role="status" className="text-sm text-warning-text">History: {plainSyncError(meta.name, connection.historyError)}</p>}
               <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
                 {connection ? <>
                   {connection.error && needsNewCredentials(connection.error)

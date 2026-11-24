@@ -18,6 +18,7 @@ import { AllocationChart } from "../../_components/charts";
 import { ConnectedValuationNotice } from "../../_components/connected-accounts";
 import { SyncConnectionsButton } from "../../_components/connection-controls";
 import { ConnectionStatus, HoldingsTable } from "../../_components/holdings-table";
+import { FilterLinks } from "../../_components/filter-links";
 import { NetWorthHistory } from "../../_components/net-worth-history";
 import { PortfolioAccounts, type PortfolioAccount } from "../../_components/portfolio-accounts";
 import { EmptyState, MissingFxAlert, Money, PageHeader, Panel, Pct, StatCards } from "../../_components/ui";
@@ -269,22 +270,18 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <nav aria-label="Filter by asset class" className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant={filter ? "outline" : "default"}>
-            <Link href={filterHref(null)}>All · {visible.length}</Link>
-          </Button>
-          {classes.map((c) => (
-            <Button key={c} asChild size="sm" variant={filter === c ? "default" : "outline"}>
-              <Link href={filterHref(c)}>
-                {ASSET_CLASS_META[c].plural} · {countClass(c)}
-              </Link>
-            </Button>
-          ))}
-        </nav>
+        <FilterLinks
+          label="Filter by asset class"
+          links={[
+            { key: "all", label: `All · ${visible.length}`, href: filterHref(null), active: !filter },
+            ...classes.map((c) => ({ key: c, label: `${ASSET_CLASS_META[c].plural} · ${countClass(c)}`, href: filterHref(c), active: filter === c })),
+          ]}
+        />
         <div className="flex flex-wrap items-center gap-2">
           <ConnectionStatus connections={connections} now={now} />
           {(showSmall || smallCount > 0) && (
             <Button asChild size="sm" variant={showSmall ? "default" : "outline"}>
+              {/* The label names what the link does, so its state needs no extra announcement. */}
               <Link href={filterHref(filter, !showSmall)}>{showSmall ? "Hide small" : `Show small · ${smallCount}`}</Link>
             </Button>
           )}

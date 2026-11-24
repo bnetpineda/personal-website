@@ -30,6 +30,8 @@
   --success: #08783b;
   --warning: #f5b700;
   --warning-foreground: #15140f;
+  /* Amber as text or an icon on paper: --warning is a fill (1.7:1 as text in light mode); this reads at 5:1. */
+  --warning-text: #8a5a00;
   --border: var(--ink);
   --input: var(--ink);
   --ring: var(--ink);
@@ -55,6 +57,7 @@
 .dark {
   --muted: color-mix(in srgb, var(--ink) 10%, var(--paper));
   --success: #3ddc84;
+  --warning-text: #f5b700;
   --overlay: rgb(0 0 0 / 0.7);
 }
 
@@ -77,6 +80,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-text: var(--warning-text);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

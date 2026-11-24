@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { FormState } from "@/lib/finance/form-state";
+import { dayLabel, dayRangeLabel } from "@/lib/finance/dates";
 import { configureInvestmentHistory, continueInvestmentHistory, importInvestmentReport, prepareHoldingCosts, previewInvestmentReport, setHistoryEnabled, type HistoryPreview } from "../_actions/history";
 import { FormField, FormFooter, FormSheet, notify, useFormAction } from "./form";
 import { ImportAction, NativeAmount } from "./import-controls";
@@ -38,9 +39,9 @@ export function ImportHoldingCostsButton({ disabled }: { disabled: boolean }) {
         }
         if (stopped.current) break;
       }
-      setStatus(stopped.current ? "Stopped. Saved progress is ready to resume in Investment history." :
-        `Spot cost import finished.${failed ? ` ${failed} streams need attention in Investment history.` : ""}${setup.skipped?.length ? ` Not imported automatically: ${setup.skipped.join(", ")}. Add their pairs in Investment history.` : ""} Add any other pairs you traded there too.`);
-    } catch { setStatus("Import interrupted. Resume in Investment history; saved trades are kept."); }
+      setStatus(stopped.current ? "Stopped. Saved progress is ready to resume on History." :
+        `Spot cost import finished.${failed ? ` ${failed} streams need attention on History.` : ""}${setup.skipped?.length ? ` Not imported automatically: ${setup.skipped.join(", ")}. Add their pairs on History.` : ""} Add any other pairs you traded there too.`);
+    } catch { setStatus("Import interrupted. Resume on History; saved trades are kept."); }
     finally { setRunning(false); }
   };
   return <div className="flex flex-col gap-2"><div className="flex flex-wrap gap-2">
@@ -51,9 +52,9 @@ export function ImportHoldingCostsButton({ disabled }: { disabled: boolean }) {
 function ConfigureForm({ yesterday }: { yesterday: string }) {
   const { state, pending, onSubmit, formKey } = useFormAction(configureInvestmentHistory);
   return <form key={formKey} onSubmit={onSubmit} className="flex flex-col gap-6">
-    <FormField id="history-from" label="Earn and transfers: start date" description={`Choose your first investment date, from July 14, 2017 through ${yesterday}.`}><DatePicker id="history-from" name="from" today={yesterday} disabled={pending} /></FormField>
+    <FormField id="history-from" label="Earn and transfers: start date" description={`Choose your first investment date, from July 14, 2017 through ${dayLabel(yesterday)}.`}><DatePicker id="history-from" name="from" today={yesterday} disabled={pending} /></FormField>
     <FormField id="history-pairs" label="Spot trading pairs" description="Up to 20 pairs, separated by commas. Include pairs you no longer hold. Leave empty to import Earn and transfers only."><Input id="history-pairs" name="pairs" placeholder="BTCUSDT, ETHUSDT, SOLUSDT" maxLength={600} disabled={pending} /></FormField>
-    <p className="text-sm text-muted-foreground">Each pair starts at its earliest available trade and keeps syncing new fills. Earn and completed crypto transfers import through {yesterday} (UTC), in 30-day batches. Progress survives closing this page. Provider retention limits, delisted pairs, Convert, fiat/P2P and other products can leave gaps.</p>
+    <p className="text-sm text-muted-foreground">Each pair starts at its earliest available trade and keeps syncing new fills. Earn and completed crypto transfers import through {dayLabel(yesterday)} (UTC), in 30-day batches. Progress survives closing this page. Provider retention limits, delisted pairs, Convert, fiat/P2P and other products can leave gaps.</p>
     <FormFooter state={state} pending={pending}>Save history streams</FormFooter>
   </form>;
 }
@@ -107,12 +108,12 @@ function ReportForm() {
     <FormField id="investment-report" label="Activity Flex XML"><Input id="investment-report" name="file" type="file" accept=".xml,text/xml,application/xml" required disabled={pending} /></FormField>
     {preview?.ok && <>
       <Alert variant={preview.conflicts ? "destructive" : "default"}><AlertTitle>History preview</AlertTitle><AlertDescription>
-        {preview.coverage?.from} through {preview.coverage?.to} · {preview.accounts?.length} account(s) · {preview.total} entries · {preview.duplicates} already imported{preview.navDays ? ` · ${preview.navDays} days of NAV` : ""}.
+        {preview.coverage ? `${dayRangeLabel(preview.coverage.from, preview.coverage.to)} · ` : ""}{preview.accounts?.length} account(s) · {preview.total} entries · {preview.duplicates} already imported{preview.navDays ? ` · ${preview.navDays} days of NAV` : ""}.
         {preview.conflicts ? ` ${preview.conflicts} changed records must be checked before importing.` : " Old and overlapping reports can be imported safely."}
       </AlertDescription></Alert>
       <Table><TableHeader><TableRow><TableHead>Activity</TableHead><TableHead>Amount</TableHead></TableRow></TableHeader><TableBody>
-        {preview.entries?.map((e) => <TableRow key={`${e.accountKey}:${e.externalId}`}><TableCell>{e.occurredOn}<br />{e.description}</TableCell><TableCell><NativeAmount value={e.amount} currency={e.currency} /></TableCell></TableRow>)}
-      </TableBody></Table><p className="text-xs text-muted-foreground">Preview shows the first 10 entries. Imported report ranges are recorded in Investment history.</p>
+        {preview.entries?.map((e) => <TableRow key={`${e.accountKey}:${e.externalId}`}><TableCell>{dayRangeLabel(e.occurredOn, e.occurredOn)}<br />{e.description}</TableCell><TableCell><NativeAmount value={e.amount} currency={e.currency} /></TableCell></TableRow>)}
+      </TableBody></Table><p className="text-xs text-muted-foreground">Preview shows the first 10 entries. Imported report ranges are recorded on History.</p>
       <Button type="button" disabled={pending || Boolean(preview.conflicts)} onClick={() => run(true)}>Import full report</Button>
     </>}
     {(result?.message || preview?.message) && <p role="status" className="text-sm">{result?.message ?? preview?.message}</p>}

@@ -208,7 +208,7 @@ function AlertRow({ group: g }: { group: AlertGroup }) {
   return (
     <Item size="xs" variant="interactive">
       <ItemMedia>
-        <Icon aria-hidden className={cn("size-4", urgent ? "text-destructive" : "text-warning")} />
+        <Icon aria-hidden className={cn("size-4", urgent ? "text-destructive" : "text-warning-text")} />
       </ItemMedia>
       <ItemContent>
         <ItemTitle>
@@ -295,7 +295,7 @@ export function NeedsYou({ defaultOpen, onClosed, ...props }: InboxProps & { def
                 {missingFx.length > 0 && (
                   <Item size="xs">
                     <ItemMedia>
-                      <TriangleAlert aria-hidden className="size-4 text-warning" />
+                      <TriangleAlert aria-hidden className="size-4 text-warning-text" />
                     </ItemMedia>
                     <ItemContent>
                       <ItemTitle>Missing exchange rates</ItemTitle>
@@ -382,7 +382,7 @@ export function AccountsPanel({ rows, className }: { rows: AccountRow[]; classNa
                   <Link href={row.href} className="outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring">
                     {row.name}
                   </Link>
-                  {row.attention && <TriangleAlert aria-label="Needs attention" className="size-3 text-warning" />}
+                  {row.attention && <TriangleAlert aria-label="Needs attention" className="size-3 text-warning-text" />}
                   {!row.inNetWorth && <span className="font-normal text-muted-foreground text-xs" title="Not counted in net worth">Excluded</span>}
                 </ItemTitle>
                 {/* Two lines, so a statement's date isn't cut off beside a long balance. */}
