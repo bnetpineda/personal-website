@@ -13,6 +13,7 @@ import type { EntrySuggestion } from "@/lib/dal";
 import { CURRENCIES, type CashFlowKind } from "@/lib/finance/constants";
 import { addDays, isMonth, monthLabel, todayManila } from "@/lib/finance/dates";
 import { deleteCashFlow, saveCashFlow } from "../_actions/cash-flows";
+import { carryOver, type CarriedEntry } from "./entry-carry";
 import { FormField, FormFooter, useFormAction } from "./form";
 
 export interface FormCategory {
@@ -61,6 +62,15 @@ export function CashFlowForm({ kind, categories, accounts, suggestions = [], def
   const { state, pending, onSubmit, formKey, error } = useFormAction(saveCashFlow, {
     undo: (s) => (!entry && !recurring && s.id ? () => deleteCashFlow(s.id!) : undefined),
   });
+  // "Add another" starts the next entry with the last one's date, currency, category and account
+  // (five receipts from last Saturday shouldn't mean picking the date five times). Only the amount
+  // and description start blank. It only shows once the save succeeded and the fields remount.
+  const [carried, setCarried] = useState<CarriedEntry | null>(null);
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    const stay = (event.nativeEvent as SubmitEvent).submitter?.hasAttribute("data-stay");
+    setCarried(stay ? carryOver(new FormData(event.currentTarget)) : null);
+    onSubmit(event);
+  };
   return (
     <CashFlowFields
       key={formKey}
@@ -68,12 +78,12 @@ export function CashFlowForm({ kind, categories, accounts, suggestions = [], def
       categories={categories}
       accounts={accounts}
       suggestions={suggestions}
-      defaults={defaults}
+      defaults={carried ? { ...defaults, ...carried } : defaults}
       entry={entry}
       recurring={recurring}
       autoFocus={autoFocus}
       viewedMonth={viewedMonth}
-      onSubmit={onSubmit}
+      onSubmit={submit}
       footer={
         <FormFooter
           state={state}

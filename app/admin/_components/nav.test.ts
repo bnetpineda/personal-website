@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dashboardCategoryFilter, dashboardHref, dashboardMonthHref, isNavActive, openingMonth } from "./nav";
+import { dashboardCategoryFilter, dashboardHref, dashboardMonthHref, isNavActive, nextMonthWithin, openingMonth } from "./nav";
 
 describe("dashboard navigation", () => {
   test("month navigation exits all-time search without dropping the shared filters", () => {
@@ -30,13 +30,24 @@ describe("dashboard navigation", () => {
     expect(openingMonth([...both("2026-10"), ...both("2026-12")], "2026-11")).toBe("2026-10");
   });
 
-  test("Earnings, History and Goals count as Portfolio; only the Overview matches exactly", () => {
+  test("Earnings, History and Goals count as Portfolio; Categories counts as the Overview", () => {
     expect(isNavActive("/admin/holdings", "/admin/earnings")).toBe(true);
     expect(isNavActive("/admin/holdings", "/admin/history")).toBe(true);
     expect(isNavActive("/admin/holdings", "/admin/goals")).toBe(true);
-    expect(isNavActive("/admin", "/admin/categories")).toBe(false);
+    // Categories is opened from the Overview, so the Overview stays lit there (but isn't "the page").
+    expect(isNavActive("/admin", "/admin/categories")).toBe(true);
+    expect(isNavActive("/admin", "/admin/categories", { exact: true })).toBe(false);
+    expect(isNavActive("/admin/connections", "/admin/categories")).toBe(false);
     expect(isNavActive("/admin", "/admin")).toBe(true);
     expect(isNavActive("/admin/recurring", "/admin/holdings")).toBe(false);
+  });
+
+  test("the next-month arrow stops at this month", () => {
+    expect(nextMonthWithin("2026-10", "2026-11")).toBe("2026-11");
+    expect(nextMonthWithin("2025-12", "2026-11")).toBe("2026-01");
+    expect(nextMonthWithin("2026-11", "2026-11")).toBeNull();
+    // A future month opened from an old link still can't go further out.
+    expect(nextMonthWithin("2026-12", "2026-11")).toBeNull();
   });
 
   test("a category filter toggles without touching the type filter, so clearing it restores what was on", () => {

@@ -97,6 +97,14 @@ function Rows({ rows, active, onPick }: { rows: BreakdownItem[]; active: number 
                     <>
                       {" / "}
                       <Money value={budget} />
+                      {/* The bar's color isn't the only sign: near or over budget is said in words too. */}
+                      {ratio != null && ratio > 1 && <span className="text-destructive"> · Over</span>}
+                      {ratio != null && ratio >= 0.85 && ratio <= 1 && (
+                        <span className="text-warning-text">
+                          {" · "}
+                          <Pct value={ratio} /> used
+                        </span>
+                      )}
                     </>
                   ) : total > 0 && row.value != null ? (
                     <>

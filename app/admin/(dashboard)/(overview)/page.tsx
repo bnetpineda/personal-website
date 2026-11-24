@@ -284,9 +284,15 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const categoriesAction = (
     <>
       {budgetsSheet}
+      {/* Phones have no hover for the tooltip, so the link says its name there. */}
+      <Button asChild variant="ghost" size="sm" className="sm:hidden">
+        <Link href="/admin/categories">
+          <Tags /> Categories
+        </Link>
+      </Button>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button asChild variant="ghost" size="icon-sm">
+          <Button asChild variant="ghost" size="icon-sm" className="hidden sm:inline-flex">
             <Link href="/admin/categories" aria-label="Manage categories">
               <Tags />
             </Link>

@@ -31,7 +31,7 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { addMonths, currentMonth, isMonth, monthLabel } from "@/lib/finance/dates";
 import { syncConnections } from "../_actions/connections";
 import { notify } from "./form";
-import { dashboardHref } from "./nav";
+import { dashboardHref, nextMonthWithin } from "./nav";
 
 const PAGES = [
   { href: "/admin", label: "Overview", icon: House },
@@ -157,7 +157,8 @@ export function CommandMenu({
               <ChevronLeft />
               {monthLabel(addMonths(month, -1))}
             </CommandItem>
-            {addMonths(month, 1) !== current && (
+            {/* Not into the future, and not this month: that has its own item below. */}
+            {nextMonthWithin(month, current) != null && addMonths(month, 1) !== current && (
               <CommandItem value={`next month ${monthLabel(addMonths(month, 1))}`} onSelect={() => run(() => goToMonth(addMonths(month, 1)), true)}>
                 <ChevronRight />
                 {monthLabel(addMonths(month, 1))}

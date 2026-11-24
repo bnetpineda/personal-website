@@ -30,7 +30,9 @@ function RefreshButton({ label }: { label: string }) {
       variant="ghost"
       size="sm"
       disabled={pending}
-      aria-label={label}
+      // The name follows the visible text, so "Thinking…" is announced too.
+      aria-label={pending ? "Thinking…" : label}
+      aria-busy={pending}
       onClick={() => startTransition(async () => {
         try {
           notify(await refreshAiSummary());

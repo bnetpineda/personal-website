@@ -20,13 +20,18 @@ const SHOWN = 6;
  * payment, saves a rule for the next import, and becomes an example the model learns from.
  */
 export function TeachList({ groups, categories }: { groups: TeachGroup[]; categories: Record<CashFlowKind, FormCategory[]> }) {
+  const [expanded, setExpanded] = useState(false);
   const more = groups.length - SHOWN;
   return (
     <>
       <ItemGroup>
-        {groups.slice(0, SHOWN).map((group) => <TeachRow key={group.key} group={group} categories={categories[group.kind]} />)}
+        {(expanded ? groups : groups.slice(0, SHOWN)).map((group) => <TeachRow key={group.key} group={group} categories={categories[group.kind]} />)}
       </ItemGroup>
-      {more > 0 && <p className="mt-2 text-sm text-muted-foreground">{more} more after these.</p>}
+      {more > 0 && (
+        <Button variant="subtle" size="xs" className="mt-2" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show fewer" : `Show ${more} more`}
+        </Button>
+      )}
     </>
   );
 }
@@ -54,7 +59,7 @@ function TeachRow({ group, categories }: { group: TeachGroup; categories: FormCa
           <SelectTrigger size="sm" aria-label={`Category for ${group.payee}`}><SelectValue placeholder="Category" /></SelectTrigger>
           <SelectContent>{options.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
-        <Button size="sm" variant="outline" disabled={!choice || pending} onClick={save}>{pending && <Spinner />}Save</Button>
+        <Button size="sm" variant="outline" disabled={!choice || pending} onClick={save} aria-label={`Save category for ${group.payee}`}>{pending && <Spinner />}Save</Button>
       </ItemActions>
     </Item>
   );

@@ -20,14 +20,29 @@ export const PORTFOLIO_SECTIONS = [
   { href: "/admin/goals", label: "Goals" },
 ] as const;
 
-/** Earnings, History and Goals are part of Portfolio; only the Overview needs an exact match. */
-export function isNavActive(href: (typeof NAV_DESTINATIONS)[number]["href"], pathname: string) {
-  if (href === "/admin") return pathname === "/admin";
+/**
+ * Earnings, History and Goals are part of Portfolio; Categories is opened from the Overview, so it
+ * lights the Overview. `exact` asks whether the destination is the page itself (aria-current="page").
+ */
+export function isNavActive(href: (typeof NAV_DESTINATIONS)[number]["href"], pathname: string, { exact = false } = {}) {
+  if (exact) return pathname === href;
+  if (href === "/admin") return pathname === "/admin" || pathname === "/admin/categories";
   if (href === "/admin/holdings") return PORTFOLIO_SECTIONS.some((section) => section.href === pathname);
   return pathname === href;
 }
 
-export type DashboardParams = { kind?: string | null; month?: string | null; category?: number | string | null; q?: string | null; add?: string | null };
+/**
+ * The month after `month`, or null when that would be after this month: nothing is recorded in
+ * the future, so stepping there only shows an empty month (the month grid stops at this month too).
+ */
+export function nextMonthWithin(month: string, current: string): string | null {
+  if (month >= current) return null;
+  const [y, m] = month.split("-").map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+  return next <= current ? next : null;
+}
+
+export type DashboardParams ={ kind?: string | null; month?: string | null; category?: number | string | null; q?: string | null; add?: string | null };
 
 /**
  * Choosing a month leaves all-time search, but keeps the selected type and category. The month stays

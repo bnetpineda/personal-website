@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleUserRound, Download, House, Landmark, LogOut, MonitorSmartphone, Moon, MoreHorizontal, Repeat, Sun, Upload, Wallet, type LucideIcon } from "lucide-react";
+import { CircleUserRound, Download, House, Landmark, LogOut, MonitorSmartphone, Moon, MoreHorizontal, Repeat, Sun, Tags, Upload, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -32,7 +32,8 @@ function NavLinks() {
       <Link
         key={href}
         href={href}
-        aria-current={active ? "page" : undefined}
+        // "page" on the destination itself; "true" on a page reached from it (Portfolio's views, Categories).
+        aria-current={active ? (isNavActive(href, pathname, { exact: true }) ? "page" : "true") : undefined}
         className={cn(
           "flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-md border-2 px-0.5 py-1.5 font-mono text-xs font-bold tracking-tight outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:flex-none",
           active ? "border-border bg-primary text-primary-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -154,6 +155,12 @@ export function MoreMenu() {
         align="end"
         before={
           <>
+            {/* Phones have no rail and no keyboard for ⌘K, so Categories gets a labelled way in here too. */}
+            <DropdownMenuItem asChild>
+              <Link href="/admin/categories">
+                <Tags /> Categories and rules
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
               {resolvedTheme === "dark" ? <Sun /> : <Moon />} Use {resolvedTheme === "dark" ? "light" : "dark"} theme
             </DropdownMenuItem>

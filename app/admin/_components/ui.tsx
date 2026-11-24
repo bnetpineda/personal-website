@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { addMonths, monthLabel } from "@/lib/finance/dates";
 import { formatMoney, formatPct } from "@/lib/finance/format";
 import { LinkIcon } from "./link-icon";
+import { nextMonthWithin } from "./nav";
 import { Masked } from "./privacy";
 
 /* Admin building blocks composed from components/ui. Server-safe (no hooks). */
@@ -225,7 +226,8 @@ const PICKER_YEARS = 3;
  * the link for a month (so other filters are kept); `recorded` marks the months that have data, so
  * the empty ones can be skipped at a glance.
  */
-export function MonthPicker({ month, current, href, recorded, compact = false }: { month: string; current: string; href: (month: string) => string; recorded?: string[]; compact?: boolean }) {
+export function MonthPicker({ month, current, href, recorded }: { month: string; current: string; href: (month: string) => string; recorded?: string[] }) {
+  const next = nextMonthWithin(month, current);
   const thisYear = Number(current.slice(0, 4));
   const years = Array.from({ length: PICKER_YEARS }, (_, i) => thisYear - i).map((year) => ({
     year,
@@ -278,16 +280,24 @@ export function MonthPicker({ month, current, href, recorded, compact = false }:
             {recorded && <p className="mt-2 text-xs text-muted-foreground">Outlined months have records.</p>}
           </PopoverContent>
         </Popover>
-        <Button asChild variant="outline" size="icon-sm">
-          <Link href={href(addMonths(month, 1))} aria-label="Next month">
-            <LinkIcon>
-              <ChevronRight />
-            </LinkIcon>
-          </Link>
-        </Button>
+        {next ? (
+          <Button asChild variant="outline" size="icon-sm">
+            <Link href={href(next)} aria-label="Next month">
+              <LinkIcon>
+                <ChevronRight />
+              </LinkIcon>
+            </Link>
+          </Button>
+        ) : (
+          // Nothing is recorded in the future, so the arrow stops at this month.
+          <Button variant="outline" size="icon-sm" disabled aria-label="Next month (this is the latest month)">
+            <ChevronRight />
+          </Button>
+        )}
       </ButtonGroup>
+      {/* On phones too: it's the one-tap way back after browsing old months. */}
       {month !== current && (
-        <Button asChild variant="outline" size="sm" className={compact ? "hidden sm:inline-flex" : undefined}>
+        <Button asChild variant="outline" size="sm">
           <Link href={href(current)}>Go to {monthLabel(current, "short")}</Link>
         </Button>
       )}
