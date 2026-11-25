@@ -25,7 +25,7 @@ dbTest("auto-sorting a payee moves its unsure entries, and Undo puts back everyt
     await db.insert(cashFlows).values(ids.map((id, i) => ({ id, kind: "expense" as const, occurredOn: `2001-02-0${i + 1}`, amount: 100 + i, currency: "PHP", amountPhp: 100 + i,
       categoryId: other.id, description: `Card payment: ${payee}`, notes: "Categorized by AI: unsure" })));
     await db.insert(importedEntries).values(ids.map((id, i) => ({ id, provider: "wise" as const, accountKey: scope, externalId: `T-${i}`, occurredOn: `2001-02-0${i + 1}`,
-      kind: "payment" as const, amount: String(-(100 + i)), currency: "PHP", description: `Card payment: ${payee}`, status: "posted" as const,
+      kind: "payment" as const, amount: -(100 + i), currency: "PHP", description: `Card payment: ${payee}`, status: "posted" as const,
       categoryId: other.id, categorizedBy: "ai" as const, aiReason: reason })));
 
     const taught = await teachPayeeNow(payee, "expense", target.id, { auto: true });
