@@ -48,3 +48,32 @@ export function within<T>(work: Promise<T>, ms: number, fallback: () => T): Prom
   const late = new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback()), Math.max(0, ms)); });
   return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
+
+/** A step's outcome as saved: status and time only. Values and error text can carry amounts or prompts. */
+export type DailyStepRecord = { status: "ok" | "failed" | "skipped"; ms?: number; error?: string };
+
+export function stepRecords(outcomes: Record<string, StepOutcome>): Record<string, DailyStepRecord> {
+  return Object.fromEntries(Object.entries(outcomes).map(([name, o]) => [name,
+    o.status === "skipped" ? { status: "skipped" } : o.status === "failed" ? { status: "failed", ms: o.ms, error: o.error } : { status: "ok", ms: o.ms }]));
+}
+
+/** What each step is for, in the words of the app. */
+export const DAILY_STEP_LABELS: Record<string, string> = {
+  rates: "exchange rates", recurring: "recurring entries", imports: "category rules", logins: "sign-in cleanup",
+  resealed: "credential re-encryption", sync: "account sync", snapshot: "today's net-worth point", portfolio: "account values",
+  ai: "AI categorizing", feedback: "AI feedback",
+};
+
+export interface DailyRun { id: string; startedAt: Date; steps: Record<string, DailyStepRecord> }
+
+/**
+ * What needs saying about the last daily runs (newest first): a step that failed in the latest run, or
+ * one skipped for lack of time two runs in a row (once can be a slow provider). Nothing on a clean run.
+ */
+export function dailyRunProblems(runs: DailyRun[]): { failed: string[]; skipped: string[] } | null {
+  const [latest, before] = runs;
+  if (!latest) return null;
+  const failed = Object.entries(latest.steps).filter(([, s]) => s.status === "failed").map(([name]) => name);
+  const skipped = before ? Object.entries(latest.steps).filter(([name, s]) => s.status === "skipped" && before.steps[name]?.status === "skipped").map(([name]) => name) : [];
+  return failed.length || skipped.length ? { failed, skipped } : null;
+}

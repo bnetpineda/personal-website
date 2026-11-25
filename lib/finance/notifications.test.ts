@@ -57,3 +57,26 @@ test("an account's alerts group into one row; the rest stay single", () => {
   expect(account.severity).toBe("destructive");
   expect(budget).toMatchObject({ provider: null, title: "Food budget nearly used", lines: [{ label: null }] });
 });
+
+test("auto-posting bills stay quiet until they are overdue; confirm-mode bills still remind", () => {
+  const base = { connections: [], budgets: [] };
+  const bills = [
+    { id: "netflix", description: "Netflix", nextOn: "2026-09-25", autoPost: true },
+    { id: "power", description: "Meralco", nextOn: "2026-09-25", autoPost: false },
+    { id: "stuck", description: "Rent", nextOn: "2026-09-20", autoPost: true },
+  ];
+  expect(buildNotifications({ ...base, bills }, now).map((a) => a.key)).toEqual(["bill:power:2026-09-25", "bill:stuck:2026-09-20"]);
+});
+
+test("the daily job alerts on a failed step, and on a skipped one only two runs running", () => {
+  const base = { connections: [], budgets: [], bills: [] };
+  const run = (id: string, steps: Record<string, "ok" | "failed" | "skipped">) =>
+    ({ id, startedAt: now, steps: Object.fromEntries(Object.entries(steps).map(([k, status]) => [k, { status }])) });
+  expect(buildNotifications({ ...base, dailyRuns: [run("b", { rates: "ok", ai: "skipped" }), run("a", { rates: "ok", ai: "ok" })] }, now)).toEqual([]);
+  expect(buildNotifications({ ...base, dailyRuns: [] }, now)).toEqual([]);
+  const [failed] = buildNotifications({ ...base, dailyRuns: [run("b", { rates: "failed", ai: "skipped" }), run("a", { ai: "skipped" })] }, now);
+  expect(failed).toMatchObject({ key: "daily-job:b", severity: "warning", title: "This morning's daily job had 2 problems" });
+  expect(failed.detail).toStartWith("Failed: exchange rates. Ran out of time two days running: AI categorizing.");
+  const [lost] = buildNotifications({ ...base, dailyRuns: [run("c", { recurring: "failed" })] }, now);
+  expect(lost).toMatchObject({ severity: "destructive", title: "This morning's daily job had a problem" });
+});

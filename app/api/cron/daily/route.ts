@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { runDailyJob } from "@/lib/finance/daily-job";
+import { recordDailyRun } from "@/lib/finance/daily-runs";
 
 // Vercel Cron: post recurring entries and file imports, sync accounts, record net worth and each account's value, then categorize.
 export const maxDuration = 300;
@@ -17,6 +18,8 @@ export async function GET(request: Request) {
   if (!authorized(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const startedAt = new Date();
   const steps = await runDailyJob(maxDuration);
+  await recordDailyRun(startedAt, steps);
   return Response.json({ at: new Date().toISOString(), steps }, { headers: { "Cache-Control": "private, no-store" } });
 }

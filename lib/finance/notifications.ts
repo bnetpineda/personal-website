@@ -2,6 +2,7 @@ import type { ConnectionView, Provider } from "./connections/types";
 import { isConnectionStale, needsNewCredentials, plainSyncError, PROVIDER_META, untriedAccounts } from "./connections/types";
 import { addMonths, dayLabel, daysBetween, fullDayLabel, monthLabel, timeAgo, todayManila } from "./dates";
 import type { StatementCoverage, StatementProvider } from "./imports/coverage";
+import { DAILY_STEP_LABELS, dailyRunProblems, type DailyRun } from "./daily-steps";
 import { categorySpikes, debtReminders, doubleCharges, newPayees, priceRises, type BankCharge, type CategorySpending, type DebtDue, type RecentExpense, type Subscription } from "./anomalies";
 
 export type NotificationType = "sync" | "history" | "expiry" | "budget" | "bill" | "statement" | "ai" | "debt" | "spending";
@@ -24,7 +25,10 @@ export interface FinanceNotification {
 export function buildNotifications(input: {
   connections: { provider: ConnectionView["provider"]; enabled: boolean; error: string | null; lastSyncedAt: Date | null; lastAttemptAt?: Date | null; historyError: string | null; historySyncedAt: Date | null; credentialsExpireOn: string | null; snapshot: { asOf: string } | null }[];
   budgets: { id: number; name: string; budget: number; spent: number }[];
-  bills: { id: string; description: string; nextOn: string | null }[];
+  /** `autoPost` schedules post themselves, so they only need a word once they are overdue (posting failed). */
+  bills: { id: string; description: string; nextOn: string | null; autoPost?: boolean }[];
+  /** The last two daily cron runs, newest first. */
+  dailyRuns?: DailyRun[];
   /** Imported entries still uncategorized after a day, while AI is configured. Background runs fail quietly. */
   aiBacklog?: { waiting: number; oldest: string } | null;
   /** What each statement-only bank (Wise, MariBank, GoTyme) has imported: they update only when the person uploads. */
@@ -42,6 +46,16 @@ export function buildNotifications(input: {
     alerts.push({ key: `daily-sync:${untried.map((c) => (c.lastAttemptAt ?? c.lastSyncedAt)!.toISOString()).sort().at(-1)}`, type: "sync", title, label: title,
       detail: `Nothing has tried to update ${untried.map((c) => PROVIDER_META[c.provider].name).join(" or ")} in over 2 days, so these will keep going out of date. Sync by hand for now; the daily job needs checking in Vercel.`,
       href: "/admin/connections", severity: "warning" });
+  }
+  const problems = dailyRunProblems(input.dailyRuns ?? []);
+  if (problems) {
+    const steps = (names: string[]) => names.map((n) => DAILY_STEP_LABELS[n] ?? n).join(", ");
+    const count = problems.failed.length + problems.skipped.length;
+    const title = `This morning's daily job had ${count === 1 ? "a problem" : `${count} problems`}`;
+    const parts = [problems.failed.length ? `Failed: ${steps(problems.failed)}.` : "", problems.skipped.length ? `Ran out of time two days running: ${steps(problems.skipped)}.` : ""];
+    alerts.push({ key: `daily-job:${input.dailyRuns![0].id}`, type: "sync", title, label: title,
+      detail: `${parts.filter(Boolean).join(" ")} Everything else ran. It tries again tomorrow at 6 AM; if this keeps happening, check the cron logs in Vercel.`,
+      href: "/admin/connections", severity: problems.failed.includes("recurring") || problems.failed.includes("snapshot") ? "destructive" : "warning" });
   }
   for (const c of input.connections) {
     const name = PROVIDER_META[c.provider].name;
@@ -64,7 +78,7 @@ export function buildNotifications(input: {
     alerts.push({ key: `budget:${month}:${b.id}:${exceeded ? "100" : "85"}`, type: "budget", title, label: title,
       detail: `Posted expenses have reached ${exceeded ? "100%" : "85%"} of this month's budget. Pending imports are excluded.`, href: `/admin?kind=expense&month=${month}&category=${b.id}`, severity: exceeded ? "destructive" : "warning" });
   }
-  for (const b of input.bills) if (b.nextOn && daysBetween(today, b.nextOn) <= 3) {
+  for (const b of input.bills) if (b.nextOn && daysBetween(today, b.nextOn) <= 3 && !(b.autoPost && b.nextOn >= today)) {
     const title = `${b.description} ${b.nextOn < today ? "is overdue" : "is coming up"}`;
     alerts.push({ key: `bill:${b.id}:${b.nextOn}`, type: "bill", title, label: title, detail: `Scheduled for ${dayLabel(b.nextOn)}.`, href: "/admin/recurring", severity: "warning" });
   }

@@ -148,6 +148,13 @@
       "when": 1795561026045,
       "tag": "0020_dated_fx_twins_handled",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795612332291,
+      "tag": "0021_daily_job_runs",
+      "breakpoints": true
     }
   ]
 }

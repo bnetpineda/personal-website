@@ -11,6 +11,7 @@ import { env } from "@/lib/env";
 import { currentMonth, monthRange } from "./dates";
 import { buildNotifications } from "./notifications";
 import { loadDebtsDue, loadSpendingSignals } from "./anomalies-dal";
+import { loadDailyRuns } from "./daily-runs";
 
 /** The layout's badge, the Overview and Needs you all ask in one request; cache() runs the queries once. */
 export const getNotifications = cache(async function getNotifications() {
@@ -31,7 +32,7 @@ export const getNotifications = cache(async function getNotifications() {
       // Every expense category: a month's own budget can apply where there's no default.
       .where(and(eq(categories.archived, false), eq(categories.kind, "expense")))
       .groupBy(categories.id),
-    db.select({ id: recurringCashFlows.id, description: recurringCashFlows.description, nextOn: recurringCashFlows.nextOn })
+    db.select({ id: recurringCashFlows.id, description: recurringCashFlows.description, nextOn: recurringCashFlows.nextOn, autoPost: recurringCashFlows.autoPost })
       .from(recurringCashFlows).where(and(eq(recurringCashFlows.paused, false), eq(recurringCashFlows.kind, "expense"))),
     db.select({ key: notificationDismissals.key }).from(notificationDismissals),
     env.aiGatewayApiKey() ? db.select({ waiting: sql<number>`count(*)`.mapWith(Number), oldest: min(e.occurredOn) }).from(e)
@@ -45,10 +46,11 @@ export const getNotifications = cache(async function getNotifications() {
   const budgeted = budgets.map((b) => ({ ...b, budget: monthBudget({ id: b.id, monthlyBudget: b.budget }, own) ?? 0 })).filter((b) => b.budget > 0);
   const withBudget = new Set(budgeted.map((b) => b.id));
   // Money alerts are extras: a failed read leaves them out rather than taking the account alerts with it.
-  const [debts, spending] = await Promise.all([
+  const [debts, spending, dailyRuns] = await Promise.all([
     loadDebtsDue().catch(() => []),
     loadSpendingSignals(month, budgets.map((b) => ({ id: b.id, name: b.name, spent: b.spent, budgeted: withBudget.has(b.id) }))).catch(() => undefined),
+    loadDailyRuns().catch(() => []),
   ]);
-  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgeted, bills, aiBacklog, statements: statementCoverage(months), debts, spending })
+  return buildNotifications({ connections: connections.map(({ asOf, ...connection }) => ({ ...connection, snapshot: asOf ? { asOf } : null })), budgets: budgeted, bills, aiBacklog, statements: statementCoverage(months), debts, spending, dailyRuns })
     .map((alert) => ({ ...alert, dismissed: keys.has(alert.key) }));
 });

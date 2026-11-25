@@ -1,16 +1,7 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useTransition, type ReactNode } from "react";
 import { CheckCheck, Pencil } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { FormState } from "@/lib/finance/form-state";
@@ -81,37 +72,14 @@ export function DueActions({
   );
 }
 
-/** Posts every due occurrence at its saved amount, after saying how many. */
+/** Posts every due occurrence at its saved amount in one tap; the toast that follows undoes all of them. */
 export function PostAllButton({ occurrences }: { occurrences: Occurrence[] }) {
   const { pending, run } = useRun();
-  const [confirming, setConfirming] = useState(false);
   const count = occurrences.length;
   return (
-    <>
-      <Button variant="outline" size="sm" disabled={pending} onClick={() => setConfirming(true)}>
-        {pending ? <Spinner /> : <CheckCheck />} Post all {count}
-      </Button>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Post all {count} at their saved amounts?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Each becomes an entry on its due date. Bills whose amount changed are better adjusted one at a time. You can undo this from the message that follows.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              onClick={() => {
-                setConfirming(false);
-                run(() => postRecurring(occurrences), () => undoRecurring({ undone: occurrences, posted: true }));
-              }}
-            >
-              Post {count}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <Button variant="outline" size="sm" disabled={pending}
+      onClick={() => run(() => postRecurring(occurrences), () => undoRecurring({ undone: occurrences, posted: true }))}>
+      {pending ? <Spinner /> : <CheckCheck />} Post all {count}
+    </Button>
   );
 }

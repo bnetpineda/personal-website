@@ -3,6 +3,7 @@ import type { ConnectionSnapshot, Provider, SyncProvider } from "../finance/conn
 import type { AiSuggestion, CategorizedBy, EntryKind, EntryStatus, HistoryCoverage, SpotTrade } from "../finance/imports/types";
 import type { PortfolioSource } from "../finance/performance";
 import type { FinanceSummary } from "../finance/ai-summary";
+import type { DailyStepRecord } from "../finance/daily-steps";
 import {
   type AnyPgColumn,
   bigserial,
@@ -472,6 +473,17 @@ export const aiSummaries = pgTable("ai_summaries", {
   summary: jsonb("summary").$type<FinanceSummary>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("ai_summaries_created_at_idx").on(t.createdAt)]);
+
+/**
+ * What each daily cron run did, step by step (status and time only: values and error messages can carry
+ * amounts or prompts). Read for the "daily job" alert; runs older than 60 days are pruned by the job.
+ */
+export const dailyJobRuns = pgTable("daily_job_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }).notNull().defaultNow(),
+  steps: jsonb("steps").$type<Record<string, DailyStepRecord>>().notNull(),
+}, (t) => [index("daily_job_runs_started_at_idx").on(t.startedAt)]);
 
 /** Alert content is derived from current data; only dismissals need persistence. */
 export const notificationDismissals = pgTable("notification_dismissals", {

@@ -58,3 +58,14 @@ describe("daily job", () => {
     expect(steps.snapshot.status).toBe("ok");
   });
 });
+
+describe("daily run records", () => {
+  test("keep status and time, never values or messages", async () => {
+    const { stepRecords } = await import("./daily-steps");
+    expect(stepRecords({
+      rates: { status: "ok", ms: 12, value: { fxUpdated: 3 } },
+      ai: { status: "failed", ms: 40, error: "AbortError" },
+      feedback: { status: "skipped", reason: "out of time" },
+    })).toEqual({ rates: { status: "ok", ms: 12 }, ai: { status: "failed", ms: 40, error: "AbortError" }, feedback: { status: "skipped" } });
+  });
+});
