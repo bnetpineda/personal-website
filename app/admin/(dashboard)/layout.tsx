@@ -5,6 +5,7 @@ import { groupAlerts } from "@/lib/finance/notifications";
 import { getNotifications } from "@/lib/finance/notifications-dal";
 import { postDueRecurringQuietly } from "@/lib/finance/service";
 import { PRIVACY_COOKIE } from "../_components/nav";
+import { StatementDropZone } from "../_components/import-controls";
 import { Shell } from "../_components/shell";
 
 export default async function DashboardLayout({
@@ -23,5 +24,9 @@ export default async function DashboardLayout({
   ]);
   const alerts = groupAlerts(notifications.filter((alert) => !alert.dismissed)).length;
 
-  return <Shell initialPrivate={cookieStore.get(PRIVACY_COOKIE)?.value === "1"} alerts={alerts}>{children}</Shell>;
+  return <Shell initialPrivate={cookieStore.get(PRIVACY_COOKIE)?.value === "1"} alerts={alerts}>
+    {children}
+    {/* Statements dropped on any admin page import from whichever bank they are. */}
+    <StatementDropZone />
+  </Shell>;
 }

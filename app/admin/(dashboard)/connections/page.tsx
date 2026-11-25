@@ -10,6 +10,7 @@ import { dayLabel, daysBetween, fullDayLabel, todayManila } from "@/lib/finance/
 import { env } from "@/lib/env";
 import { ConnectedAccounts } from "../../_components/connected-accounts";
 import { SyncConnectionsButton } from "../../_components/connection-controls";
+import { ImportStatementsButton } from "../../_components/import-controls";
 import type { PlannerDebt } from "../../_components/debt-planner";
 import { ManualBalances, type DebtDTO, type ManualAccountDTO } from "../../_components/manual-balances";
 import { PageHeader } from "../../_components/ui";
@@ -47,10 +48,11 @@ export default async function ConnectionsPage() {
   return <>
     <PageHeader title="Accounts">
       <Button asChild variant="outline" size="sm"><Link href="/admin/connections/activity"><ListChecks /> Bank activity</Link></Button>
+      <ImportStatementsButton />
       <SyncConnectionsButton disabled={!connections.some((c) => c.enabled)} />
     </PageHeader>
     <p className="mb-6 max-w-3xl text-sm text-muted-foreground">
-      Connected accounts are set to update every day at 6 AM Manila time. Wise, MariBank and GoTyme update when you upload a statement. Other accounts and debts keep the value you last entered.
+      Connected accounts are set to update every day at 6 AM Manila time. Wise, MariBank and GoTyme update when you upload a statement: pick or drop them anywhere, any mix, and each is matched to its bank. Other accounts and debts keep the value you last entered.
     </p>
     {untried.length > 0 && <Alert variant="warning" className="mb-6"><AlertTitle>Daily sync doesn&apos;t seem to be running</AlertTitle>
       <AlertDescription>Last tried: {untried.map((c) => `${PROVIDER_META[c.provider].name} ${dayLabel(todayManila(c.lastAttemptAt ?? c.lastSyncedAt!))}`).join(", ")}. Sync by hand for now; the daily job needs checking in Vercel.</AlertDescription></Alert>}

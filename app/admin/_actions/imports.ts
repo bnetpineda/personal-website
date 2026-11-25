@@ -9,11 +9,10 @@ import { payeeKey } from "@/lib/finance/payee";
 import { applyCategoryRules, ingestEntries, saveStatementBalances } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { actionDeadline } from "@/lib/finance/deadline";
-import { parseGoTymeStatement } from "@/lib/finance/imports/gotyme";
-import { parseMariBankStatement, type PdfPage } from "@/lib/finance/imports/maribank";
+import { parseStatementPdf, statementFileType } from "@/lib/finance/imports/detect";
 import { PdfPasswordError, pdfPages } from "@/lib/finance/imports/pdf-text";
 import type { StatementBalance } from "@/lib/finance/statement-balances";
-import { ImportError, uniqueEntries, type ImportEntry } from "@/lib/finance/imports/types";
+import { ImportError, uniqueEntries } from "@/lib/finance/imports/types";
 import { detectFeeMode, mergeWiseStatements, parseWiseStatement } from "@/lib/finance/imports/wise-csv";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
 import { refreshAdmin } from "@/lib/finance/refresh";
@@ -28,79 +27,73 @@ function message(error: unknown): FormState {
   if (error instanceof PdfPasswordError) return { ok: false, needsPassword: true, message: error.message };
   return { ok: false, message: error instanceof ImportError ? error.message : "The import could not be saved. Check the statement format and try again." };
 }
-/** One statement per currency: up to 10 files, each under 750 KB, within the 3 MB action body limit. */
-async function csvEntries(data: FormData) {
-  const files = data.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
-  if (!files.length) throw new ImportError("Choose at least one Wise CSV file.");
+/** Wise CSVs: one statement per currency, each under 750 KB. Several are merged into one set of entries and balances. */
+async function wiseEntries(files: File[], named: boolean) {
   if (files.length > 10) throw new ImportError("Import up to 10 Wise CSV files at a time.");
   if (files.some((file) => file.size > 750_000)) throw new ImportError("Each Wise CSV file must be smaller than 750 KB.");
-  if (files.reduce((sum, file) => sum + file.size, 0) > 2_500_000) throw new ImportError("The selected files are too large together. Import them in smaller groups.");
   const statements = await Promise.all(files.map(async (file) => {
     try { const text = await file.text(); return { name: file.name, ...parseWiseStatement(text, detectFeeMode(text)) }; }
-    catch (error) { throw error instanceof ImportError && files.length > 1 ? new ImportError(`${file.name}: ${error.message}`) : error; }
+    catch (error) { throw error instanceof ImportError && named ? new ImportError(`${file.name}: ${error.message}`) : error; }
   }));
-  return { ...mergeWiseStatements(statements), files: files.length };
-}
-/**
- * Every Wise CSV at once, in one step: the fee format is detected per file, then rules and AI file
- * the entries before answering. Each currency's closing balance counts as cash in net worth.
- * Re-importing is safe; entries already imported are skipped.
- */
-export async function importWiseStatements(data: FormData): Promise<FormState> {
-  const deadline = actionDeadline();
-  await requireAdmin();
-  try {
-    const { entries, files, balances, balanceWarning } = await csvEntries(data);
-    if (!entries.length) throw new ImportError("These statements have no transactions.");
-    const result = await ingestEntries(entries);
-    const updated = await saveStatementBalances(balances.map((b) => ({ provider: "wise", account: "personal", ...b })));
-    await applyCategoryRules();
-    const ai = await categorizeQuietly({ deadline });
-    refreshAdmin();
-    return { ok: true, message: `Imported ${result.inserted} new entries from ${files} ${files === 1 ? "file" : "files"}; ${result.duplicates} were already imported.${balancesNote(updated, balanceWarning)}${describeAiRun(ai)}` };
-  } catch (error) { return message(error); }
+  const merged = mergeWiseStatements(statements);
+  return { entries: merged.entries, balances: merged.balances.map((b): StatementBalance => ({ provider: "wise", account: "personal", ...b })), warning: merged.balanceWarning };
 }
 
 /**
- * Statement PDFs, several at once. Each file must add up to its own summary totals before anything
- * is saved; then rules and AI file the entries, as for Wise. One password, when given, opens every
- * locked file (a bank uses the same one for all of a person's statements); it is never kept.
+ * Opens a PDF with no password, then with each one given until one works: the person's banks each
+ * use their own, and one upload can mix them. Passwords only open the file in memory; none is kept.
  */
-async function importStatementPdfs(data: FormData, bank: string, parse: (pages: PdfPage[]) => { entries: ImportEntry[]; balances: StatementBalance[] }): Promise<FormState> {
+async function openPdf(file: File, passwords: string[]) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  try { return await pdfPages(bytes.slice()); }
+  catch (error) { if (!(error instanceof PdfPasswordError) || !passwords.length) throw error; }
+  for (const password of passwords) {
+    try { return await pdfPages(bytes.slice(), { password }); }
+    catch (error) { if (!(error instanceof PdfPasswordError)) throw error; }
+  }
+  throw new PdfPasswordError(true);
+}
+
+/**
+ * Every statement at once, from any bank: Wise CSVs and MariBank or GoTyme PDFs, mixed in one pick or
+ * drop. Each file says which bank it is from (detect.ts) and must add up to its own totals before
+ * anything is saved; then rules and AI file the entries before answering. Each closing balance counts
+ * as cash in net worth. Re-importing is safe; entries already imported are skipped.
+ */
+export async function importStatements(data: FormData): Promise<FormState> {
   const deadline = actionDeadline();
   await requireAdmin();
   try {
     const files = data.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
-    const password = data.get("password");
-    if (!files.length) throw new ImportError(`Choose at least one ${bank} statement PDF.`);
-    if (files.length > 12) throw new ImportError(`Import up to 12 ${bank} statements at a time.`);
+    const passwords = data.getAll("password").filter((p): p is string => typeof p === "string" && p.length > 0);
+    if (!files.length) throw new ImportError("Choose at least one statement: Wise CSVs, or MariBank or GoTyme PDFs.");
+    const odd = files.find((file) => !statementFileType(file.name));
+    if (odd) throw new ImportError(`${odd.name} isn't a statement. Upload Wise CSVs or MariBank and GoTyme PDFs.`);
+    if (files.length > 15) throw new ImportError("Import up to 15 statements at a time.");
     if (files.reduce((sum, file) => sum + file.size, 0) > 2_500_000) throw new ImportError("The selected files are too large together. Import them in smaller groups.");
-    if (typeof password === "string" && password.length > 128) throw new PdfPasswordError(true);
-    const statements = await Promise.all(files.map(async (file) => {
-      try { return parse(await pdfPages(new Uint8Array(await file.arrayBuffer()), { password: typeof password === "string" && password ? password : undefined })); }
-      catch (error) { throw error instanceof ImportError && !(error instanceof PdfPasswordError) && files.length > 1 ? new ImportError(`${file.name}: ${error.message}`) : error; }
-    }));
-    const entries = uniqueEntries(statements.flatMap((s) => s.entries));
-    const balances = statements.flatMap((s) => s.balances);
-    if (!entries.length && !balances.length) throw new ImportError("These statements have no transactions.");
+    if (passwords.length > 5 || passwords.some((p) => p.length > 128)) throw new PdfPasswordError(true);
+    const named = files.length > 1;
+    const csvs = files.filter((file) => statementFileType(file.name) === "csv");
+    const pdfs = files.filter((file) => statementFileType(file.name) === "pdf");
+    const [wise, statements] = await Promise.all([
+      csvs.length ? wiseEntries(csvs, named) : null,
+      Promise.all(pdfs.map(async (file) => {
+        try { return parseStatementPdf(await openPdf(file, passwords)); }
+        catch (error) { throw error instanceof ImportError && !(error instanceof PdfPasswordError) && named ? new ImportError(`${file.name}: ${error.message}`) : error; }
+      })),
+    ]);
+    const entries = uniqueEntries([...(wise?.entries ?? []), ...statements.flatMap((s) => s.entries)]);
+    const balances = [...(wise?.balances ?? []), ...statements.flatMap((s) => s.balances)];
+    if (!entries.length && !balances.length) throw new ImportError(named ? "These statements have no transactions." : "This statement has no transactions.");
     const result = entries.length ? await ingestEntries(entries) : { inserted: 0, duplicates: 0 };
     const updated = await saveStatementBalances(balances);
     await applyCategoryRules();
     const ai = await categorizeQuietly({ deadline });
     refreshAdmin();
-    const count = statements.length === 1 ? "1 statement" : `${statements.length} statements`;
-    return { ok: true, message: `Imported ${result.inserted} new entries from ${count}; ${result.duplicates} were already imported.${balancesNote(updated)}${describeAiRun(ai)}` };
+    const banks = [...new Set([...(wise ? ["Wise"] : []), ...statements.map((s) => s.bank)])].join(", ");
+    const count = files.length === 1 ? "1 file" : `${files.length} files`;
+    return { ok: true, message: `Imported ${result.inserted} new entries from ${count} (${banks}); ${result.duplicates} were already imported.${balancesNote(updated, wise?.warning)}${describeAiRun(ai)}` };
   } catch (error) { return message(error); }
-}
-
-/** MariBank monthly e-statement PDFs. */
-export async function importMariBankStatements(data: FormData): Promise<FormState> {
-  return importStatementPdfs(data, "MariBank", parseMariBankStatement);
-}
-
-/** GoTyme Bank statement PDFs, for any period requested in the app. Overlapping periods are fine. */
-export async function importGoTymeStatements(data: FormData): Promise<FormState> {
-  return importStatementPdfs(data, "GoTyme", parseGoTymeStatement);
 }
 
 // Adding and editing category rules: saveRule in ./rules.ts.
