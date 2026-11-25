@@ -17,6 +17,7 @@ const NOT_BACKED_UP: Record<string, string> = {
   ai_summaries: "regenerated from the data by the daily job",
   fx_rate_history: "cache of past exchange rates, refetched from Frankfurter",
   daily_job_runs: "operational log of the daily cron, pruned after 60 days",
+  auto_taught_payees: "undo log for payees the daily job sorted; the rules themselves are backed up",
 };
 /** Backup keys that differ from the schema export's name. */
 const KEY_TO_EXPORT: Record<string, string> = { recurring: "recurringCashFlows" };

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { closestGuess, teachGroups } from "./teach";
+import { autoTeachPicks, closestGuess, teachGroups } from "./teach";
 
 describe("teach once", () => {
   test("groups unsure payments by payee and direction, biggest first, with the model's usual guess", () => {
@@ -20,5 +20,35 @@ describe("teach once", () => {
   test("reads the closest category from the model's reason", () => {
     expect(closestGuess("Jev: Other, closest Family & Gifts (55% likely)")).toBe("Family & Gifts");
     expect(closestGuess("Jev: Other (43% likely)")).toBeNull();
+  });
+});
+
+describe("auto-sorting", () => {
+  const categories = [
+    { id: 1, name: "Subscriptions", kind: "expense" as const, archived: false },
+    { id: 2, name: "Other", kind: "expense" as const, archived: false },
+    { id: 3, name: "Old", kind: "expense" as const, archived: true },
+    { id: 4, name: "Salary", kind: "income" as const, archived: false },
+  ];
+  const unsure = (description: string, guess: string | null, amountPhp = 500, kind: "expense" | "income" = "expense") =>
+    ({ description, kind, amountPhp, occurredOn: "2026-10-01", aiReason: guess ? `Jev: Other, closest ${guess} (62% likely)` : "Jev: Other (40% likely)" });
+  const picks = (entries: ReturnType<typeof unsure>[], declined = new Set<string>()) =>
+    autoTeachPicks(teachGroups(entries), categories, declined).map((p) => `${p.group.payee} → ${p.category.name}`);
+
+  test("files a payee once the model guessed the same category three times", () => {
+    expect(picks([unsure("Netflix", "Subscriptions"), unsure("Netflix", "Subscriptions")])).toEqual([]);
+    expect(picks([unsure("Netflix", "Subscriptions"), unsure("Netflix", "Subscriptions"), unsure("Netflix", "Subscriptions")])).toEqual(["Netflix → Subscriptions"]);
+  });
+
+  test("not when its guesses disagree, a payment is large, or it is income", () => {
+    expect(picks([...Array(3)].map(() => unsure("Netflix", "Subscriptions")).concat([unsure("Netflix", null), unsure("Netflix", null)]))).toEqual([]);
+    expect(picks([unsure("Netflix", "Subscriptions"), unsure("Netflix", "Subscriptions"), unsure("Netflix", "Subscriptions", 5000)])).toEqual([]);
+    expect(picks([...Array(3)].map(() => unsure("Acme", "Salary", 500, "income")))).toEqual([]);
+  });
+
+  test("not to Other, an archived category, or a payee the person un-did", () => {
+    expect(picks([...Array(3)].map(() => unsure("Shop", "Other")))).toEqual([]);
+    expect(picks([...Array(3)].map(() => unsure("Shop", "Old")))).toEqual([]);
+    expect(picks([...Array(3)].map(() => unsure("Netflix", "Subscriptions")), new Set(["netflix|expense"]))).toEqual([]);
   });
 });

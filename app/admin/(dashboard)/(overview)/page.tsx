@@ -28,7 +28,7 @@ import {
   getSnapshotsSince,
   getStatementBalances,
   getStatementImports,
-  getTeachGroups,
+  getAutoTaught, getTeachGroups,
 } from "@/lib/dal";
 import { computeNetWorth, fxToPhp, holdingMetrics, monthBudget, monthlySeries, savingsRate } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
@@ -118,6 +118,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     received,
     balances,
     teach,
+    autoTaught,
     statements,
     notifications,
     lastExpense,
@@ -143,6 +144,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     optional("imported income", getImportedIncome(importedIncomeSince(today)), []),
     getStatementBalances(),
     optional("teach groups", getTeachGroups(), []),
+    optional("auto-sorted payees", getAutoTaught(), []),
     optional("statement imports", getStatementImports(), {}),
     optional("notifications", getNotifications(), []),
     optional("last expense", getLastEntryDefaults("expense"), null),
@@ -250,6 +252,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     missingFx: [...new Set([...nw.missingFx, ...income.missing])],
     due: dueOccurrences(recurring, today),
     teach,
+    autoTaught,
     today,
     categories: formCategories,
     accounts,

@@ -30,6 +30,7 @@ import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE, isSearching, type EntryFilters } fr
 import type { EntryKind } from "@/lib/finance/imports/types";
 import { statementCoverage } from "@/lib/finance/imports/coverage";
 import { teachGroups } from "@/lib/finance/imports/teach";
+import { loadUnsureEntries, recentAutoTaught } from "@/lib/finance/imports/teach-service";
 import { currentNetWorth, loadFxTable } from "@/lib/finance/service";
 import { latestAiSummary } from "@/lib/finance/ai-summary-service";
 import { loadConnectionViews } from "@/lib/finance/connections/service";
@@ -52,13 +53,13 @@ export async function getConnections() {
 /** Payees the model filed under Other (it was not sure), grouped so each is taught once. */
 export async function getTeachGroups() {
   await requireAdmin();
-  const e = importedEntries;
-  const rows = await getDb()
-    .select({ description: e.description, kind: cashFlows.kind, amountPhp: cashFlows.amountPhp, occurredOn: cashFlows.occurredOn, aiReason: e.aiReason })
-    .from(e).innerJoin(cashFlows, eq(cashFlows.id, e.id)).innerJoin(categories, eq(categories.id, cashFlows.categoryId))
-    .where(and(eq(e.status, "posted"), eq(e.categorizedBy, "ai"), eq(categories.name, "Other"), eq(e.categoryId, cashFlows.categoryId)))
-    .limit(2000);
-  return teachGroups(rows);
+  return teachGroups(await loadUnsureEntries());
+}
+
+/** Payees the daily job sorted on its own lately, each with Undo. */
+export async function getAutoTaught() {
+  await requireAdmin();
+  return recentAutoTaught();
 }
 
 /** Closing balances from uploaded bank statements, by bank and currency. */

@@ -6,9 +6,9 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import type { CashFlowKind } from "@/lib/finance/constants";
-import { dayLabel } from "@/lib/finance/dates";
-import type { TeachGroup } from "@/lib/finance/imports/teach";
-import { teachPayee } from "../_actions/imports";
+import { dayLabel, todayManila } from "@/lib/finance/dates";
+import type { AutoTaughtRow, TeachGroup } from "@/lib/finance/imports/teach";
+import { teachPayee, undoAutoTaughtPayee } from "../_actions/imports";
 import type { FormCategory } from "./cash-flow-form";
 import { notify } from "./form";
 import { Money } from "./ui";
@@ -60,6 +60,32 @@ function TeachRow({ group, categories }: { group: TeachGroup; categories: FormCa
           <SelectContent>{options.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
         <Button size="sm" variant="outline" disabled={!choice || pending} onClick={save} aria-label={`Save category for ${group.payee}`}>{pending && <Spinner />}Save</Button>
+      </ItemActions>
+    </Item>
+  );
+}
+
+/** Payees the daily job sorted on its own, each with Undo. */
+export function AutoTaughtList({ rows }: { rows: AutoTaughtRow[] }) {
+  return <ItemGroup>{rows.map((row) => <AutoTaughtItem key={row.id} row={row} />)}</ItemGroup>;
+}
+
+function AutoTaughtItem({ row }: { row: AutoTaughtRow }) {
+  const [pending, startTransition] = useTransition();
+  const undo = () => startTransition(async () => {
+    try { notify(await undoAutoTaughtPayee(row.id)); }
+    catch { notify({ ok: false, message: "Couldn't undo that. Try again." }); }
+  });
+  return (
+    <Item size="xs">
+      <ItemContent>
+        <ItemTitle>{row.payee} → {row.category}</ItemTitle>
+        <ItemDescription>
+          {row.entries} past {row.entries === 1 ? "payment" : "payments"} moved · {dayLabel(todayManila(new Date(row.createdAt)))}
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Button size="sm" variant="outline" disabled={pending} onClick={undo} aria-label={`Undo sorting ${row.payee} as ${row.category}`}>{pending && <Spinner />}Undo</Button>
       </ItemActions>
     </Item>
   );

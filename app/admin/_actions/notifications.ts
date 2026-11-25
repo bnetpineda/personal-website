@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { notificationDismissals } from "@/lib/db/schema";
-import { getAccounts, getCategories, getConnections, getFx, getImportedIncome, getRecurring, getStatementBalances, getTeachGroups } from "@/lib/dal";
+import { getAccounts, getAutoTaught, getCategories, getConnections, getFx, getImportedIncome, getRecurring, getStatementBalances, getTeachGroups } from "@/lib/dal";
 import { computeNetWorth } from "@/lib/finance/calc";
 import { includedPositions } from "@/lib/finance/connections/types";
 import type { CashFlowKind } from "@/lib/finance/constants";
@@ -23,8 +23,9 @@ import { refreshAdmin } from "@/lib/finance/refresh";
 export async function getInboxData(): Promise<InboxProps> {
   await requireAdmin();
   const today = todayManila();
-  const [notifications, connections, fx, balances, recurring, received, teach, categories, accounts] = await Promise.all([
-    getNotifications(), getConnections(), getFx(), getStatementBalances(), getRecurring(), getImportedIncome(importedIncomeSince(today)), getTeachGroups(), getCategories(), getAccounts(),
+  const [notifications, connections, fx, balances, recurring, received, teach, autoTaught, categories, accounts] = await Promise.all([
+    getNotifications(), getConnections(), getFx(), getStatementBalances(), getRecurring(), getImportedIncome(importedIncomeSince(today)), getTeachGroups(),
+    getAutoTaught().catch(() => []), getCategories(), getAccounts(),
   ]);
   const netWorth = computeNetWorth([], [], fx, [...includedPositions(connections), ...statementPositions(balances)]);
   const income = typicalIncome(fx, recurring, repeatPayers(received, today.slice(0, 7)));
@@ -34,6 +35,7 @@ export async function getInboxData(): Promise<InboxProps> {
     missingFx: [...new Set([...netWorth.missingFx, ...income.missing])],
     due: dueOccurrences(recurring, today),
     teach,
+    autoTaught,
     today,
     categories: { expense: form("expense"), income: form("income") },
     accounts,

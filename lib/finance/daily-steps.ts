@@ -61,7 +61,7 @@ export function stepRecords(outcomes: Record<string, StepOutcome>): Record<strin
 export const DAILY_STEP_LABELS: Record<string, string> = {
   rates: "exchange rates", recurring: "recurring entries", imports: "category rules", logins: "sign-in cleanup",
   resealed: "credential re-encryption", sync: "account sync", snapshot: "today's net-worth point", portfolio: "account values",
-  ai: "AI categorizing", feedback: "AI feedback",
+  teach: "auto-sorting payees", ai: "AI categorizing", feedback: "AI feedback",
 };
 
 export interface DailyRun { id: string; startedAt: Date; steps: Record<string, DailyStepRecord> }

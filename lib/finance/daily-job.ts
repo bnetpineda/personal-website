@@ -7,6 +7,7 @@ import { deadlineFor, timeLeft } from "./deadline";
 import { categorizeQuietly } from "./imports/ai-service";
 import { syncInvestmentHistory } from "./imports/history-service";
 import { applyCategoryRules } from "./imports/service";
+import { autoTeachPayees } from "./imports/teach-service";
 import { recordPortfolioQuietly } from "./portfolio";
 import { ensureFx, postDueRecurring, refreshRates, upsertTodaySnapshot } from "./service";
 
@@ -23,7 +24,7 @@ const SUMMARY_MS = 60_000;
 
 const services = {
   refreshRates, postDueRecurring, applyCategoryRules, pruneLoginAttempts, resealAllCredentials, syncAllAccounts, syncInvestmentHistory,
-  loadConnectionViews, ensureFx, upsertTodaySnapshot, recordPortfolioQuietly, categorizeQuietly, writeAiSummaryQuietly,
+  loadConnectionViews, ensureFx, upsertTodaySnapshot, recordPortfolioQuietly, autoTeachPayees, categorizeQuietly, writeAiSummaryQuietly,
 };
 export type DailyServices = typeof services;
 
@@ -56,6 +57,9 @@ export function dailySteps(s: DailyServices = services): DailyStep[] {
       },
     },
     { name: "portfolio", run: () => s.recordPortfolioQuietly() },
+    // Payees the model keeps guessing the same way get their rule (with Undo), so the next imports and
+    // the AI step below file them without asking. Database only, so it's quick.
+    { name: "teach", run: () => s.autoTeachPayees() },
     { name: "ai", needsMs: SUMMARY_MS + 20_000, run: (deadline) => s.categorizeQuietly({ deadline: deadline - SUMMARY_MS }) },
     // Last, so it sees today's synced balances and filed entries; skipped when nothing changed. Never throws.
     { name: "feedback", needsMs: SUMMARY_MS, run: () => s.writeAiSummaryQuietly() },

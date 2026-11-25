@@ -485,6 +485,27 @@ export const dailyJobRuns = pgTable("daily_job_runs", {
   steps: jsonb("steps").$type<Record<string, DailyStepRecord>>().notNull(),
 }, (t) => [index("daily_job_runs_started_at_idx").on(t.startedAt)]);
 
+/** An entry as it was before a payee was auto-sorted, so Undo can put it back. */
+export interface AutoTaughtEntry { id: string; categoryId: number; notes: string | null; importCategoryId: number | null; categorizedBy: CategorizedBy | null; aiReason: string | null }
+
+/**
+ * Payees the daily job filed on its own because the model kept guessing the same category, with what
+ * it changed. Undo restores both the entries and the rule; an undone payee is never auto-sorted again.
+ */
+export const autoTaughtPayees = pgTable("auto_taught_payees", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  payee: text("payee").notNull(),
+  payeeKey: text("payee_key").notNull(),
+  kind: cashFlowKindEnum("kind").notNull(),
+  categoryId: integer("category_id").notNull().references(() => categories.id, { onDelete: "cascade" }),
+  ruleId: uuid("rule_id").references(() => categoryRules.id, { onDelete: "set null" }),
+  /** The rule's settings before, when one already existed for this payee; null when this created it. */
+  ruleBefore: jsonb("rule_before").$type<{ categoryId: number; enabled: boolean; autoPost: boolean } | null>(),
+  entriesBefore: jsonb("entries_before").$type<AutoTaughtEntry[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  undoneAt: timestamp("undone_at", { withTimezone: true }),
+}, (t) => [index("auto_taught_payees_key_idx").on(t.payeeKey, t.kind)]);
+
 /** Alert content is derived from current data; only dismissals need persistence. */
 export const notificationDismissals = pgTable("notification_dismissals", {
   key: text("key").primaryKey(),

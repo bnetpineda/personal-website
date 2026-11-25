@@ -1,11 +1,10 @@
 "use server";
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { cashFlows, categories, categoryRules, importedEntries } from "@/lib/db/schema";
-import { payeeKey } from "@/lib/finance/payee";
+import { categoryRules } from "@/lib/db/schema";
 import { applyCategoryRules, ingestEntries, saveStatementBalances } from "@/lib/finance/imports/service";
 import { categorizeQuietly, describeAiRun } from "@/lib/finance/imports/ai-service";
 import { actionDeadline } from "@/lib/finance/deadline";
@@ -16,6 +15,7 @@ import { ImportError, uniqueEntries } from "@/lib/finance/imports/types";
 import { detectFeeMode, mergeWiseStatements, parseWiseStatement } from "@/lib/finance/imports/wise-csv";
 import { idSchema, type FormState } from "@/lib/finance/schemas";
 import { refreshAdmin } from "@/lib/finance/refresh";
+import { teachPayeeNow, undoAutoTaught } from "@/lib/finance/imports/teach-service";
 
 /** The tail of an import message: which balances now count in net worth. */
 function balancesNote(currencies: string[], warning?: string) {
@@ -107,26 +107,18 @@ export async function teachPayee(payee: string, kind: "income" | "expense", cate
   const parsed = z.object({ payee: z.string().trim().min(2).max(120), kind: z.enum(["income", "expense"]), categoryId: z.number().int().positive() })
     .safeParse({ payee, kind, categoryId });
   if (!parsed.success) return { ok: false, message: "Choose a category for this payee." };
-  const db = getDb(), value = parsed.data;
-  const [category] = await db.select().from(categories).where(eq(categories.id, value.categoryId));
-  if (!category || category.archived || category.kind !== value.kind) return { ok: false, message: "Choose an active category matching income or expense." };
-  const key = payeeKey(value.payee);
-  const e = importedEntries;
-  const candidates = await db.select({ id: e.id, description: e.description }).from(e).innerJoin(cashFlows, eq(cashFlows.id, e.id))
-    .where(and(eq(e.status, "posted"), eq(e.categorizedBy, "ai"), eq(cashFlows.kind, value.kind))).limit(5000);
-  const ids = candidates.filter((c) => payeeKey(c.description) === key).map((c) => c.id);
-  const [existing] = await db.select({ id: categoryRules.id }).from(categoryRules)
-    .where(and(sql`lower(${categoryRules.contains}) = lower(${value.payee})`, eq(categoryRules.kind, value.kind)));
-  // One batch is one transaction: the rule and the re-filed entries land together.
-  const rule = existing
-    ? db.update(categoryRules).set({ categoryId: category.id, enabled: true, autoPost: true, updatedAt: new Date() }).where(eq(categoryRules.id, existing.id))
-    : db.insert(categoryRules).values({ contains: value.payee, provider: null, kind: value.kind, categoryId: category.id, autoPost: true });
-  if (ids.length) await db.batch([rule,
-    db.update(cashFlows).set({ categoryId: category.id, notes: `Taught once: ${value.payee} is ${category.name}.`, updatedAt: new Date() }).where(inArray(cashFlows.id, ids)),
-    db.update(e).set({ categoryId: category.id, categorizedBy: "rule", aiReason: null, updatedAt: new Date() }).where(inArray(e.id, ids))]);
-  else await rule;
-  refreshAdmin();
-  return { ok: true, message: `${value.payee} is ${category.name} from now on. Moved ${ids.length} past ${ids.length === 1 ? "entry" : "entries"}.` };
+  const result = await teachPayeeNow(parsed.data.payee, parsed.data.kind, parsed.data.categoryId);
+  if (result.ok) refreshAdmin();
+  return { ok: result.ok, message: result.message };
+}
+
+/** Puts back a payee the daily job sorted on its own; it returns to Sort these for good. */
+export async function undoAutoTaughtPayee(id: string): Promise<FormState> {
+  await requireAdmin();
+  if (!idSchema.safeParse(id).success) return { ok: false, message: "Unknown payee." };
+  const result = await undoAutoTaught(id);
+  if (result.ok) refreshAdmin();
+  return result;
 }
 
 export async function setRuleEnabled(id: string, enabled: boolean): Promise<FormState> {

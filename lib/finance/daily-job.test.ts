@@ -18,6 +18,7 @@ function fakes(failing: string[] = []) {
     resealAllCredentials: fake("resealAllCredentials", 0), syncAllAccounts: fake("syncAllAccounts", []),
     syncInvestmentHistory: fake("syncInvestmentHistory", []), loadConnectionViews: fake("loadConnectionViews", [{ snapshot: { positions: [{ currency: "USD" }] } }]),
     ensureFx: fake("ensureFx", {}), upsertTodaySnapshot: fake("upsertTodaySnapshot"), recordPortfolioQuietly: fake("recordPortfolioQuietly"),
+    autoTeachPayees: fake("autoTeachPayees", { payees: 0, moved: 0 }),
     categorizeQuietly: fake("categorizeQuietly", { skipped: true }), writeAiSummaryQuietly: fake("writeAiSummaryQuietly", "unchanged"),
   } as unknown as DailyServices;
   return { calls, services };
@@ -30,7 +31,7 @@ describe("daily job", () => {
     expect(calls).toEqual([
       "refreshRates", "postDueRecurring", "applyCategoryRules", "pruneLoginAttempts", "resealAllCredentials",
       "syncAllAccounts", "syncInvestmentHistory", "loadConnectionViews", "ensureFx", "upsertTodaySnapshot",
-      "recordPortfolioQuietly", "categorizeQuietly", "writeAiSummaryQuietly",
+      "recordPortfolioQuietly", "autoTeachPayees", "categorizeQuietly", "writeAiSummaryQuietly",
     ]);
     expect(Object.values(steps).every((s) => s.status === "ok")).toBe(true);
     expect(steps.recurring).toMatchObject({ value: { posted: 1 } });

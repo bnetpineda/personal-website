@@ -12,7 +12,7 @@ import type { CashFlowKind } from "@/lib/finance/constants";
 import { PROVIDER_META, type SyncProvider } from "@/lib/finance/connections/meta";
 import { monthLabel } from "@/lib/finance/dates";
 import { isStatementProvider, type StatementProvider } from "@/lib/finance/imports/coverage";
-import type { TeachGroup } from "@/lib/finance/imports/teach";
+import type { AutoTaughtRow, TeachGroup } from "@/lib/finance/imports/teach";
 import type { AlertGroup } from "@/lib/finance/notifications";
 import type { Occurrence } from "@/lib/finance/recurrence";
 import type { FormCategory } from "./cash-flow-form";
@@ -21,7 +21,7 @@ import { FormSheet } from "./form";
 import { ImportGoTymeButton, ImportMariBankButton, ImportWiseButton } from "./import-controls";
 import { DismissNotificationButton } from "./notification-controls";
 import { DueList, PostAllDue } from "./recurring";
-import { TeachList } from "./teach-jev";
+import { AutoTaughtList, TeachList } from "./teach-jev";
 import { TERMS } from "./labels";
 import { EmptyState, Money, Panel, Pct } from "./ui";
 
@@ -252,6 +252,8 @@ export interface InboxProps {
   missingFx: string[];
   due: Occurrence<RecurringRow>[];
   teach: TeachGroup[];
+  /** Payees the daily job sorted on its own lately; shown with Undo, not counted as needing you. */
+  autoTaught: AutoTaughtRow[];
   today: string;
   categories: Record<CashFlowKind, FormCategory[]>;
   accounts: string[];
@@ -266,7 +268,7 @@ export function inboxCount({ groups, missingFx, due, teach }: Pick<InboxProps, "
  * alerts (and its fix: Reconnect, Sync now, Import), recurring items to confirm and payees to sort.
  */
 export function NeedsYou({ defaultOpen, onClosed, ...props }: InboxProps & { defaultOpen?: boolean; onClosed?: () => void }) {
-  const { groups, missingFx, due, teach, today, categories, accounts } = props;
+  const { groups, missingFx, due, teach, autoTaught, today, categories, accounts } = props;
   const count = inboxCount(props);
   const urgent = groups.some((g) => g.severity === "destructive");
   const notices = groups.length + (missingFx.length ? 1 : 0);
@@ -285,9 +287,12 @@ export function NeedsYou({ defaultOpen, onClosed, ...props }: InboxProps & { def
       }
     >
       {count === 0 ? (
-        <EmptyState size="sm" title="All caught up">
-          Syncs, statements and recurring items are up to date.
-        </EmptyState>
+        <div className="flex flex-col gap-4">
+          <EmptyState size="sm" title="All caught up">
+            Syncs, statements and recurring items are up to date.
+          </EmptyState>
+          <AutoTaughtSection rows={autoTaught} />
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
           {notices > 0 && (
@@ -323,9 +328,23 @@ export function NeedsYou({ defaultOpen, onClosed, ...props }: InboxProps & { def
               <TeachList groups={teach} categories={categories} />
             </InboxSection>
           )}
+          <AutoTaughtSection rows={autoTaught} />
         </div>
       )}
     </FormSheet>
+  );
+}
+
+/** What the daily job sorted on its own, so nothing it decided goes unseen. */
+function AutoTaughtSection({ rows }: { rows: AutoTaughtRow[] }) {
+  if (!rows.length) return null;
+  return (
+    <InboxSection title={`Sorted for you · ${rows.length}`}>
+      <p className="text-sm text-muted-foreground">
+        AI kept guessing the same category for these, so they were filed and get a rule. Undo puts them back in Sort these.
+      </p>
+      <AutoTaughtList rows={rows} />
+    </InboxSection>
   );
 }
 
