@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { EntrySuggestion } from "@/lib/dal";
 import { CURRENCIES, type CashFlowKind } from "@/lib/finance/constants";
 import { addDays, isMonth, monthLabel, todayManila } from "@/lib/finance/dates";
+import { accountCurrency, guessEntry } from "@/lib/finance/entry-guess";
 import { deleteCashFlow, saveCashFlow } from "../_actions/cash-flows";
 import { carryOver, type CarriedEntry } from "./entry-carry";
 import { FormField, FormFooter, useFormAction } from "./form";
@@ -27,7 +28,7 @@ export interface CashFlowFormProps {
   kind: CashFlowKind;
   categories: FormCategory[];
   accounts: string[];
-  /** Past descriptions for this kind; picking one fills in its category and account. */
+  /** Past descriptions and category rules for this kind; typing a description fills in what it can (entry-guess.ts). */
   suggestions?: EntrySuggestion[];
   defaults: {
     occurredOn: string;
@@ -128,14 +129,32 @@ function CashFlowFields({
   const [categoryId, setCategoryId] = useState(options.some((c) => String(c.id) === initialCategory) ? initialCategory : "");
   const [date, setDate] = useState(entry?.occurredOn ?? defaults.occurredOn);
   const [account, setAccount] = useState((entry ? entry.account : defaults.account) ?? "");
-  // Suggestions only fill fields the user hasn't set by hand.
-  const [touched, setTouched] = useState({ category: Boolean(entry), account: Boolean(entry) });
+  const [currency, setCurrency] = useState(entry?.currency ?? defaults.currency ?? "PHP");
+  const amountInput = useRef<HTMLInputElement>(null);
+  // Guesses only fill fields the user hasn't set by hand.
+  const [touched, setTouched] = useState({ category: Boolean(entry), account: Boolean(entry), currency: Boolean(entry) });
+  const pastDescriptions = suggestions.filter((s) => !s.rule);
+  // Only a currency the picker offers can be filled in.
+  const offered = (code: string | null) => (code && (CURRENCIES as readonly string[]).includes(code) ? code : null);
 
+  // The description says the most: last time's category, account and currency, and the usual amount
+  // when the amount is still empty. An account on its own says its currency.
   const suggest = (description: string) => {
-    const match = suggestions.find((s) => s.description.toLowerCase() === description.trim().toLowerCase());
+    const match = guessEntry(description, suggestions);
     if (!match) return;
     if (!touched.category && options.some((c) => c.id === match.categoryId)) setCategoryId(String(match.categoryId));
-    if (!touched.account && match.account) setAccount(match.account);
+    const nextAccount = !touched.account && match.account ? match.account : account;
+    if (nextAccount !== account) setAccount(nextAccount);
+    const nextCurrency = touched.currency ? currency : (offered(match.currency) ?? offered(accountCurrency(nextAccount, suggestions)) ?? currency);
+    if (nextCurrency !== currency) setCurrency(nextCurrency);
+    const amount = amountInput.current;
+    if (amount && !amount.value && match.amount != null && match.currency === nextCurrency) amount.value = String(match.amount);
+  };
+  const pickAccount = (value: string) => {
+    setAccount(value);
+    setTouched((t) => ({ ...t, account: true }));
+    const known = touched.currency ? null : offered(accountCurrency(value, suggestions));
+    if (known) setCurrency(known);
   };
 
   return (
@@ -152,7 +171,7 @@ function CashFlowFields({
       <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormField id={id("amount")} label="Amount" error={error("amount") ?? error("currency")} wide>
           <ButtonGroup className="w-full">
-            <Select name="currency" defaultValue={entry?.currency ?? defaults.currency ?? "PHP"}>
+            <Select name="currency" value={currency} onValueChange={(value) => { setCurrency(value); setTouched((t) => ({ ...t, currency: true })); }}>
               <SelectTrigger aria-label="Currency">
                 <SelectValue />
               </SelectTrigger>
@@ -165,6 +184,7 @@ function CashFlowFields({
               </SelectContent>
             </Select>
             <Input
+              ref={amountInput}
               id={id("amount")}
               name="amount"
               inputMode="decimal"
@@ -218,7 +238,7 @@ function CashFlowFields({
           <Input
             id={id("description")}
             name="description"
-            list={suggestions.length > 0 ? id("suggestions") : undefined}
+            list={pastDescriptions.length > 0 ? id("suggestions") : undefined}
             maxLength={200}
             autoComplete="off"
             placeholder={expense ? "Groceries at SM" : "September salary"}
@@ -226,9 +246,9 @@ function CashFlowFields({
             onChange={(e) => suggest(e.target.value)}
             aria-invalid={Boolean(error("description"))}
           />
-          {suggestions.length > 0 && (
+          {pastDescriptions.length > 0 && (
             <datalist id={id("suggestions")}>
-              {suggestions.map((s) => (
+              {pastDescriptions.map((s) => (
                 <option key={s.description} value={s.description} />
               ))}
             </datalist>
@@ -269,10 +289,7 @@ function CashFlowFields({
             maxLength={60}
             placeholder="GCash"
             value={account}
-            onChange={(e) => {
-              setAccount(e.target.value);
-              setTouched((t) => ({ ...t, account: true }));
-            }}
+            onChange={(e) => pickAccount(e.target.value)}
           />
           <datalist id={id("accounts")}>
             {accounts.map((a) => (

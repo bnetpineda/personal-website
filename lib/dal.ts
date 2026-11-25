@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, isNull, lt, lte, max, or, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, isNull, lt, lte, max, or, sql, sum, type AnyColumn, type SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import {
@@ -23,6 +23,7 @@ import {
 import type { FxTable, MonthTotal } from "@/lib/finance/calc";
 import type { CashFlowKind } from "@/lib/finance/constants";
 import { addMonths, monthRange } from "@/lib/finance/dates";
+import { typicalAmount, type EntryHint } from "@/lib/finance/entry-guess";
 import { IMPORTER_NOTE_PATTERNS } from "@/lib/finance/notes";
 import { loadStatementMonths } from "@/lib/finance/imports/statement-months";
 import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE, isSearching, type EntryFilters } from "@/lib/finance/entry-filters";
@@ -145,43 +146,48 @@ export async function getCashFlows({ kind, category, month, q, filters, limit }:
     .limit(Math.min(limit ?? (searching ? SEARCH_LIMIT : MONTH_LIMIT), MONTH_LIMIT));
 }
 
-export interface EntrySuggestion {
-  kind: CashFlowKind;
-  description: string;
-  categoryId: number;
-  account: string | null;
-}
+export type EntrySuggestion = EntryHint & { kind: CashFlowKind };
 
 /**
- * Descriptions used before (latest spelling, category and account of each), most recent
- * first — the add form suggests them and fills in the rest when one is picked.
+ * Descriptions used before (latest spelling, category, account and currency of each, and the usual
+ * amount when recent ones agree), most recent first, then the category rules. The add form suggests
+ * the descriptions and fills in the rest from whichever matches what is typed (entry-guess.ts).
  */
 export async function getEntrySuggestions(limit = 150): Promise<EntrySuggestion[]> {
   await requireAdmin();
-  const key = sql`lower(${cashFlows.description})`;
-  const distinct = getDb()
-    .selectDistinctOn([cashFlows.kind, key], {
-      kind: cashFlows.kind,
-      description: cashFlows.description,
-      categoryId: cashFlows.categoryId,
-      account: cashFlows.account,
-      lastUsed: cashFlows.createdAt,
-    })
-    .from(cashFlows)
-    .innerJoin(categories, eq(cashFlows.categoryId, categories.id))
-    .where(eq(categories.archived, false))
-    .orderBy(cashFlows.kind, key, desc(cashFlows.createdAt))
-    .as("distinct_entries");
-  return getDb()
-    .select({
-      kind: distinct.kind,
-      description: distinct.description,
-      categoryId: distinct.categoryId,
-      account: distinct.account,
-    })
-    .from(distinct)
-    .orderBy(desc(distinct.lastUsed))
-    .limit(limit);
+  const f = cashFlows;
+  const latest = <T>(column: AnyColumn) => sql<T>`(array_agg(${column} order by ${f.createdAt} desc))[1]`;
+  const [past, rules] = await Promise.all([
+    getDb()
+      .select({
+        kind: f.kind,
+        description: latest<string>(f.description),
+        categoryId: latest<number>(f.categoryId),
+        account: latest<string | null>(f.account),
+        currency: latest<string>(f.currency),
+        // The last five amounts in the latest currency; typicalAmount keeps one only when they agree.
+        recent: sql<string[]>`(array_agg(${f.amount}::text order by ${f.createdAt} desc))[1:5]`,
+        currencies: sql<string[]>`(array_agg(${f.currency}::text order by ${f.createdAt} desc))[1:5]`,
+      })
+      .from(f)
+      .innerJoin(categories, eq(f.categoryId, categories.id))
+      .where(eq(categories.archived, false))
+      .groupBy(f.kind, sql`lower(${f.description})`)
+      .orderBy(desc(max(f.createdAt)))
+      .limit(limit),
+    getDb()
+      .select({ kind: categoryRules.kind, contains: categoryRules.contains, categoryId: categoryRules.categoryId })
+      .from(categoryRules)
+      .innerJoin(categories, eq(categoryRules.categoryId, categories.id))
+      .where(and(eq(categoryRules.enabled, true), eq(categories.archived, false))),
+  ]);
+  return [
+    ...past.map(({ recent, currencies, ...row }) => ({
+      ...row,
+      amount: typicalAmount(recent.filter((_, i) => currencies[i] === row.currency).map(Number)),
+    })),
+    ...rules.map((r) => ({ kind: r.kind, description: r.contains, categoryId: r.categoryId, account: null, currency: null, amount: null, rule: true })),
+  ];
 }
 
 /** PHP totals per category for one month. */
