@@ -21,6 +21,7 @@ import {
   buildUsageSnapshot,
   type ModelRateMap,
   type RawUsageRecord,
+  type UsageBackfillFile,
 } from "../lib/usage/collect";
 import { aiUsageSnapshotSchema } from "../lib/usage/schema";
 import { formatTokens, formatUsd, type UsageProviderId } from "../lib/usage/types";
@@ -33,6 +34,8 @@ const directDb = args.has("--db");
 const directProdDb = args.has("--prod-db");
 
 const userdataDir = process.env.T3_USERDATA_DIR || join(homedir(), ".t3", "userdata");
+const backfillDir =
+  process.env.USAGE_BACKFILL_DIR || join(homedir(), ".local", "share", "personal-website-usage");
 const machineId = process.env.USAGE_MACHINE_ID || "zephyrus-g14";
 const machineLabel = process.env.USAGE_MACHINE_LABEL || "Zephyrus-G14";
 const timezone = process.env.USAGE_TIMEZONE || "Asia/Manila";
@@ -213,14 +216,33 @@ function readAntigravityRecords(dir: string): RawUsageRecord[] {
   }
 }
 
+function loadBackfillFiles(dir: string): UsageBackfillFile[] {
+  if (!existsSync(dir)) return [];
+  const files: UsageBackfillFile[] = [];
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as UsageBackfillFile;
+      if (parsed && parsed.version === 1 && Array.isArray(parsed.buckets)) {
+        files.push(parsed);
+      }
+    } catch {
+      // Ignore unreadable backfill files
+    }
+  }
+  return files;
+}
+
 async function main() {
   const rates = loadModelRates(userdataDir);
   const scanRecords = readScanCacheRecords(userdataDir);
   const agRecords = readAntigravityRecords(userdataDir);
   const records = [...scanRecords, ...agRecords];
+  const backfills = loadBackfillFiles(backfillDir);
 
   const snapshot = buildUsageSnapshot({
     records,
+    backfills,
     rates,
     machineId,
     machineLabel,
@@ -277,7 +299,7 @@ async function main() {
     return;
   }
 
-  const syncUrl = process.env.USAGE_SYNC_URL?.trim() || "https://bnetpineda.dev/api/usage/sync";
+  const syncUrl = process.env.USAGE_SYNC_URL?.trim() || "https://www.bnetpineda.dev/api/usage/sync";
   const syncSecret = process.env.USAGE_SYNC_SECRET?.trim() || process.env.CRON_SECRET?.trim();
   if (!syncSecret) {
     throw new Error(

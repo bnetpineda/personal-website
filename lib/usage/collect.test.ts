@@ -116,4 +116,50 @@ describe("usage snapshot aggregation", () => {
     expect(w30.totals.cacheSavings).toBe(10.45);
     expect(w30.providers.map((p) => p.id)).toEqual(["claude", "codex", "antigravity"]);
   });
+
+  test("merges historical backfill buckets cleanly across sliding windows without session collisions", () => {
+    const nowMs = Date.parse("2026-11-29T00:00:00.000Z");
+    const snapshot = buildUsageSnapshot({
+      records: [
+        {
+          timestampMs: Date.parse("2026-11-28T08:00:00.000Z"),
+          provider: "claude",
+          model: "claude-opus-5-5",
+          sessionId: "0",
+          uncachedInput: 100_000,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cacheWrite1h: 0,
+          output: 0,
+          speed: "standard",
+          dedupKey: "z-1",
+        },
+      ],
+      backfills: [
+        {
+          version: 1,
+          machineId: "desktop-4a7jm3l",
+          timezone: "Asia/Manila",
+          generatedAt: "2026-11-28T16:00:00.000Z",
+          buckets: [
+            // Inside 30d but outside 7d
+            ["2026-11-10", "claude", "claude-opus-5-5", "standard", [0, 1], 1000, 2000, 0, 0, 500, 10, 2, 0, 8, 20, 0, 0, 15],
+            // Inside 7d with same session index 0 (should NOT collide with Zephyrus sessionId "0")
+            ["2026-11-25", "opencode", "gpt-6.2-sol", "fast", [0], 500, 0, 0, 0, 200, 2, 0, 0, 3, 0, 5, 2.5, 0],
+          ],
+        },
+      ],
+      rates: SAMPLE_RATES,
+      machineId: "zephyrus-g14",
+      machineLabel: "Zephyrus-G14",
+      timezone: "Asia/Manila",
+      nowMs,
+    });
+
+    expect(aiUsageSnapshotSchema.safeParse(snapshot).success).toBe(true);
+    expect(snapshot.windows["7d"].totalCost).toBe(5.4);
+    expect(snapshot.windows["7d"].sessionCount).toBe(2);
+    expect(snapshot.windows["30d"].totalCost).toBe(25.4);
+    expect(snapshot.windows["30d"].sessionCount).toBe(4);
+  });
 });

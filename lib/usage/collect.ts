@@ -67,6 +67,39 @@ export interface PricedRecord extends RawUsageRecord {
   processedTokens: number;
 }
 
+/**
+ * Compact pre-priced historical bucket exported from another machine (e.g. a one-time backfill from
+ * DESKTOP-4A7JM3L). Session indices are anonymized integers scoped to `(machineId, provider)`.
+ */
+export type BackfillBucket = [
+  day: string,
+  provider: UsageProviderId,
+  model: string,
+  speed: "standard" | "fast",
+  sessionNums: number[],
+  uncachedInput: number,
+  cacheRead: number,
+  cacheWrite: number,
+  cacheWrite1h: number,
+  output: number,
+  inputCost: number,
+  cacheReadCost: number,
+  cacheWriteCost: number,
+  outputCost: number,
+  standardCost: number,
+  fastCost: number,
+  fastPremium: number,
+  cacheSavings: number,
+];
+
+export interface UsageBackfillFile {
+  version: 1;
+  machineId: string;
+  timezone: string;
+  generatedAt: string;
+  buckets: BackfillBucket[];
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round4 = (n: number) => Math.round(n * 10_000) / 10_000;
 
@@ -244,12 +277,33 @@ function enumerateDays(startIso: string, endIso: string): string[] {
   return out;
 }
 
+interface AggregatableEntry {
+  day: string;
+  provider: UsageProviderId;
+  model: string;
+  sessionKeys: string[];
+  uncachedInput: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+  processedTokens: number;
+  inputCost: number;
+  cacheReadCost: number;
+  cacheWriteCost: number;
+  outputCost: number;
+  totalCost: number;
+  standardCost: number;
+  fastCost: number;
+  fastPremium: number;
+  cacheSavings: number;
+}
+
 function summarizeWindow(
-  records: readonly PricedRecord[],
+  entries: readonly AggregatableEntry[],
   startDay: string,
   endDay: string
 ): UsageWindowSummary {
-  const filtered = records.filter((r) => r.day >= startDay && r.day <= endDay);
+  const filtered = entries.filter((r) => r.day >= startDay && r.day <= endDay);
 
   let totalCost = 0;
   let inputCost = 0;
@@ -303,15 +357,11 @@ function summarizeWindow(
     outputTokens += r.output;
     cacheSavings += r.cacheSavings;
 
-    const sessionKey = `${r.provider}:${r.sessionId}`;
-    allSessions.add(sessionKey);
-
     let pAcc = providerAgg.get(r.provider);
     if (!pAcc) {
       pAcc = { sessions: new Set(), cost: 0, tokens: 0 };
       providerAgg.set(r.provider, pAcc);
     }
-    pAcc.sessions.add(sessionKey);
     pAcc.cost += r.totalCost;
     pAcc.tokens += r.processedTokens;
 
@@ -321,7 +371,6 @@ function summarizeWindow(
       mAcc = { provider: r.provider, model: r.model, sessions: new Set(), cost: 0, tokens: 0 };
       modelAgg.set(modelKey, mAcc);
     }
-    mAcc.sessions.add(sessionKey);
     mAcc.cost += r.totalCost;
     mAcc.tokens += r.processedTokens;
 
@@ -335,10 +384,16 @@ function summarizeWindow(
       };
       dayAgg.set(r.day, dAcc);
     }
-    dAcc.sessions.add(sessionKey);
     dAcc.total += r.totalCost;
     dAcc.tokens += r.processedTokens;
     dAcc.byProvider[r.provider] += r.totalCost;
+
+    for (const sk of r.sessionKeys) {
+      allSessions.add(sk);
+      pAcc.sessions.add(sk);
+      mAcc.sessions.add(sk);
+      dAcc.sessions.add(sk);
+    }
   }
 
   const pct = (part: number) => (totalCost > 0 ? round2((part / totalCost) * 100) : 0);
@@ -431,6 +486,7 @@ function summarizeWindow(
 
 export function buildUsageSnapshot(options: {
   records: readonly RawUsageRecord[];
+  backfills?: readonly UsageBackfillFile[];
   rates: ModelRateMap;
   machineId: string;
   machineLabel: string;
@@ -442,29 +498,96 @@ export function buildUsageSnapshot(options: {
   const today = toDay(nowMs);
 
   const seenDedup = new Set<string>();
-  const priced: PricedRecord[] = [];
+  const entries: AggregatableEntry[] = [];
   for (const raw of options.records) {
     if (raw.dedupKey) {
       if (seenDedup.has(raw.dedupKey)) continue;
       seenDedup.add(raw.dedupKey);
     }
     const rate = lookupModelRate(options.rates, raw.model);
-    priced.push(priceRecord(raw, rate, toDay(raw.timestampMs)));
+    const priced = priceRecord(raw, rate, toDay(raw.timestampMs));
+    entries.push({
+      day: priced.day,
+      provider: priced.provider,
+      model: priced.model,
+      sessionKeys: [`${options.machineId}:${priced.provider}:${priced.sessionId}`],
+      uncachedInput: priced.uncachedInput,
+      cacheRead: priced.cacheRead,
+      cacheWrite: priced.cacheWrite,
+      output: priced.output,
+      processedTokens: priced.processedTokens,
+      inputCost: priced.inputCost,
+      cacheReadCost: priced.cacheReadCost,
+      cacheWriteCost: priced.cacheWriteCost,
+      outputCost: priced.outputCost,
+      totalCost: priced.totalCost,
+      standardCost: priced.standardCost,
+      fastCost: priced.fastCost,
+      fastPremium: priced.fastPremium,
+      cacheSavings: priced.cacheSavings,
+    });
+  }
+
+  for (const bf of options.backfills ?? []) {
+    for (const b of bf.buckets) {
+      const [
+        day,
+        provider,
+        model,
+        ,
+        sessionNums,
+        uncachedInput,
+        cacheRead,
+        cacheWrite,
+        ,
+        output,
+        inputCost,
+        cacheReadCost,
+        cacheWriteCost,
+        outputCost,
+        standardCost,
+        fastCost,
+        fastPremium,
+        cacheSavings,
+      ] = b;
+      const totalCost = inputCost + cacheReadCost + cacheWriteCost + outputCost;
+      const processedTokens = uncachedInput + cacheRead + cacheWrite + output;
+      entries.push({
+        day,
+        provider,
+        model,
+        sessionKeys: sessionNums.map((n) => `bf:${bf.machineId}:${provider}:${n}`),
+        uncachedInput,
+        cacheRead,
+        cacheWrite,
+        output,
+        processedTokens,
+        inputCost,
+        cacheReadCost,
+        cacheWriteCost,
+        outputCost,
+        totalCost,
+        standardCost,
+        fastCost,
+        fastPremium,
+        cacheSavings,
+      });
+    }
   }
 
   const start7d = shiftIsoDay(today, -6);
   const start30d = shiftIsoDay(today, -29);
   let earliest = start30d;
-  for (const r of priced) {
+  for (const r of entries) {
     if (r.day < earliest) earliest = r.day;
   }
   const minAllowed = shiftIsoDay(today, -364);
   const startAll = earliest < minAllowed ? minAllowed : earliest;
 
   const windows: Record<UsageRangeKey, UsageWindowSummary> = {
-    "7d": summarizeWindow(priced, start7d, today),
-    "30d": summarizeWindow(priced, start30d, today),
-    all: summarizeWindow(priced, startAll, today),
+    "7d": summarizeWindow(entries, start7d, today),
+    "30d": summarizeWindow(entries, start30d, today),
+    all: summarizeWindow(entries, startAll, today),
   };
 
   return {
