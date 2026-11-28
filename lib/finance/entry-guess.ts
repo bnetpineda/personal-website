@@ -1,4 +1,4 @@
-import { payeeKey } from "./payee";
+import { isGenericDescription, payeeKey } from "./payee";
 
 /*
  * What the Add form can work out from a description before the person picks anything: the category,
@@ -41,7 +41,7 @@ export function guessEntry(text: string, hints: readonly EntryHint[]): EntryHint
   const exact = past.find((h) => h.description.trim().toLowerCase() === typed);
   if (exact) return exact;
   const key = payeeKey(text);
-  const payee = key.length >= 3 ? past.find((h) => payeeKey(h.description) === key) : undefined;
+  const payee = !isGenericDescription(text) && key.length >= 3 ? past.find((h) => payeeKey(h.description) === key) : undefined;
   if (payee) return payee;
   if (typed.length >= 3) {
     const started = past.filter((h) => h.description.toLowerCase().startsWith(typed));

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CategoryRule, ImportedEntry } from "@/lib/db/schema";
 import { parseIbkrHistory, parseRewardsPage, parseCapitalPage } from "./provider-parsers";
-import { canPost, earningsByCurrency, matchingRule, transferEligible, transferSuggestions } from "./review";
+import { canPost, conversionPairs, earningsByCurrency, matchingRule, reversalSets, transferEligible, transferSuggestions } from "./review";
 import { detectFeeMode, mergeWiseStatements, parseCsv, parseWiseCsv, parseWiseStatement } from "./wise-csv";
 import { uniqueEntries, type ImportEntry } from "./types";
 
@@ -133,11 +133,13 @@ describe("provider history", () => {
 });
 
 describe("review and accounting", () => {
-  test("most specific rule wins; conflicting rules, transfers and crypto never auto-post", () => {
+  test("most specific rule wins; conflicting rules, self-transfers and crypto never auto-post, while third-party Wise transfers match explicit rules", () => {
     const specific = rule({ contains: "Spotify premium", categoryId: 2 });
     expect(matchingRule(imported(), [rule(), specific])?.categoryId).toBe(2);
     expect(matchingRule(imported(), [rule(), rule({ categoryId: 2 })])).toBeNull();
     expect(matchingRule(imported({ kind: "transfer" }), [rule()])).toBeNull();
+    expect(matchingRule(imported({ kind: "transfer", description: "Sent to Mark Bennett Naval Pineda" }), [rule({ contains: "Pineda" })], "Mark Bennett Pineda")).toBeNull();
+    expect(matchingRule(imported({ kind: "transfer", description: "Sent to RA**N CR**G I." }), [rule({ contains: "RA**N CR**G I.", categoryId: 12 })], "Mark Bennett Pineda")?.categoryId).toBe(12);
     expect(matchingRule(imported({ provider: "binance", currency: "USD" }), [rule()])).toBeNull();
     expect(matchingRule(imported({ amount: 15 }), [rule()])).toBeNull();
   });
@@ -154,6 +156,21 @@ describe("review and accounting", () => {
     expect(transferSuggestions([a, { ...b, occurredOn: "2026-09-28" }])).toHaveLength(0);
     expect(transferSuggestions([a, { ...b, kind: "dividend" }])).toHaveLength(0);
     expect(transferEligible(a, { ...b, currency: "EUR", amount: 14 })).toBe(true);
+  });
+  test("pairs Wise currency conversions and detects zero-net reversals and card refunds", () => {
+    const out = imported({ externalId: "BALANCE-1:USD:out", kind: "transfer", currency: "USD", amount: -258.35, description: "Converted 260.00 USD to 15,662.31 PHP" });
+    const inc = imported({ externalId: "BALANCE-1:PHP:in", kind: "transfer", currency: "PHP", amount: 15662.31, description: "Converted 260.00 USD to 15,662.31 PHP" });
+    expect(conversionPairs([out, inc])).toEqual([[out, inc]]);
+
+    const sent = imported({ externalId: "TRANSFER-9:PHP:out", kind: "transfer", currency: "PHP", amount: -1500, description: "Sent to RA**N CR**G I." });
+    const fee = imported({ externalId: "FEE-TRANSFER-9:PHP:out", kind: "fee", currency: "PHP", amount: -39.2, description: "Wise transfer fee" });
+    const back = imported({ externalId: "TRANSFER-9:PHP:in", kind: "payment", currency: "PHP", amount: 1539.2, description: "Sent to RA**N CR**G I." });
+    const charge = imported({ provider: "gotyme", externalId: "gt-1", currency: "PHP", amount: -71.61, description: "Card payment: SCALEWAY" });
+    const refund = imported({ provider: "gotyme", externalId: "gt-2", currency: "PHP", amount: 71.61, description: "Refund for card payment" });
+    expect(reversalSets([sent, fee, back, charge, refund])).toEqual([
+      { ids: [sent.id, fee.id, back.id], reason: "Reversed Wise transaction" },
+      { ids: [charge.id, refund.id], reason: "Refunded card payment" },
+    ]);
   });
   test("earnings separate contributions, dividends, fees and realized P/L without subtracting fees twice", () => {
     const row = (v: Partial<ImportedEntry>) => imported({ provider: "ibkr", ...v });

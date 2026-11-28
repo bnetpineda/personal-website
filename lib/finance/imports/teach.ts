@@ -1,5 +1,5 @@
 import type { CashFlowKind } from "../constants";
-import { payeeKey, payeeOf } from "../payee";
+import { isGenericDescription, payeeKey, payeeOf } from "../payee";
 
 /** An imported entry the model filed under Other: it was not sure. */
 export interface UnsureEntry { description: string; kind: CashFlowKind; amountPhp: number; occurredOn: string; aiReason: string | null }
@@ -20,6 +20,8 @@ export function closestGuess(aiReason: string | null): string | null {
 export function teachGroups(entries: UnsureEntry[]): TeachGroup[] {
   const groups = new Map<string, TeachGroup & { guesses: Map<string, number> }>();
   for (const entry of entries) {
+    // Generic channel lines ("QR payment", "Refund for card payment") name no payee: a blanket rule would misfile every future one.
+    if (isGenericDescription(entry.description)) continue;
     const key = `${payeeKey(entry.description)}|${entry.kind}`;
     const group = groups.get(key) ?? { key, payee: payeeOf(entry.description), kind: entry.kind, count: 0, totalPhp: 0, lastOn: entry.occurredOn, guess: null, guessCount: 0, maxPhp: 0, guesses: new Map() };
     group.count++;

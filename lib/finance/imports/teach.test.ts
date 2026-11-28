@@ -21,6 +21,16 @@ describe("teach once", () => {
     expect(closestGuess("Jev: Other, closest Family & Gifts (55% likely)")).toBe("Family & Gifts");
     expect(closestGuess("Jev: Other (43% likely)")).toBeNull();
   });
+
+  test("skips generic channel lines so they never become blanket payee rules", () => {
+    const groups = teachGroups([
+      { description: "QR payment", kind: "expense", amountPhp: 4000, occurredOn: "2026-11-09", aiReason: "Jev: Other (71% likely)" },
+      { description: "Refund for card payment", kind: "income", amountPhp: 71.61, occurredOn: "2026-11-10", aiReason: "Jev: Other (52% likely)" },
+      { description: "Outbound interbank transfer", kind: "expense", amountPhp: 1875, occurredOn: "2026-11-15", aiReason: "Jev: Other, closest Transfer (58% likely)" },
+      { description: "Card payment: BLIZZARD *US1066982371", kind: "expense", amountPhp: 961.02, occurredOn: "2026-11-06", aiReason: "Jev: Other, closest Entertainment (69% likely)" },
+    ]);
+    expect(groups.map((g) => g.payee)).toEqual(["BLIZZARD"]);
+  });
 });
 
 describe("auto-sorting", () => {

@@ -108,7 +108,7 @@ export async function applyCategoryRules(entryIds?: string[]) {
     db.select().from(categoryRules).where(eq(categoryRules.enabled, true)),
     db.select().from(importedEntries).where(and(eq(importedEntries.status, "pending"),
       inArray(importedEntries.provider, [...BANK_PROVIDERS, "ibkr"]), inArray(importedEntries.currency, [...CURRENCIES]),
-      inArray(importedEntries.kind, ["payment", "reward", "dividend", "interest", "fee", "tax"]),
+      inArray(importedEntries.kind, ["payment", "transfer", "reward", "dividend", "interest", "fee", "tax"]),
       sql`abs(${importedEntries.amount}) >= 0.005`,
       // Apply rules only to candidates that can match an active rule. Old unrelated entries cannot starve the queue.
       sql`exists (select 1 from category_rules r where r.enabled and (r.provider is null or r.provider = ${importedEntries.provider})

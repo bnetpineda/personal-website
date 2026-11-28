@@ -10,8 +10,8 @@ import { logError } from "@/lib/log";
 import { deadlineFor, timeLeft } from "../deadline";
 import { AI_BATCH_SIZE, aiOutputSchema, buildCategorizePrompt, buildEvaluationQuestion, ledgerDecision, rememberedDecision, routineDecision, settleEvaluation, unconvertibleDecision, validateDecisions,
   type AiDecision, type AiExample } from "./ai-review";
-import { payeeKey } from "../payee";
-import { transferSuggestions } from "./review";
+import { isGenericDescription, payeeKey } from "../payee";
+import { conversionPairs, reversalSets, transferSuggestions } from "./review";
 import { ImportError } from "./types";
 
 export interface AiRunResult { skipped: boolean; claimed: number; linked: number; posted: number; duplicates: number; held: number; transfers: number; investment: number; ignored: number; unsure: number;
@@ -50,6 +50,7 @@ export async function categorizeWithAi({ retry = false, limit = RUN_LIMIT, model
   if (!model && !given && !apiKey) return { ...result, skipped: true };
   const classifier: Classifier = given ?? (model ? { kind: "language", model } : configuredClassifier(apiKey!));
   const db = getDb();
+  result.ignored += await ignoreReversals(entryIds);
   result.linked = await linkExactTransfers(entryIds);
   await pairFiledTransfers();
   const e = importedEntries;
@@ -106,7 +107,7 @@ async function loadExamples(): Promise<AiExample[]> {
   const [rules, posted, moved] = await Promise.all([
     db.select({ contains: categoryRules.contains, provider: categoryRules.provider, kind: categories.kind, category: categories.name })
       .from(categoryRules).innerJoin(categories, eq(categories.id, categoryRules.categoryId))
-      .where(and(eq(categoryRules.enabled, true), eq(categories.archived, false))),
+      .where(and(eq(categoryRules.enabled, true), eq(categories.archived, false), ne(categories.name, "Other"))),
     db.select({ description: e.description, provider: e.provider, kind: categories.kind, category: categories.name })
       .from(e).innerJoin(cashFlows, eq(cashFlows.id, e.id)).innerJoin(categories, eq(categories.id, cashFlows.categoryId))
       .where(and(eq(e.status, "posted"), or(isNull(e.categorizedBy), ne(e.categorizedBy, "ai"), ne(cashFlows.categoryId, e.categoryId))))
@@ -123,6 +124,7 @@ async function loadExamples(): Promise<AiExample[]> {
   ];
   const seen = new Set<string>();
   return all.filter((example) => {
+    if (isGenericDescription(example.description)) return false;
     const key = `${payeeKey(example.description)}|${example.decision}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -130,34 +132,68 @@ async function loadExamples(): Promise<AiExample[]> {
   }).slice(0, 150);
 }
 
-/** Links unambiguous transfer pairs between your accounts (same currency, exact opposite amounts, 7 days). */
+/** Ignores unambiguous zero-net reversals and card refunds before they can reach Transactions. */
+async function ignoreReversals(entryIds?: string[]) {
+  const db = getDb();
+  const candidates = await db.select().from(importedEntries).where(and(eq(importedEntries.status, "pending"), entryIds ? inArray(importedEntries.id, entryIds) : undefined))
+    .orderBy(desc(importedEntries.occurredOn)).limit(500);
+  const sets = reversalSets(candidates);
+  if (!sets.length) return 0;
+  const payload = sets.flatMap((set) => {
+    const groupId = crypto.randomUUID();
+    return set.ids.map((id) => ({ id, group_id: groupId, expected: set.ids.length, reason: set.reason }));
+  });
+  const result = await db.execute(sql`
+    with groups as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(id uuid, group_id uuid, expected int, reason text)),
+    locked as materialized (select e.id, e.status, g.group_id, g.expected, g.reason from imported_entries e join groups g on g.id = e.id order by e.id for update of e),
+    complete as (select group_id from locked group by group_id, expected having count(*) filter (where status = 'pending') = expected)
+    update imported_entries e set status = 'ignored', category_id = null, categorized_by = 'ai',
+      ai_reason = l.reason, ai_suggestion = null, updated_at = now()
+    from locked l where e.id = l.id and l.group_id in (select group_id from complete) returning e.id`);
+  return result.rows.length;
+}
+
+/** Links unambiguous transfer pairs (same currency, opposite amounts, 7 days) and Wise cross-currency conversions. */
 async function linkExactTransfers(entryIds?: string[]) {
   const db = getDb();
   const candidates = await db.select().from(importedEntries).where(and(eq(importedEntries.status, "pending"), entryIds ? inArray(importedEntries.id, entryIds) : undefined))
     .orderBy(desc(importedEntries.occurredOn)).limit(500);
-  const pairs = transferSuggestions(candidates);
+  const sameCurrency = transferSuggestions(candidates);
+  const pairedIds = new Set(sameCurrency.flatMap(([a, b]) => [a.id, b.id]));
+  const conversions = conversionPairs(candidates).filter(([a, b]) => !pairedIds.has(a.id) && !pairedIds.has(b.id));
+  const pairs = [
+    ...sameCurrency.map(([a, b]) => ({ a, b, reason: "Matched transfer between your accounts" })),
+    ...conversions.map(([a, b]) => ({ a, b, reason: "Currency conversion between Wise balances" })),
+  ];
   if (!pairs.length) return 0;
-  const payload = pairs.flatMap(([a, b]) => { const transferId = crypto.randomUUID(); return [{ id: a.id, transfer_id: transferId }, { id: b.id, transfer_id: transferId }]; });
+  const payload = pairs.flatMap(({ a, b, reason }) => {
+    const transferId = crypto.randomUUID();
+    return [{ id: a.id, transfer_id: transferId, reason }, { id: b.id, transfer_id: transferId, reason }];
+  });
   const result = await db.execute(sql`
-    with pairs as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(id uuid, transfer_id uuid)),
-    locked as materialized (select e.id, e.status, p.transfer_id from imported_entries e join pairs p on p.id = e.id order by e.id for update of e),
+    with pairs as (select * from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(id uuid, transfer_id uuid, reason text)),
+    locked as materialized (select e.id, e.status, p.transfer_id, p.reason from imported_entries e join pairs p on p.id = e.id order by e.id for update of e),
     complete as (select transfer_id from locked group by transfer_id having count(*) filter (where status = 'pending') = 2)
     update imported_entries e set status = 'transfer', transfer_id = l.transfer_id, category_id = null, categorized_by = 'ai',
-      ai_reason = 'Matched transfer between your accounts', ai_suggestion = null, updated_at = now()
+      ai_reason = l.reason, ai_suggestion = null, updated_at = now()
     from locked l where e.id = l.id and l.transfer_id in (select transfer_id from complete) returning e.id`);
   return result.rows.length / 2;
 }
 
 /**
  * Pairs transfers that were each filed on their own, typically because the two sides came from
- * different uploads (Wise sends, MariBank receives). Totals do not change; the pair becomes one movement.
+ * different uploads (Wise sends, MariBank receives, or two currency files of a Wise conversion).
+ * Totals do not change; the pair becomes one movement.
  */
 async function pairFiledTransfers() {
   const db = getDb(), e = importedEntries;
   // A bank transfer you filed or unlinked yourself (Bank activity) is left alone: re-pairing it would undo your decision.
   const filed = await db.select().from(e).where(and(eq(e.status, "transfer"), isNull(e.transferId), sql`not (${e.categorizedBy} is not distinct from 'manual' and ${e.provider} in ('wise', 'maribank', 'gotyme'))`)).orderBy(desc(e.occurredOn)).limit(500);
-  // Same narrow matching as pending suggestions: exact opposite amounts, same currency, within 7 days, unambiguous.
-  const pairs = transferSuggestions(filed.map((row) => ({ ...row, status: "pending" as const })));
+  const asPending = filed.map((row) => ({ ...row, status: "pending" as const }));
+  // Same narrow matching as pending suggestions: exact opposite amounts, same currency, within 7 days, plus Wise conversions.
+  const sameCurrency = transferSuggestions(asPending);
+  const pairedIds = new Set(sameCurrency.flatMap(([a, b]) => [a.id, b.id]));
+  const pairs = [...sameCurrency, ...conversionPairs(asPending).filter(([a, b]) => !pairedIds.has(a.id) && !pairedIds.has(b.id))];
   if (!pairs.length) return 0;
   const payload = pairs.flatMap(([a, b]) => { const transferId = crypto.randomUUID(); return [{ id: a.id, transfer_id: transferId }, { id: b.id, transfer_id: transferId }]; });
   const result = await db.execute(sql`

@@ -1,7 +1,9 @@
+import { SITE } from "@/lib/constants";
 import type { CategoryRule, ImportedEntry } from "@/lib/db/schema";
 import { isBank } from "../connections/types";
 import { CURRENCIES } from "../constants";
 import { daysBetween } from "../dates";
+import { counterpartyOf, paysAccountHolder } from "../payee";
 import type { ImportEntry } from "./types";
 
 export function canPost(entry: Pick<ImportEntry, "provider" | "currency" | "kind" | "amount">) {
@@ -9,8 +11,16 @@ export function canPost(entry: Pick<ImportEntry, "provider" | "currency" | "kind
     (CURRENCIES as readonly string[]).includes(entry.currency) && Math.abs(entry.amount) >= 0.005;
 }
 
-export function matchingRule(entry: ImportEntry, rules: CategoryRule[]): CategoryRule | null {
-  if (!canPost(entry) || entry.kind === "transfer" || entry.kind === "other") return null;
+/** Outgoing Wise transfers to another person carry kind = "transfer"; let explicit rules match them without touching self-transfers or conversions. */
+function isThirdPartyBankTransfer(entry: Pick<ImportEntry, "provider" | "kind" | "amount" | "description">, accountHolder: string): boolean {
+  if (!isBank(entry.provider) || entry.kind !== "transfer" || entry.amount >= 0) return false;
+  const counterparty = counterpartyOf(entry.description);
+  return Boolean(counterparty && !paysAccountHolder(counterparty, accountHolder));
+}
+
+export function matchingRule(entry: ImportEntry, rules: CategoryRule[], accountHolder = SITE.name): CategoryRule | null {
+  if (!canPost(entry) || entry.kind === "other") return null;
+  if (entry.kind === "transfer" && !isThirdPartyBankTransfer(entry, accountHolder)) return null;
   const candidates = rules.filter((r) => r.enabled && (!r.provider || r.provider === entry.provider) &&
     r.kind === (entry.amount > 0 ? "income" : "expense") && entry.description.toLowerCase().includes(r.contains.toLowerCase()))
     // Every rule saved today posts automatically; a few old ones only suggested ("Left to AI"). Two
@@ -23,6 +33,7 @@ export function matchingRule(entry: ImportEntry, rules: CategoryRule[]): Categor
 }
 
 export type TransferCandidate = Pick<ImportedEntry, "id" | "provider" | "accountKey" | "occurredOn" | "amount" | "currency" | "description" | "kind" | "status">;
+export type ReversalCandidate = TransferCandidate & Pick<ImportedEntry, "externalId">;
 
 export function transferEligible(a: TransferCandidate, b: TransferCandidate): boolean {
   return a.id !== b.id && a.status === "pending" && b.status === "pending" &&
@@ -38,6 +49,79 @@ export function transferSuggestions(entries: TransferCandidate[]): [TransferCand
     Math.abs(a.amount + b.amount) <= Math.max(1e-10, Math.abs(a.amount) * 1e-10)));
   return entries.filter((a) => a.amount < 0 && candidates.get(a.id)?.length === 1)
     .flatMap((a) => { const b = candidates.get(a.id)![0]; return candidates.get(b.id)?.length === 1 ? [[a, b]] : []; });
+}
+
+const wiseBaseRef = (externalId: string) => externalId.split(":")[0].replace(/^(?:FEE|CHARGE)[-_]/i, "");
+
+/** Pairs both legs of a Wise currency conversion (same BALANCE-* or CONVERSION-* reference, opposite directions, different currencies). */
+export function conversionPairs(entries: ReversalCandidate[]): [ReversalCandidate, ReversalCandidate][] {
+  const byRef = new Map<string, ReversalCandidate[]>();
+  for (const e of entries) {
+    if (e.status !== "pending" || e.provider !== "wise" || e.kind !== "transfer") continue;
+    const base = e.externalId.split(":")[0];
+    if (!/^(?:BALANCE|CONVERSION)[-_]/i.test(base)) continue;
+    const key = `${e.accountKey}|${base.toUpperCase()}`;
+    byRef.set(key, [...(byRef.get(key) ?? []), e]);
+  }
+  const pairs: [ReversalCandidate, ReversalCandidate][] = [];
+  for (const group of byRef.values()) {
+    if (group.length !== 2) continue;
+    const [a, b] = group;
+    if (a.amount * b.amount >= 0 || a.currency === b.currency || Math.abs(daysBetween(a.occurredOn, b.occurredOn)) > 7) continue;
+    pairs.push(a.amount < 0 ? [a, b] : [b, a]);
+  }
+  return pairs;
+}
+
+export interface ReversalSet { ids: string[]; reason: string }
+
+/**
+ * Unambiguous zero-net reversals and card refunds within the same bank account:
+ * - Wise rows sharing one reference (including its fee row) whose debit + fee + refund sum to 0.
+ * - Same-account card payment + explicit refund row of the exact opposite amount within 7 days.
+ */
+export function reversalSets(entries: ReversalCandidate[]): ReversalSet[] {
+  const pending = entries.filter((e) => e.status === "pending" && isBank(e.provider));
+  const used = new Set<string>();
+  const sets: ReversalSet[] = [];
+
+  const wiseGroups = new Map<string, ReversalCandidate[]>();
+  for (const e of pending) {
+    if (e.provider !== "wise") continue;
+    const ref = wiseBaseRef(e.externalId);
+    if (!ref) continue;
+    const key = `${e.accountKey}|${e.currency}|${ref.toUpperCase()}`;
+    wiseGroups.set(key, [...(wiseGroups.get(key) ?? []), e]);
+  }
+  for (const group of wiseGroups.values()) {
+    if (group.length < 2) continue;
+    const hasDebit = group.some((e) => e.amount < 0), hasCredit = group.some((e) => e.amount > 0);
+    if (!hasDebit || !hasCredit) continue;
+    const dates = group.map((e) => e.occurredOn).sort();
+    if (Math.abs(daysBetween(dates[0], dates.at(-1)!)) > 7) continue;
+    const net = group.reduce((sum, e) => sum + e.amount, 0);
+    if (Math.abs(net) > 0.005) continue;
+    const ids = group.map((e) => e.id);
+    for (const id of ids) used.add(id);
+    sets.push({ ids, reason: "Reversed Wise transaction" });
+  }
+
+  const remaining = pending.filter((e) => !used.has(e.id) && e.kind === "payment");
+  const refunds = remaining.filter((e) => e.amount > 0 && /\b(?:refund|reversal)\b/i.test(e.description));
+  const debits = remaining.filter((e) => e.amount < 0);
+  const matches = (r: ReversalCandidate, d: ReversalCandidate) =>
+    r.provider === d.provider && r.accountKey === d.accountKey && r.currency === d.currency &&
+    Math.abs(daysBetween(r.occurredOn, d.occurredOn)) <= 7 && Math.abs(r.amount + d.amount) <= 0.005;
+  const forRefund = new Map(refunds.map((r) => [r.id, debits.filter((d) => matches(r, d))]));
+  const forDebit = new Map(debits.map((d) => [d.id, refunds.filter((r) => matches(r, d))]));
+  for (const r of refunds) {
+    const candidates = forRefund.get(r.id) ?? [];
+    if (candidates.length !== 1) continue;
+    const d = candidates[0];
+    if ((forDebit.get(d.id)?.length ?? 0) !== 1) continue;
+    sets.push({ ids: [d.id, r.id], reason: "Refunded card payment" });
+  }
+  return sets;
 }
 
 /** How a bank import was filed, in Bank activity. A same-day twin of something you logged is told apart from a plain ignore. */

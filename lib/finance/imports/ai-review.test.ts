@@ -31,8 +31,11 @@ describe("learning from the person's choices", () => {
       .toMatchObject({ decision: "post", categoryId: 9 });
   });
 
-  test("mixed past choices, the wrong direction and unknown payees go to the model", () => {
-    expect(rememberedDecision(entry({ description: "Payment: Shopee", currency: "PHP" }), examples, book)).toBeNull();
+  test("mixed past choices, generic descriptions, the wrong direction and unknown payees go to the model", () => {
+    const withGeneric = [...examples, { description: "Outbound interbank transfer", provider: "gotyme", decision: "transfer" }];
+    expect(rememberedDecision(entry({ description: "Payment: Shopee", currency: "PHP" }), withGeneric, book)).toBeNull();
+    expect(rememberedDecision(entry({ description: "Outbound interbank transfer", provider: "gotyme", currency: "PHP" }), withGeneric, book)).toBeNull();
+    expect(learnedPayees(withGeneric, book).get("transfer")).toBeUndefined();
     expect(rememberedDecision(entry({ description: "Card Payment: Grok Xai", amount: 50, currency: "PHP" }), examples, book)).toBeNull();
     expect(rememberedDecision(entry({ description: "Card Payment: Brand New Shop", currency: "PHP" }), examples, book)).toBeNull();
   });
@@ -119,6 +122,7 @@ describe("AI decision guardrails", () => {
     expect(routineDecision(entry({ description: "Card transaction of 1.00 PHP issued by Shopee Ph" }), book, holder)).toMatchObject({ decision: "ignore" });
     expect(routineDecision(entry({ description: "Card transaction of 33,641.00 PHP issued by Shopee Ph" }), book, holder)).toBeNull();
     expect(routineDecision(entry({ kind: "transfer", amount: -49960, description: "Sent money to Mark Bennett Naval Pineda" }), book, holder)).toMatchObject({ decision: "transfer" });
+    expect(routineDecision(entry({ kind: "transfer", amount: -258.35, currency: "USD", description: "Converted 260.00 USD to 15,662.31 PHP" }), book, holder)).toMatchObject({ decision: "transfer" });
     expect(routineDecision(entry({ amount: 56028, description: "Received money from Centauri Media Ltd with reference" }), book, holder)).toBeNull();
     expect(routineDecision(entry({ provider: "wise", kind: "fee", amount: -39.2, description: "Wise Charges for: TRANSFER-1" }), book, holder)).toMatchObject({ decision: "post", categoryId: 4 });
     expect(routineDecision(entry({ provider: "ibkr", kind: "dividend", amount: 12, description: "AAPL dividend" }), book, holder)).toMatchObject({ decision: "post", categoryId: 6 });
@@ -143,7 +147,7 @@ describe("AI decision guardrails", () => {
     expect(evaluationDecision("e2", "transfer", categories)).toEqual({ ref: "e2", decision: "transfer", categoryId: null, reason: "Jev: Transfer" });
   });
 
-  test("a close Jev category lands on Other and a clear one is filed", () => {
+  test("a close Jev pick (category, transfer or ignore) lands on Other when posting is an option, and a clear one is filed", () => {
     const book = [...categories, category({ id: 7, kind: "expense", name: "Other" })];
     const unsure = settleEvaluation("e1", "post:expense:Subscriptions", book, -15, { "post:expense:Subscriptions": 0.54, ignore: 0.46 });
     expect(unsure).toEqual({ ref: "e1", decision: "post", categoryId: 7, reason: "Jev: Other, closest Subscriptions (54% likely)" });
@@ -151,7 +155,12 @@ describe("AI decision guardrails", () => {
     expect(split.categoryId).toBe(7);
     const sure = settleEvaluation("e3", "post:expense:Subscriptions", book, -15, { "post:expense:Subscriptions": 0.96, ignore: 0.04 });
     expect(sure).toMatchObject({ decision: "post", categoryId: 1 });
-    expect(settleEvaluation("e4", "transfer", book, -15, { transfer: 0.44, "post:expense:Subscriptions": 0.4 }).decision).toBe("transfer");
+    // Uncertain transfer on a postable bank entry goes to Other instead of hiding money silently.
+    expect(settleEvaluation("e4", "transfer", book, -32260.95, { transfer: 0.32, "post:expense:Subscriptions": 0.28 }))
+      .toEqual({ ref: "e4", decision: "post", categoryId: 7, reason: "Jev: Other, closest Transfer (32% likely)" });
+    // Clear transfer stays a transfer; uncertain transfer without post options (crypto) stays a transfer.
+    expect(settleEvaluation("e5", "transfer", book, -750, { transfer: 0.97, "post:expense:Subscriptions": 0.02 }).decision).toBe("transfer");
+    expect(settleEvaluation("e6", "transfer", book, -15, { transfer: 0.55, investment: 0.45 }).decision).toBe("transfer");
   });
 
   test("prompt carries no account keys, source IDs or archived categories", () => {
