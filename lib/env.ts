@@ -26,6 +26,8 @@ export const env = {
   /** Encrypts saved account credentials (v2 envelopes). Unset: they stay keyed from the session secret (v1). */
   credentialsSecret: () => optional("CREDENTIALS_SECRET", (v) => v.length >= 32),
   cronSecret: () => optional("CRON_SECRET"),
+  /** Bearer token protecting `POST /api/usage/sync` (pushed from Zephyrus-G14). */
+  usageSyncSecret: () => optional("USAGE_SYNC_SECRET"),
   coingeckoApiKey: () => optional("COINGECKO_API_KEY"),
   aiGatewayApiKey: () => optional("AI_GATEWAY_API_KEY"),
   aiCategorizeModel: () => optional("AI_CATEGORIZE_MODEL") ?? "anthropic/claude-haiku-4.5",

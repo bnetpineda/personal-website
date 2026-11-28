@@ -41,3 +41,47 @@ export const SOCIAL_ICONS = {
   twitter: TwitterIcon,
   email: EmailIcon,
 } as const;
+
+/** Compact marks for AI coding providers shown in the live usage dashboard. */
+
+export function ClaudeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" {...props}>
+      <path d="M12 2.5v19M2.5 12h19M5.3 5.3l13.4 13.4M18.7 5.3 5.3 18.7" />
+    </svg>
+  );
+}
+
+export function CodexIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 9.5 12 7.5l3.5 2v5L12 16.5l-3.5-2v-5Z" />
+    </svg>
+  );
+}
+
+export function AntigravityIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M5 19 12 4l7 15" />
+      <path d="M8 14.5h8" />
+    </svg>
+  );
+}
+
+export function OpenCodeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 9h8M8 13h5" />
+    </svg>
+  );
+}
+
+export const USAGE_PROVIDER_ICONS = {
+  claude: ClaudeIcon,
+  codex: CodexIcon,
+  antigravity: AntigravityIcon,
+  opencode: OpenCodeIcon,
+} as const;

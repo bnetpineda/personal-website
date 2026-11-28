@@ -70,10 +70,10 @@ export function Contact() {
   const isSubmitting = status === "submitting";
 
   return (
-    <section className="section bg-pat" id="contact">
+    <section className="section section--alt bg-pat" id="contact">
       <div className="wrap">
         <SectionHead
-          idx="04"
+          idx="05"
           kicker="Let's build something"
           title="Get in touch"
           lead="Open to full-time roles, freelance builds and good conversations. Drop a line — I reply fast."

@@ -11,7 +11,7 @@ const eslintConfig = defineConfig([
     // Design-system rules (see DESIGN.md). Enforced on app code built from components/ui.
     // components/ui styles itself; the public one-pager (components/sections, .site CSS)
     // predates the design system and is migrated when it's touched.
-    files: ["app/admin/**/*.{ts,tsx}"],
+    files: ["app/admin/**/*.{ts,tsx}", "components/sections/AiUsage*.tsx"],
     plugins: { shadcn },
     settings: designSystem.settings,
     rules: designSystem.rules,

@@ -4,6 +4,7 @@ import type { AiSuggestion, CategorizedBy, EntryKind, EntryStatus, HistoryCovera
 import type { PortfolioSource } from "../finance/performance";
 import type { FinanceSummary } from "../finance/ai-summary";
 import type { DailyStepRecord } from "../finance/daily-steps";
+import type { AiUsageSnapshot } from "../usage/types";
 import {
   type AnyPgColumn,
   bigserial,
@@ -512,6 +513,19 @@ export const notificationDismissals = pgTable("notification_dismissals", {
   dismissedAt: timestamp("dismissed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Aggregated, public-safe AI coding usage snapshots pushed periodically from the owner's machine
+ * (e.g. Zephyrus-G14). Contains numeric totals and breakdowns only — never prompts, file paths, or session text.
+ */
+export const aiUsageSnapshots = pgTable("ai_usage_snapshots", {
+  machineId: text("machine_id").primaryKey(),
+  machineLabel: text("machine_label").notNull(),
+  timezone: text("timezone").notNull(),
+  snapshot: jsonb("snapshot").$type<AiUsageSnapshot>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AiUsageSnapshotRow = typeof aiUsageSnapshots.$inferSelect;
 export type ImportedEntry = typeof importedEntries.$inferSelect;
 export type CategoryRule = typeof categoryRules.$inferSelect;
 
