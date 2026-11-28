@@ -74,9 +74,9 @@ export function Contact() {
       <div className="wrap">
         <SectionHead
           idx="05"
-          kicker="Let's build something"
-          title="Get in touch"
-          lead="Open to full-time roles, freelance builds and good conversations. Drop a line — I reply fast."
+          kicker="Let's talk"
+          title="Contact"
+          lead="Open to full-time roles and select builds. Drop a note — I reply fast."
         />
         <div className="contact-grid">
           <Reveal className="cardx contact-card">

@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/chart";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
-import { SegmentedBar, type SegmentedBarItem } from "@/components/ui/segmented-bar";
 import { Separator } from "@/components/ui/separator";
 import { Swatch } from "@/components/ui/swatch";
 import {
@@ -51,6 +50,7 @@ import {
 
 const POLL_INTERVAL_MS = 60_000;
 const TICK_INTERVAL_MS = 30_000;
+const TOP_BREAKDOWN_ROWS = 5;
 
 const RANGE_OPTIONS: readonly { key: UsageRangeKey; label: string }[] = [
   { key: "7d", label: "7D" },
@@ -76,18 +76,6 @@ const CHART_CONFIG = {
     color: USAGE_PROVIDER_META.opencode.color,
   },
 } satisfies ChartConfig;
-
-const COST_TYPE_COLORS = {
-  input: "var(--chart-4)",
-  cacheRead: "var(--chart-2)",
-  cacheWrite: "var(--chart-5)",
-  output: "var(--chart-6)",
-} as const;
-
-const COST_SPEED_COLORS = {
-  standard: "var(--chart-1)",
-  fast: "var(--chart-3)",
-} as const;
 
 function ProviderBadgeIcon({ id }: { id: UsageProviderId }) {
   const Icon = USAGE_PROVIDER_ICONS[id];
@@ -158,8 +146,8 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
             <Badge variant="outline">Zephyrus-G14</Badge>
           </div>
           <CardDescription>
-            No usage snapshot has been synced from Zephyrus-G14 yet. Once the background sync pushes its first summary,
-            live token counts, daily spend, and model breakdowns appear here automatically.
+            No usage snapshot has been synced from Zephyrus-G14 yet. Live token counts, daily spend, and top models
+            appear here automatically once synced.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -167,26 +155,8 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
   }
 
   const updatedAge = nowMs !== null ? formatRelativeAge(payload?.updatedAt ?? snapshot.generatedAt, nowMs) : "live";
-
-  const typeSegments: SegmentedBarItem[] = [
-    { id: "input", label: "Input", value: activeWindow.costByType.input, color: COST_TYPE_COLORS.input },
-    { id: "cacheRead", label: "Cache read", value: activeWindow.costByType.cacheRead, color: COST_TYPE_COLORS.cacheRead },
-    { id: "cacheWrite", label: "Cache write", value: activeWindow.costByType.cacheWrite, color: COST_TYPE_COLORS.cacheWrite },
-    { id: "output", label: "Output", value: activeWindow.costByType.output, color: COST_TYPE_COLORS.output },
-  ];
-
-  const speedSegments: SegmentedBarItem[] = [
-    { id: "standard", label: "Standard", value: activeWindow.costBySpeed.standard, color: COST_SPEED_COLORS.standard },
-    { id: "fast", label: "Fast", value: activeWindow.costBySpeed.fast, color: COST_SPEED_COLORS.fast },
-  ];
-
-  const totalsTiles = [
-    { label: "Processed tokens", value: formatTokens(activeWindow.totals.processedTokens), accent: false },
-    { label: "Cached input", value: formatTokens(activeWindow.totals.cachedInputTokens), accent: false },
-    { label: "Uncached input", value: formatTokens(activeWindow.totals.uncachedInputTokens), accent: false },
-    { label: "Output", value: formatTokens(activeWindow.totals.outputTokens), accent: false },
-    { label: "Cache savings", value: formatUsd(activeWindow.totals.cacheSavings), accent: true },
-  ];
+  const topModels = activeWindow.models.slice(0, TOP_BREAKDOWN_ROWS);
+  const topDays = activeWindow.days.slice(0, TOP_BREAKDOWN_ROWS);
 
   return (
     <Card>
@@ -235,18 +205,22 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
 
       <Separator />
 
-      <CardContent className="flex flex-col gap-8">
-        {/* Top section: Headline + Provider list (left) and Daily cost chart (right) */}
-        <div className="grid gap-8 lg:grid-cols-12">
+      <CardContent className="flex flex-col gap-6">
+        <div className="grid gap-6 lg:grid-cols-12">
           <div className="flex flex-col gap-5 lg:col-span-5">
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
               <div className="font-display text-4xl leading-none tracking-tight text-foreground tabular-nums sm:text-5xl">
                 {formatUsd(activeWindow.totalCost)}
               </div>
-              <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-muted-foreground tabular-nums">
                 <span>
                   {activeWindow.sessionCount.toLocaleString("en-US")}{" "}
-                  {activeWindow.sessionCount === 1 ? "session" : "sessions"} · API estimate
+                  {activeWindow.sessionCount === 1 ? "session" : "sessions"} ·{" "}
+                  {formatTokens(activeWindow.totals.processedTokens)} tokens ·{" "}
+                  <strong className="font-bold text-success">
+                    {formatUsd(activeWindow.totals.cacheSavings)}
+                  </strong>{" "}
+                  cache saved
                 </span>
                 <Popover>
                   <PopoverTrigger asChild>
@@ -269,11 +243,11 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
               </div>
             </div>
 
-            <div className="flex flex-col divide-y divide-border/15">
+            <div className="flex flex-col gap-3">
               {activeWindow.providers.map((provider) => {
                 const meta = USAGE_PROVIDER_META[provider.id];
                 return (
-                  <div key={provider.id} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
+                  <div key={provider.id} className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <Swatch color={meta.color} size="sm" />
@@ -281,24 +255,29 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
                         <span className="truncate font-sans text-sm font-semibold text-foreground">
                           {provider.label}
                         </span>
-                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                          {provider.sessions} {provider.sessions === 1 ? "session" : "sessions"}
+                      </div>
+                      <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
+                        <span className="text-sm font-bold text-foreground">
+                          {formatUsd(provider.cost)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatShare(provider.share)}
                         </span>
                       </div>
-                      <span className="shrink-0 font-mono text-sm font-bold text-foreground tabular-nums">
-                        {formatUsd(provider.cost)}
-                      </span>
                     </div>
-                    <div className="pl-5 font-mono text-xs text-muted-foreground tabular-nums">
-                      {formatShare(provider.share)} of cost · {formatTokens(provider.tokens)} tokens
-                    </div>
+                    <Progress
+                      value={Math.max(provider.share, 1)}
+                      thin
+                      indicatorColor={meta.color}
+                      aria-label={`${provider.label} share ${formatShare(provider.share)}`}
+                    />
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:col-span-7">
+          <div className="flex flex-col gap-2 lg:col-span-7">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-xs font-bold tracking-wider text-muted-foreground uppercase">
                 Daily cost
@@ -308,7 +287,7 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
               </span>
             </div>
 
-            <ChartContainer config={CHART_CONFIG} className="aspect-auto h-64 w-full">
+            <ChartContainer config={CHART_CONFIG} className="aspect-auto h-52 w-full">
               <AreaChart
                 aria-label="Daily API-equivalent AI coding cost by provider"
                 data={activeWindow.daily}
@@ -378,84 +357,10 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
 
         <Separator />
 
-        {/* Totals strip */}
-        <div className="flex flex-col gap-3">
-          <h3 className="font-mono text-xs font-bold tracking-wider text-muted-foreground uppercase">
-            Totals
-          </h3>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {totalsTiles.map((tile) => (
-              <Card key={tile.label} variant="quiet" size="sm">
-                <CardHeader className="gap-1">
-                  <CardDescription className="font-mono text-xs tracking-wider uppercase">
-                    {tile.label}
-                  </CardDescription>
-                  <div
-                    className={cn(
-                      "font-display text-xl leading-tight tabular-nums sm:text-2xl",
-                      tile.accent ? "text-success" : "text-foreground"
-                    )}
-                  >
-                    {tile.value}
-                  </div>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Cost by type + Cost by speed */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="flex flex-col gap-3">
-            <h3 className="font-mono text-xs font-bold tracking-wider text-muted-foreground uppercase">
-              Cost by type
-            </h3>
-            <SegmentedBar segments={typeSegments} label="Cost breakdown by token type" />
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-              {typeSegments.map((seg) => (
-                <div key={seg.id} className="flex items-center gap-1.5">
-                  <Swatch color={seg.color} size="sm" />
-                  <span className="text-muted-foreground">{seg.label}</span>
-                  <span className="font-mono font-bold text-foreground tabular-nums">
-                    {formatUsd(seg.value)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-mono text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                Cost by speed
-              </h3>
-              <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                Premium{" "}
-                <strong className="font-bold text-foreground">
-                  {formatUsd(activeWindow.costBySpeed.premium)}
-                </strong>
-              </span>
-            </div>
-            <SegmentedBar segments={speedSegments} label="Cost breakdown by inference speed" />
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-              {speedSegments.map((seg) => (
-                <div key={seg.id} className="flex items-center gap-1.5">
-                  <Swatch color={seg.color} size="sm" />
-                  <span className="text-muted-foreground">{seg.label}</span>
-                  <span className="font-mono font-bold text-foreground tabular-nums">
-                    {formatUsd(seg.value)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Breakdown table (Model / Day toggle) */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-mono text-xs font-bold tracking-wider text-muted-foreground uppercase">
-              Breakdown
+              Top breakdown
             </h3>
             <ToggleGroup
               type="single"
@@ -485,7 +390,7 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
               </TableHeader>
               <TableBody>
                 {breakdown === "model"
-                  ? activeWindow.models.map((row, idx) => {
+                  ? topModels.map((row, idx) => {
                       const meta = USAGE_PROVIDER_META[row.provider];
                       return (
                         <TableRow key={`${row.provider}:${row.model}`}>
@@ -520,7 +425,7 @@ export function AiUsageDashboard({ initial }: { initial: AiUsagePayload | null }
                         </TableRow>
                       );
                     })
-                  : activeWindow.days.map((row, idx) => {
+                  : topDays.map((row, idx) => {
                       const meta = USAGE_PROVIDER_META[row.topProvider];
                       return (
                         <TableRow key={row.date}>

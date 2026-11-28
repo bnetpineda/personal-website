@@ -8,22 +8,17 @@ export function About() {
       <div className="wrap">
         <SectionHead
           idx="02"
-          kicker="Who's behind the keyboard"
+          kicker="Behind the keyboard"
           title="About"
-          lead="Discipline is the throughline — from the gym to the IDE. I like tearing things down and building them back stronger."
+          lead="Same engine in the gym and the IDE — show up daily, compound quietly."
         />
 
         <div className="bento">
           <Reveal className="cardx about-intro" style={{ gridColumn: "1 / -1" }}>
-            <h3>More than just lines of code.</h3>
+            <h3>Built on endurance.</h3>
             <p>
-              I believe in <span className="mark">endurance</span> — whether it&apos;s debugging a nasty race
-              condition at 2am or grinding through the last 10km of a marathon.
-            </p>
-            <p>
-              From a heavier, slower 2022 version of myself to shipping production apps and running full
-              marathons — the process is the same: tear it down, rebuild it stronger,{" "}
-              <span className="mark">1% better every day</span>.
+              Whether debugging a gnarly race condition or grinding through kilometer 35 of a marathon, the formula is
+              the same: strip away the noise, rebuild stronger, and get <span className="mark">1% better every day</span>.
             </p>
             <div className="transform">
               <div className="transform__img">
@@ -36,10 +31,9 @@ export function About() {
                 <span className="yr">2022 · BEFORE</span>
               </div>
               <div>
-                <h4>The Beginning</h4>
+                <h4>2022 → Now</h4>
                 <p>
-                  The year I decided to change everything. Lost the weight, hit the gym daily, and fell in
-                  love with programming. Same engine, two outputs.
+                  Rebuilt my health from scratch, ran a full marathon, and fell in love with shipping software.
                 </p>
               </div>
             </div>

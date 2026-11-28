@@ -19,28 +19,15 @@ export const NAV_LINKS = [
 
 export const SECTION_IDS = NAV_LINKS.map((link) => link.href.slice(1));
 
-export const TYPE_LINES = [
-  "Building clean, performant code that endures.",
-  "React · Next.js · Node.js · TypeScript.",
-  "Discipline from the gym to the IDE.",
-  "1% better, every single day.",
-] as const;
-
-export const HERO_STATS = [
-  { v: "3+", l: "Years writing code" },
-  { v: "3", l: "Shipped products" },
-  { v: "2022", l: "Year I started building" },
-] as const;
-
 export const MARQUEE_ITEMS = [
+  "TypeScript",
   "React",
   "Next.js",
-  "Node.js",
-  "TypeScript",
-  "Endurance",
+  "Electron",
+  "Cloudflare Workers",
+  "PostgreSQL",
   "1% Better",
-  "Clean Code",
-  "Ship It",
+  "Built to Endure",
 ] as const;
 
 export const CONTACT_FORM_ENDPOINT = "https://formspree.io/f/mojvqdge";

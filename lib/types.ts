@@ -14,15 +14,7 @@ export interface Project {
   demo?: string;
 }
 
-export type SkillCategory =
-  | "languages"
-  | "frontend"
-  | "backend"
-  | "databases"
-  | "testing"
-  | "devtools"
-  | "cloud"
-  | "ai";
+export type SkillCategory = "frontend" | "backend" | "ai" | "infra";
 
 export interface Skill {
   category: SkillCategory;

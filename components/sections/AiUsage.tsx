@@ -11,9 +11,9 @@ export async function AiUsage() {
       <div className="wrap">
         <SectionHead
           idx="04"
-          kicker="Live from Zephyrus-G14"
+          kicker="Live telemetry"
           title="AI Usage"
-          lead="Live token throughput, cache savings, and API-equivalent spend streamed from my home server — adapted from T3 Code."
+          lead="Live token volume and API-equivalent spend streamed every 5 minutes from my home server."
         />
         <Reveal delay={60}>
           <AiUsageDashboard initial={initial} />
